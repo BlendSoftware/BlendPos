@@ -32,7 +32,7 @@ This project follows **Spec-Driven Development (SDD)**. Before implementing any 
 - **Auth**: JWT (golang-jwt/jwt v5), bcrypt (golang.org/x/crypto/bcrypt)
 - **Async Tasks**: Goroutine worker pool + Redis as job queue (go-redis/redis v9)
 - **PDF Generation**: jung-kurt/gofpdf or go-pdf/fpdf
-- **AFIP Integration**: Custom HTTP client (net/http) for SOAP/REST WSAA + WSFEV1
+- **AFIP Integration**: Python Sidecar (FastAPI + pyafipws) — microservicio interno en puerto 8001. El worker de Go envia POST JSON al Sidecar, que se encarga de WSAA + WSFEV1 y retorna el CAE
 - **CSV Processing**: encoding/csv (stdlib)
 - **Email**: jordan-wright/email or go-mail/mail
 - **Validation**: go-playground/validator v10
@@ -139,7 +139,7 @@ blendpos/
 2. **Automatic disassembly** — when child product stock is insufficient, the system automatically disassembles one parent unit within the same transaction. Never leave stock in an inconsistent state.
 3. **Immutable cash events** — cash movements are NEVER deleted or modified. Cancellations create inverse movements.
 4. **Blind cash count** — the cashier declares amounts WITHOUT seeing the expected total. The system computes the difference post-declaration.
-5. **Async invoicing** — sales confirm instantly; fiscal invoices (AFIP) are generated asynchronously via goroutine workers. A connectivity failure with AFIP must NEVER block a sale.
+5. **Async invoicing** — sales confirm instantly; fiscal invoices (AFIP) are generated asynchronously via goroutine workers that send a POST request to the Python AFIP Sidecar (`http://afip-sidecar:8001/facturar`). The Sidecar handles WSAA authentication and WSFEV1 CAE requests. A connectivity failure with AFIP or the Sidecar must NEVER block a sale.
 6. **Role-based access** — every endpoint is protected by JWT with role validation (cajero, supervisor, administrador) via Gin middleware.
 7. **Sub-100ms sales** — product lookup and cart operations must complete in under 100ms. Use indexed barcode queries and Redis caching.
 

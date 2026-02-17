@@ -207,12 +207,33 @@
 
 ---
 
-## 15. Integracion AFIP
+## 15. Microservicio AFIP (Sidecar Python)
 
-### net/http (stdlib)
-- **Uso**: Cliente HTTP para consumir los web services SOAP/REST de AFIP (WSAA + WSFEV1).
-- **Por que**: A diferencia de Python (pyafipws), no existe libreria Go para AFIP. Se implementa un cliente HTTP custom que: parsea certificados X.509, genera tokens CMS para WSAA, y consume endpoints SOAP de WSFEV1.
-- **Nota**: Esta implementacion requiere conocimiento de los web services de AFIP y manejo de XML/SOAP en Go.
+La integracion con AFIP/ARCA se delega a un microservicio Sidecar en Python que se comunica con el backend Go via HTTP interno. Esta decision se toma por costo de oportunidad: reimplementar `pyafipws` en Go no aporta valor de negocio.
+
+### Python >= 3.11
+- **Uso**: Runtime del microservicio AFIP Sidecar.
+- **Por que**: Version LTS con soporte para `asyncio` y tipado moderno. Requerida por `pyafipws`.
+
+### FastAPI
+- **Uso**: Framework HTTP para exponer el endpoint interno `POST /facturar` y `GET /health`.
+- **Instalacion**: `pip install fastapi uvicorn`
+- **Por que**: API minima, alto rendimiento (async), documentacion automatica OpenAPI, validacion con Pydantic.
+
+### pyafipws
+- **Uso**: Libreria para la firma de certificados X.509 (WSAA) y consumo SOAP de WSFEV1 (solicitud de CAE).
+- **Instalacion**: `pip install pyafipws`
+- **Por que**: Libreria probada en produccion por miles de contribuyentes argentinos. Abstrae completamente la complejidad de CMS, tokens WSAA y XML SOAP de AFIP.
+- **Repositorio**: [github.com/reingart/pyafipws](https://github.com/reingart/pyafipws)
+
+### uvicorn
+- **Uso**: Servidor ASGI para ejecutar el Sidecar FastAPI.
+- **Instalacion**: `pip install uvicorn[standard]`
+
+### Comunicacion con Go
+- El backend Go envia un `POST` HTTP a `http://afip-sidecar:8001/facturar` con el payload JSON de la venta.
+- El Sidecar retorna `{ cae, cae_vencimiento, resultado, observaciones }`.
+- Desde Go, solo se necesita `net/http` (stdlib) para hacer el POST al Sidecar. No se requiere manejo de SOAP/XML/CMS en Go.
 
 ---
 

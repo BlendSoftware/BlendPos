@@ -79,7 +79,7 @@ La estructura vertical del sistema se organiza en cuatro capas con dependencias 
 |  Adaptadores a servicios externos:                             |
 |  - PostgreSQL (GORM 2.0 + pgx + golang-migrate)               |
 |  - Redis (go-redis: cache + job queue)                         |
-|  - AFIP (net/http: WSAA + WSFEV1)                              |
+|  - AFIP Sidecar Client (net/http → Python Sidecar)             |
 |  - SMTP (jordan-wright/email)                                  |
 |  - Worker Pool (goroutines + channels)                         |
 +================================================================+
@@ -113,13 +113,23 @@ Un ServiceWorker o proceso en segundo plano ("SyncEngine") monitorea el estado d
 
 ### Resolucion de Conflictos
 
+> **⚠️ DEUDA TÉCNICA CRÍTICA — Rediseñar en Fase 8**
+>
+> El modelo actual de resolución de conflictos delega la reconciliación al supervisor de forma **manual**. Este enfoque no escala operativamente: en un escenario con múltiples terminales offline vendiendo simultáneamente, el volumen de conflictos puede superar la capacidad humana de resolución, generando acumulación de alertas sin resolver y pérdida de confiabilidad en el control de stock.
+>
+> **Solución pendiente (Fase 8):** Implementar un motor de compensación automática con reglas configurables:
+> - **Límites de venta virtual**: Establecer un techo de unidades vendibles offline por producto (ej: no vender más del 50% del stock conocido al inicio del turno).
+> - **Reglas de compensación automática**: Si el conflicto es menor a un umbral configurable (ej: ≤ 3 unidades), aplicar ajuste automático de stock negativo con registro en log de compensaciones.
+> - **Escalamiento selectivo**: Solo escalar al supervisor los conflictos que superen el umbral automático.
+> - **Alertas proactivas**: Notificar al cajero cuando el stock local de un producto está en zona de riesgo de conflicto.
+
 El stock en el servidor es la **"Verdad Final"**. Si una venta offline vendio stock que ya no existia al momento de la sincronizacion, el backend la procesa pero la marca como **"Conflicto de Stock"** post-sincronizacion para revision del supervisor. La regla fundamental es: **nunca se bloquea la venta en el momento**.
 
 | Escenario | Comportamiento |
 |-----------|----------------|
 | Venta offline, stock disponible al sincronizar | Procesada normalmente |
 | Venta offline, stock insuficiente al sincronizar | Procesada + flag `conflicto_stock = true` |
-| Multiples terminales offline venden el mismo stock | Ambas procesadas, supervisor resuelve |
+| Multiples terminales offline venden el mismo stock | Ambas procesadas, supervisor resuelve **(⚠️ deuda técnica)** |
 | Precio cambio entre venta offline y sync | Se respeta el precio al momento de la venta offline |
 
 ---
@@ -193,13 +203,29 @@ La vista de contenedores descompone el sistema en sus unidades desplegables inde
 |                                       |      |                   |
 |                              +--------+  +---+--------+         |
 |                              |           |             |         |
-|                      +-------v---+ +-----v-+ +--------v------+  |
-|                      |PostgreSQL | | Redis | | AFIP          |  |
-|                      | >= 15     | | >= 7  | | WSAA+WSFEV1   |  |
-|                      | ACID      | | cache | | (externo)     |  |
-|                      | transact. | | jobs  | |               |  |
-|                      | principal | | queue | |               |  |
-|                      +-----------+ +-------+ +---------------+  |
+|                      +-------v---+ +-----v-+           |         |
+|                      |PostgreSQL | | Redis |           |         |
+|                      | >= 15     | | >= 7  |           |         |
+|                      | ACID      | | cache |           |         |
+|                      | transact. | | jobs  |           |         |
+|                      | principal | | queue |           |         |
+|                      +-----------+ +-------+           |         |
+|                                                        |         |
+|                                        +---------------v------+  |
+|                                        | Python AFIP Sidecar  |  |
+|                                        | (FastAPI + pyafipws) |  |
+|                                        |                      |  |
+|                                        | POST /facturar       |  |
+|                                        | GET /health          |  |
+|                                        +----------+-----------+  |
+|                                                   |              |
+|                                                   | HTTPS SOAP   |
+|                                                   v              |
+|                                        +------------------+      |
+|                                        | AFIP             |      |
+|                                        | WSAA + WSFEV1    |      |
+|                                        | (externo)        |      |
+|                                        +------------------+      |
 |                                                                  |
 +------------------------------------------------------------------+
 ```
@@ -210,11 +236,12 @@ La vista de contenedores descompone el sistema en sus unidades desplegables inde
 |------------|-----------|-----------------|--------|
 | Frontend | React >= 18 + Vite | Interfaz de usuario: POS, gestion de caja, productos, proveedores, consulta de precios | 5173 (dev) |
 | Backend | Go >= 1.22 + Gin | API REST, logica de negocio, autenticacion, validacion, worker pool asincrono | 8000 |
+| AFIP Sidecar | Python 3.11+ + FastAPI | Microservicio interno que encapsula la integracion con AFIP/ARCA. Expone `POST /facturar` y `GET /health`. Usa `pyafipws` para firma de certificados y consumo SOAP de WSAA/WSFEV1. | 8001 (interno) |
 | PostgreSQL | PostgreSQL >= 15 | Base de datos relacional principal. Transacciones ACID. | 5432 |
 | Redis | Redis >= 7.0 | Cache de productos frecuentes, job queue para tareas asincronas | 6379 |
-| AFIP | Servicio externo | Web services de facturacion electronica argentina | N/A |
+| AFIP | Servicio externo | Web services de facturacion electronica argentina (WSAA + WSFEV1) | N/A |
 
-> **Nota clave**: A diferencia de la version Python, no hay contenedor Celery separado. Las tareas asincronas (facturacion AFIP, email, PDF) se ejecutan dentro del mismo binario Go mediante un worker pool de goroutines, con Redis como cola de jobs persistente.
+> **Nota clave**: No hay contenedor Celery. Las tareas asincronas (facturacion, email, PDF) se ejecutan dentro del binario Go mediante un worker pool de goroutines, con Redis como cola de jobs. La integracion con AFIP se delega al **AFIP Sidecar (Python)** por costo de oportunidad: reimplementar `pyafipws` en Go no aporta valor de negocio y el Sidecar aísla las fallas de AFIP del core del sistema.
 
 **Protocolos de comunicacion:**
 
@@ -223,7 +250,8 @@ La vista de contenedores descompone el sistema en sus unidades desplegables inde
 | Frontend | Backend | HTTP REST | JSON |
 | Backend | PostgreSQL | pgx (TCP) | SQL via GORM/pgx |
 | Backend | Redis | go-redis (TCP) | Comandos Redis |
-| Worker Pool | AFIP | HTTPS SOAP/REST | XML / JSON |
+| Worker Pool (Go) | AFIP Sidecar | HTTP POST interno | JSON |
+| AFIP Sidecar | AFIP (WSAA+WSFEV1) | HTTPS SOAP | XML |
 | Worker Pool | SMTP | SMTP/TLS | Email con adjuntos PDF |
 
 ---
@@ -275,9 +303,9 @@ La vista de componentes descompone el contenedor Backend en sus modulos internos
 |  |         v    CAPA REPOSITORY + INFRAESTRUCTURA             |   |
 |  |                                                             |  |
 |  |  +-----------+    +----------+    +------------------+     |  |
-|  |  |database.go|    | redis.go |    | afip.go          |     |  |
-|  |  |GORM conn  |    | go-redis |    | HTTP client      |     |  |
-|  |  |pgx pool   |    | cache    |    | WSAA + WSFEV1    |     |  |
+|  |  |database.go|    | redis.go |    | afip_client.go   |     |  |
+|  |  |GORM conn  |    | go-redis |    | HTTP client →    |     |  |
+|  |  |pgx pool   |    | cache    |    | Python Sidecar   |     |  |
 |  |  +-----------+    +----------+    +------------------+     |  |
 |  |                                                             |  |
 |  |  +-----------+    +------------------+                     |  |
@@ -285,6 +313,20 @@ La vista de componentes descompone el contenedor Backend en sus modulos internos
 |  |  | pool.go   |    | enviar_email()   |                     |  |
 |  |  | goroutines|    +------------------+                     |  |
 |  |  +-----------+                                             |  |
+|  +------------------------------------------------------------+  |
++------------------------------------------------------------------+
+
++------------------------------------------------------------------+
+|                    Python AFIP Sidecar (FastAPI)                   |
+|                                                                  |
+|  +------------------------------------------------------------+  |
+|  |  POST /facturar                                             |  |
+|  |  Recibe: payload JSON con datos de la venta                 |  |
+|  |  Proceso: firma certificado (WSAA) → solicita CAE (WSFEV1)  |  |
+|  |  Retorna: { cae, cae_vencimiento, resultado }               |  |
+|  +------------------------------------------------------------+  |
+|  |  Dependencias: pyafipws, FastAPI, uvicorn                   |  |
+|  |  Puerto interno: 8001 (no expuesto a internet)              |  |
 |  +------------------------------------------------------------+  |
 +------------------------------------------------------------------+
 ```
@@ -307,12 +349,12 @@ La vista de componentes descompone el contenedor Backend en sus modulos internos
 | `venta_service.go` | Service | Logica de registro de venta con transaccionalidad ACID | inventario_service, caja_service, repository |
 | `inventario_service.go` | Service | Logica de desarme automatico, ajustes de stock | repository |
 | `caja_service.go` | Service | Ciclo de vida de caja, arqueo ciego, desvios | repository |
-| `facturacion_service.go` | Service | Generacion de comprobantes, coordinacion con AFIP | worker pool, afip |
+| `facturacion_service.go` | Service | Generacion de comprobantes, coordinacion con AFIP Sidecar | worker pool, afip_client |
 | `proveedor_service.go` | Service | CRUD proveedores, actualizacion masiva, CSV import | repository |
 | `auth_service.go` | Service | Login, creacion/validacion JWT, hash de passwords | repository |
 | `database.go` | Infra | GORM connection, pgx pool, migration runner | config |
 | `redis.go` | Infra | go-redis connection, cache de productos | config |
-| `afip.go` | Infra | Cliente HTTP para WSAA y WSFEV1 | config |
+| `afip_client.go` | Infra | Cliente HTTP que envía POST JSON al AFIP Sidecar (Python) para obtener CAE | config |
 | `smtp.go` | Infra | Cliente SMTP para envio de emails | config |
 | `pool.go` | Worker | Worker pool de goroutines, dequeue de Redis | redis, services |
 
@@ -545,6 +587,56 @@ Cajero
     NORMAL      WARNING    CRITICO
 ```
 
+## 7.3 Flujo de Facturacion Asincrona (via AFIP Sidecar)
+
+La facturacion electronica se procesa de forma asincrona para no bloquear la operacion del cajero. El Worker Pool de Go delega la comunicacion con AFIP al Sidecar de Python.
+
+```
+Venta confirmada (tx.Commit)
+     |
+     v
++-----------------------------+
+| Worker Pool (goroutine)     |
+| 1. Dequeue job de Redis     |
+| 2. Construir payload JSON   |
+|    con datos de la venta    |
++-------------+---------------+
+              |
+              | POST http://afip-sidecar:8001/facturar
+              | Content-Type: application/json
+              | { tipo_cbte, punto_vta, cuit,
+              |   monto_neto, monto_iva, monto_total,
+              |   items: [...] }
+              v
++-----------------------------+
+| Python AFIP Sidecar         |
+| (FastAPI + pyafipws)        |
+| 1. Autenticar con WSAA      |
+|    (firma CMS del cert)     |
+| 2. Solicitar CAE a WSFEV1   |
+| 3. Retornar respuesta JSON  |
++-------------+---------------+
+              |
+              | Response 200:
+              | { cae, cae_vencimiento,
+              |   resultado: "A"/"R",
+              |   observaciones: [...] }
+              v
++-----------------------------+
+| Worker Pool (goroutine)     |
+| 3. Guardar CAE en DB        |
+| 4. Actualizar comprobante   |
+|    estado = "emitido"       |
+| 5. Generar PDF con gofpdf   |
+| 6. Encolar envio email      |
++-----------------------------+
+
+Manejo de errores:
+- Sidecar no disponible → Retry con backoff exponencial (max 3 reintentos)
+- AFIP rechaza (resultado="R") → Comprobante estado="rechazado", log de observaciones
+- Timeout → Reencolar job en Redis para reintento posterior
+```
+
 ---
 
 # 8. Patrones de Diseño Aplicados
@@ -593,15 +685,22 @@ La autenticacion, CORS, error handling, request ID y rate limiting se implementa
 
 # 10. Decisiones Arquitectonicas
 
-## ADR-001: Go como lenguaje backend
+## ADR-001: Go como core del sistema + Sidecar Python para AFIP
 
-**Contexto**: El sistema requiere latencia sub-100ms, alta concurrencia y despliegue simplificado.
+**Contexto**: El sistema requiere latencia sub-100ms, alta concurrencia y despliegue simplificado. La integracion con AFIP/ARCA requiere firma de certificados X.509, autenticacion WSAA y consumo de SOAP WSFEV1.
 
-**Decision**: Usar Go como lenguaje principal del backend.
+**Decision**: Usar Go como lenguaje principal del core del sistema (API, logica de negocio, worker pool). Adoptar un **patron Sidecar en Python (FastAPI + pyafipws)** exclusivamente para la integracion con AFIP.
 
 **Justificacion**: Go ofrece compilacion a binario estatico (deploys simples, imagenes Docker < 20MB), concurrencia nativa con goroutines (elimina la necesidad de Celery/workers separados), rendimiento predecible sin GIL ni garbage collector pausante, y un ecosistema maduro para HTTP, SQL y redis. Para un POS de mision critica, la predictibilidad del rendimiento de Go supera las ventajas de desarrollo rapido de Python.
 
-**Consecuencias**: Requiere aprendizaje de Go si el equipo no lo domina. Las librerias de AFIP (pyafipws) no existen en Go y deben reimplementarse como cliente HTTP. La generacion de PDF usa gofpdf en lugar de ReportLab.
+Sin embargo, reimplementar `pyafipws` en Go (parseo de certificados CMS, autenticacion WSAA, consumo SOAP WSFEV1) tiene un **costo de oportunidad prohibitivo**: es trabajo de bajo valor de negocio, altamente propenso a errores, y la libreria Python ya esta probada en produccion por miles de contribuyentes argentinos. El patron Sidecar permite:
+
+- **Aislamiento de fallas**: un error en la comunicacion con AFIP no crashea el core Go.
+- **Independencia de deploy**: el Sidecar puede actualizarse sin tocar el backend.
+- **Reutilizacion**: se aprovecha `pyafipws` directamente, sin traduccion.
+- **Latencia aceptable**: la comunicacion interna Go→Sidecar via HTTP localhost agrega < 5ms, despreciable frente a los 500ms-2s de AFIP.
+
+**Consecuencias**: Se agrega un contenedor Docker adicional (Python). La comunicacion Go→Sidecar es por HTTP interno (no expuesto a internet). La generacion de PDF sigue en Go con gofpdf.
 
 ## ADR-002: Gin como framework HTTP
 
@@ -680,8 +779,22 @@ services:
       - "traefik.http.routers.backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`, `/v1`)"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
-    depends_on: [postgres, redis]
+    depends_on: [postgres, redis, afip-sidecar]
     env_file: .env
+
+  afip-sidecar:
+    build: ./afip-sidecar
+    expose:
+      - "8001"
+    env_file: .env
+    volumes:
+      - afip-certs:/certs:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
 
   postgres:
     image: postgres:15
@@ -694,9 +807,10 @@ services:
 volumes:
   pgdata:
   certs:
+  afip-certs:
 ```
 
-> **Sin contenedor Celery**: el backend Go ejecuta workers internos. Un contenedor menos que la version Python.
+> **Sin contenedor Celery**: el backend Go ejecuta workers internos. El contenedor `afip-sidecar` (Python) es el unico componente no-Go y se comunica exclusivamente via HTTP interno (puerto 8001, no expuesto a internet).
 
 ## 11.2 Dockerfile Backend (Multi-stage)
 
@@ -730,9 +844,11 @@ CMD ["/blendpos"]
 | REDIS_URL | Conexion Redis | redis://redis:6379/0 |
 | JWT_SECRET | Secreto para firma JWT | (generado, 256 bits) |
 | JWT_EXPIRATION_HOURS | Duracion del token | 8 |
-| AFIP_CERT_PATH | Certificado AFIP | /certs/afip.crt |
-| AFIP_KEY_PATH | Clave privada AFIP | /certs/afip.key |
+| AFIP_SIDECAR_URL | URL interna del Sidecar AFIP | http://afip-sidecar:8001 |
+| AFIP_CERT_PATH | Certificado AFIP (montado en Sidecar) | /certs/afip.crt |
+| AFIP_KEY_PATH | Clave privada AFIP (montado en Sidecar) | /certs/afip.key |
 | AFIP_CUIT | CUIT del contribuyente | 20123456789 |
+| AFIP_PRODUCTION | Modo produccion AFIP | false |
 | SMTP_HOST | Servidor SMTP | smtp.gmail.com |
 | SMTP_PORT | Puerto SMTP | 587 |
 | SMTP_USER | Usuario SMTP | blendpos@example.com |

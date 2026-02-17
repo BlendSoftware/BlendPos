@@ -371,7 +371,7 @@ El sistema implementa autenticacion JWT con tres roles: cajero, supervisor y adm
 
 ## Descripcion General
 
-El sistema emite comprobantes fiscales electronicos via AFIP (facturas A, B, C) de forma asincrona, y genera comprobantes PDF internos para tickets no fiscales. El envio por email es asincrono.
+El sistema emite comprobantes fiscales electronicos via AFIP (facturas A, B, C) de forma asincrona, y genera comprobantes PDF internos para tickets no fiscales. La integracion con AFIP se delega a un **microservicio Sidecar en Python (FastAPI + pyafipws)**: el worker de Go envia un `POST` HTTP al Sidecar con el payload de la venta en formato JSON, y el Sidecar se encarga de la autenticacion WSAA, la solicitud de CAE a WSFEV1, y retorna el resultado. El envio por email es asincrono.
 
 ## Aceptacion
 
@@ -710,7 +710,7 @@ La interfaz POS esta optimizada para velocidad de operacion, con foco en escaneo
 | ID | Tarea | Criterio de Completitud |
 |----|-------|------------------------|
 | T-5.1 | Comprobantes internos PDF | PDF generado con gofpdf. Layout con logo, items, totales. Envio email asincrono via worker pool. |
-| T-5.2 | Integracion AFIP | Cliente HTTP (net/http) para WSAA + WSFEV1. CAE almacenado. Retry con backoff. Venta no bloqueada. |
+| T-5.2 | Integracion AFIP (via Sidecar Python) | El worker de Go envia `POST http://afip-sidecar:8001/facturar` con el payload JSON de la venta. El Sidecar (FastAPI + pyafipws) autentica con WSAA, solicita CAE a WSFEV1, y retorna `{ cae, cae_vencimiento, resultado }`. CAE almacenado en DB. Retry con backoff exponencial. Venta no bloqueada. |
 
 ## Fase 6: Proveedores
 
