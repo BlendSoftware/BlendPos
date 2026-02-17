@@ -1,0 +1,40 @@
+# .gitignore — BlendPOS monorepo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Go
+backend/tmp/
+backend/vendor/
+*.exe
+*.test
+*.out
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Python
+afip-sidecar/__pycache__/
+afip-sidecar/*.pyc
+afip-sidecar/.venv/
+afip-sidecar/certs/          # AFIP certificates — never commit
+
+# PDF storage (runtime generated)
+pdf-storage/
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml

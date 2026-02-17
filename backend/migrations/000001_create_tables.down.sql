@@ -1,0 +1,15 @@
+-- 000001_create_tables.down.sql
+-- Rollback migration
+
+DROP TABLE IF EXISTS comprobantes CASCADE;
+DROP TABLE IF EXISTS venta_pagos CASCADE;
+DROP TABLE IF EXISTS venta_items CASCADE;
+DROP TABLE IF EXISTS ventas CASCADE;
+DROP SEQUENCE IF EXISTS ventas_numero_ticket_seq;
+DROP TABLE IF EXISTS movimiento_cajas CASCADE;
+DROP TABLE IF EXISTS sesion_cajas CASCADE;
+DROP TABLE IF EXISTS usuarios CASCADE;
+DROP TABLE IF EXISTS producto_hijos CASCADE;
+DROP TABLE IF EXISTS productos CASCADE;
+DROP TABLE IF EXISTS proveedores CASCADE;
+DROP EXTENSION IF EXISTS pg_trgm;

@@ -1,0 +1,39 @@
+package dto
+
+// ─── Request DTOs ────────────────────────────────────────────────────────────
+
+type LoginRequest struct {
+	Username string `json:"username" validate:"required,min=3"`
+	Password string `json:"password" validate:"required,min=6"`
+}
+
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+type CrearUsuarioRequest struct {
+	Username     string  `json:"username"  validate:"required,min=3,max=30"`
+	Nombre       string  `json:"nombre"    validate:"required,min=2,max=100"`
+	Email        *string `json:"email"     validate:"omitempty,email"`
+	Password     string  `json:"password"  validate:"required,min=8"`
+	Rol          string  `json:"rol"       validate:"required,oneof=cajero supervisor administrador"`
+	PuntoDeVenta *int    `json:"punto_de_venta"`
+}
+
+// ─── Response DTOs ───────────────────────────────────────────────────────────
+
+type UsuarioResponse struct {
+	ID           string `json:"id"`
+	Username     string `json:"username"`
+	Nombre       string `json:"nombre"`
+	Rol          string `json:"rol"`
+	PuntoDeVenta *int   `json:"punto_de_venta"`
+}
+
+type LoginResponse struct {
+	AccessToken  string          `json:"access_token"`
+	RefreshToken string          `json:"refresh_token"`
+	TokenType    string          `json:"token_type"`
+	ExpiresIn    int             `json:"expires_in"` // seconds
+	User         UsuarioResponse `json:"user"`
+}

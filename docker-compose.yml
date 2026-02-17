@@ -1,0 +1,86 @@
+# docker-compose.yml — BlendPOS Development Environment
+# Hot reload: backend uses Air, frontend uses Vite HMR
+# No Traefik/nginx in dev — direct port exposure
+
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: blendpos
+      POSTGRES_USER: blendpos
+      POSTGRES_PASSWORD: blendpos
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blendpos -d blendpos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev          # uses Air for hot reload
+    volumes:
+      - ./backend:/app
+      - go_mod_cache:/go/pkg/mod
+    ports:
+      - "8000:8000"
+    environment:
+      ENV: development
+      PORT: 8000
+      DATABASE_URL: postgres://blendpos:blendpos@postgres:5432/blendpos?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: dev_secret_change_in_production
+      AFIP_SIDECAR_URL: http://afip-sidecar:8001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  afip-sidecar:
+    build:
+      context: ./afip-sidecar
+    ports:
+      - "8001:8001"
+    environment:
+      AFIP_HOMOLOGACION: "true"
+      AFIP_CERT_PATH: /certs/afip.crt
+      AFIP_KEY_PATH: /certs/afip.key
+    volumes:
+      - ./afip-sidecar/certs:/certs:ro
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host"
+    volumes:
+      - ./frontend:/app
+      - node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE: http://localhost:8000
+
+volumes:
+  pg_data:
+  redis_data:
+  go_mod_cache:
+  node_modules:
