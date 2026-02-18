@@ -38,3 +38,7 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+
+test_output.txt
+test_err.txt
+tests.exe
