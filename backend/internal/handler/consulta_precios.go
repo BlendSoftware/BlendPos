@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"blendpos/internal/apierror"
 	"blendpos/internal/dto"
@@ -10,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
+
+const precioCacheTTL = 4 * time.Hour
 
 // ConsultaPreciosHandler serves the public price check endpoint.
 // No authentication required — no side effects whatsoever (RF-27).
@@ -32,21 +37,37 @@ func NewConsultaPreciosHandler(repo repository.ProductoRepository, rdb *redis.Cl
 // @Router /v1/precio/{barcode} [get]
 func (h *ConsultaPreciosHandler) GetPrecioPorBarcode(c *gin.Context) {
 	barcode := c.Param("barcode")
+	ctx := c.Request.Context()
+	cacheKey := "precio:" + barcode
 
-	// Try Redis cache first to maintain <50ms latency
-	// TODO (Phase 2): implement Redis cache layer
+	// 1. Try Redis cache (target: <50ms p99 — RF-27)
+	if cached, err := h.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+		var resp dto.ConsultaPreciosResponse
+		if jsonErr := json.Unmarshal(cached, &resp); jsonErr == nil {
+			c.JSON(http.StatusOK, resp)
+			return
+		}
+	}
 
-	producto, err := h.repo.FindByBarcode(c.Request.Context(), barcode)
+	// 2. Cache miss — query DB
+	producto, err := h.repo.FindByBarcode(ctx, barcode)
 	if err != nil {
 		c.JSON(http.StatusNotFound, apierror.New("Producto no encontrado"))
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.ConsultaPreciosResponse{
+	resp := dto.ConsultaPreciosResponse{
 		Nombre:          producto.Nombre,
 		PrecioVenta:     producto.PrecioVenta,
 		StockDisponible: producto.StockActual,
 		Categoria:       producto.Categoria,
 		Promocion:       nil, // Promotions module not in current scope
-	})
+	}
+
+	// 3. Populate cache — best effort, ignore errors
+	if b, jsonErr := json.Marshal(resp); jsonErr == nil {
+		_ = h.rdb.Set(context.Background(), cacheKey, b, precioCacheTTL).Err()
+	}
+
+	c.JSON(http.StatusOK, resp)
 }

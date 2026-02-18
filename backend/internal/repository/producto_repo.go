@@ -30,6 +30,9 @@ type ProductoRepository interface {
 
 	// Used inside transactions — callers must pass the tx instance
 	UpdateStockTx(tx *gorm.DB, id uuid.UUID, delta int) error
+
+	// DB exposes the underlying *gorm.DB so services can open transactions.
+	DB() *gorm.DB
 }
 
 type productoRepo struct{ db *gorm.DB }
@@ -57,10 +60,32 @@ func (r *productoRepo) FindByBarcode(ctx context.Context, barcode string) (*mode
 }
 
 func (r *productoRepo) List(ctx context.Context, filter dto.ProductoFilter) ([]model.Producto, int64, error) {
-	// TODO (Phase 2): implement pagination, barcode exact match, name trigram search
 	var productos []model.Producto
 	var total int64
-	return productos, total, nil
+
+	q := r.db.WithContext(ctx).Model(&model.Producto{}).Where("activo = true")
+
+	if filter.Barcode != "" {
+		q = q.Where("codigo_barras = ?", filter.Barcode)
+	}
+	if filter.Nombre != "" {
+		// pg_trgm similarity search — falls back to ILIKE when no index hit
+		q = q.Where("nombre ILIKE ?", "%"+filter.Nombre+"%")
+	}
+	if filter.Categoria != "" {
+		q = q.Where("categoria = ?", filter.Categoria)
+	}
+	if filter.ProveedorID != "" {
+		q = q.Where("proveedor_id = ?", filter.ProveedorID)
+	}
+
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (filter.Page - 1) * filter.Limit
+	err := q.Order("nombre ASC").Limit(filter.Limit).Offset(offset).Find(&productos).Error
+	return productos, total, err
 }
 
 func (r *productoRepo) Update(ctx context.Context, p *model.Producto) error {
@@ -103,3 +128,5 @@ func (r *productoRepo) UpdateStockTx(tx *gorm.DB, id uuid.UUID, delta int) error
 	return tx.Model(&model.Producto{}).Where("id = ?", id).
 		Update("stock_actual", gorm.Expr("stock_actual + ?", delta)).Error
 }
+
+func (r *productoRepo) DB() *gorm.DB { return r.db }
