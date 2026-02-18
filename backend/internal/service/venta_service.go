@@ -2,12 +2,17 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"blendpos/internal/dto"
+	"blendpos/internal/model"
 	"blendpos/internal/repository"
 	"blendpos/internal/worker"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 type VentaService interface {
@@ -20,6 +25,8 @@ type ventaService struct {
 	repo       repository.VentaRepository
 	inventario InventarioService
 	caja       CajaService
+	cajaRepo   repository.CajaRepository
+	productoRepo repository.ProductoRepository
 	dispatcher *worker.Dispatcher
 }
 
@@ -27,22 +34,289 @@ func NewVentaService(
 	repo repository.VentaRepository,
 	inventario InventarioService,
 	caja CajaService,
+	cajaRepo repository.CajaRepository,
+	productoRepo repository.ProductoRepository,
 	dispatcher *worker.Dispatcher,
 ) VentaService {
-	return &ventaService{repo: repo, inventario: inventario, caja: caja, dispatcher: dispatcher}
+	return &ventaService{
+		repo:         repo,
+		inventario:   inventario,
+		caja:         caja,
+		cajaRepo:     cajaRepo,
+		productoRepo: productoRepo,
+		dispatcher:   dispatcher,
+	}
 }
+
+// runTx executes fn inside a GORM transaction when db is available,
+// or calls fn(nil) directly when db is nil (unit test mode).
+func runTx(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) error) error {
+	if db == nil {
+		return fn(nil)
+	}
+	return db.WithContext(ctx).Transaction(fn)
+}
+
+// ── RegistrarVenta ────────────────────────────────────────────────────────────
+// Full ACID transaction per arquitectura.md §7.1:
+//   1. Validate sesion de caja is open
+//   2. For each item: fetch product price, calc subtotal, check stock
+//   3. Validate total pagos >= total venta
+//   4. BEGIN TX: nextval ticket, create venta+items+pagos, descontar stock, crear movimientos de caja
+//   5. COMMIT
+//   6. (async) dispatch facturacion job if needed
 
 func (s *ventaService) RegistrarVenta(ctx context.Context, usuarioID uuid.UUID, req dto.RegistrarVentaRequest) (*dto.VentaResponse, error) {
-	// TODO (Phase 3): full ACID transaction — see arquitectura.md §7.1
-	return nil, nil
+	sesionID, err := uuid.Parse(req.SesionCajaID)
+	if err != nil {
+		return nil, fmt.Errorf("sesion_caja_id inválido: %w", err)
+	}
+
+	// 1. Validate open session
+	if err := s.caja.FindSesionAbierta(ctx, sesionID); err != nil {
+		return nil, err
+	}
+
+	// 2. Deduplicate offline sale
+	if req.OfflineID != nil {
+		if existing, err := s.repo.FindByOfflineID(ctx, *req.OfflineID); err == nil {
+			return ventaToResponse(existing), nil
+		}
+	}
+
+	// 3. Resolve products and calculate totals (pre-flight, outside TX)
+	type resolvedItem struct {
+		productoID uuid.UUID
+		nombre     string
+		precio     decimal.Decimal
+		cantidad   int
+		descuento  decimal.Decimal
+		subtotal   decimal.Decimal
+	}
+
+	var resolved []resolvedItem
+	subtotal := decimal.Zero
+	descuentoTotal := decimal.Zero
+	conflictoStock := false
+
+	for _, item := range req.Items {
+		pid, err := uuid.Parse(item.ProductoID)
+		if err != nil {
+			return nil, fmt.Errorf("producto_id inválido: %w", err)
+		}
+		p, err := s.productoRepo.FindByID(ctx, pid)
+		if err != nil {
+			return nil, fmt.Errorf("producto %s no encontrado", item.ProductoID)
+		}
+		if p.StockActual < item.Cantidad {
+			conflictoStock = true
+		}
+		lineSubtotal := p.PrecioVenta.Mul(decimal.NewFromInt(int64(item.Cantidad))).Sub(item.Descuento)
+		subtotal = subtotal.Add(lineSubtotal)
+		descuentoTotal = descuentoTotal.Add(item.Descuento)
+		resolved = append(resolved, resolvedItem{
+			productoID: pid,
+			nombre:     p.Nombre,
+			precio:     p.PrecioVenta,
+			cantidad:   item.Cantidad,
+			descuento:  item.Descuento,
+			subtotal:   lineSubtotal,
+		})
+	}
+
+	total := subtotal
+
+	// 4. Validate payment sufficiency
+	totalPagos := decimal.Zero
+	for _, pago := range req.Pagos {
+		totalPagos = totalPagos.Add(pago.Monto)
+	}
+	if totalPagos.LessThan(total) {
+		return nil, errors.New("El monto total de pagos es insuficiente")
+	}
+	vuelto := totalPagos.Sub(total)
+
+	// 5. ACID transaction
+	var venta model.Venta
+	txErr := runTx(ctx, s.repo.DB(), func(tx *gorm.DB) error {
+		ticketNum, err := s.repo.NextTicketNumber(ctx, tx)
+		if err != nil {
+			return err
+		}
+
+		// Build venta model
+		venta = model.Venta{
+			NumeroTicket:   ticketNum,
+			SesionCajaID:   sesionID,
+			UsuarioID:      usuarioID,
+			Subtotal:       subtotal,
+			DescuentoTotal: descuentoTotal,
+			Total:          total,
+			Estado:         "completada",
+			OfflineID:      req.OfflineID,
+			ConflictoStock: conflictoStock,
+		}
+
+		// Build items
+		for _, r := range resolved {
+			venta.Items = append(venta.Items, model.VentaItem{
+				ProductoID:     r.productoID,
+				Cantidad:       r.cantidad,
+				PrecioUnitario: r.precio,
+				DescuentoItem:  r.descuento,
+				Subtotal:       r.subtotal,
+			})
+		}
+
+		// Build pagos
+		for _, pago := range req.Pagos {
+			venta.Pagos = append(venta.Pagos, model.VentaPago{
+				Metodo: pago.Metodo,
+				Monto:  pago.Monto,
+			})
+		}
+
+		if err := s.repo.Create(ctx, tx, &venta); err != nil {
+			return err
+		}
+
+		// Descontar stock — uses DescontarStockTx (handles auto-desarme from Fase 3)
+		for _, r := range resolved {
+			if err := s.inventario.DescontarStockTx(ctx, r.productoID, r.cantidad, tx); err != nil {
+				return fmt.Errorf("error descontando stock de %s: %w", r.nombre, err)
+			}
+		}
+
+		// Create movimientos de caja (one per payment method)
+		for _, pago := range req.Pagos {
+			metodo := pago.Metodo
+			mov := model.MovimientoCaja{
+				SesionCajaID: sesionID,
+				Tipo:         "venta",
+				MetodoPago:   &metodo,
+				Monto:        pago.Monto,
+				Descripcion:  fmt.Sprintf("Venta #%d", ticketNum),
+				ReferenciaID: &venta.ID,
+			}
+			if err := s.cajaRepo.CreateMovimiento(ctx, &mov); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+
+	// 6. Async facturacion job (best-effort — fire & forget)
+	if s.dispatcher != nil {
+		_ = s.dispatcher.EnqueueFacturacion(ctx, map[string]interface{}{
+			"venta_id": venta.ID.String(),
+		})
+	}
+
+	// Build response
+	resp := ventaToResponse(&venta)
+	resp.Vuelto = vuelto
+	// Enrich items with product names from resolved slice
+	for i, r := range resolved {
+		resp.Items[i].Producto = r.nombre
+	}
+	return resp, nil
 }
+
+// ── AnularVenta ───────────────────────────────────────────────────────────────
 
 func (s *ventaService) AnularVenta(ctx context.Context, id uuid.UUID, motivo string) error {
-	// TODO (Phase 3)
-	return nil
+	venta, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return errors.New("venta no encontrada")
+	}
+	if venta.Estado == "anulada" {
+		return errors.New("la venta ya está anulada")
+	}
+
+	txErr := runTx(ctx, s.repo.DB(), func(tx *gorm.DB) error {
+		// Restore stock for each item
+		for _, item := range venta.Items {
+			if err := s.productoRepo.UpdateStockTx(tx, item.ProductoID, item.Cantidad); err != nil {
+				return err
+			}
+		}
+
+		// Create inverse movimientos de caja
+		for _, pago := range venta.Pagos {
+			metodo := pago.Metodo
+			monto := pago.Monto.Neg()
+			mov := model.MovimientoCaja{
+				SesionCajaID: venta.SesionCajaID,
+				Tipo:         "anulacion",
+				MetodoPago:   &metodo,
+				Monto:        monto,
+				Descripcion:  fmt.Sprintf("Anulación venta #%d — %s", venta.NumeroTicket, motivo),
+				ReferenciaID: &venta.ID,
+			}
+			if err := s.cajaRepo.CreateMovimiento(ctx, &mov); err != nil {
+				return err
+			}
+		}
+
+		return s.repo.UpdateEstado(ctx, id, "anulada")
+	})
+	return txErr
 }
 
+// ── SyncBatch ─────────────────────────────────────────────────────────────────
+// Processes a batch of offline sales. Idempotent: uses offline_id deduplication.
+
 func (s *ventaService) SyncBatch(ctx context.Context, usuarioID uuid.UUID, req dto.SyncBatchRequest) ([]dto.VentaResponse, error) {
-	// TODO (Phase 3): process offline sales batch
-	return nil, nil
+	results := make([]dto.VentaResponse, 0, len(req.Ventas))
+	for _, ventaReq := range req.Ventas {
+		resp, err := s.RegistrarVenta(ctx, usuarioID, ventaReq)
+		if err != nil {
+			// Mark as conflict, continue processing remaining sales
+			results = append(results, dto.VentaResponse{
+				ConflictoStock: true,
+				Estado:         "error",
+			})
+			continue
+		}
+		results = append(results, *resp)
+	}
+	return results, nil
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+func ventaToResponse(v *model.Venta) *dto.VentaResponse {
+	items := make([]dto.ItemVentaResponse, 0, len(v.Items))
+	for _, item := range v.Items {
+		nombre := ""
+		if item.Producto != nil {
+			nombre = item.Producto.Nombre
+		}
+		items = append(items, dto.ItemVentaResponse{
+			Producto:       nombre,
+			Cantidad:       item.Cantidad,
+			PrecioUnitario: item.PrecioUnitario,
+			Subtotal:       item.Subtotal,
+		})
+	}
+	pagos := make([]dto.PagoRequest, 0, len(v.Pagos))
+	for _, p := range v.Pagos {
+		pagos = append(pagos, dto.PagoRequest{Metodo: p.Metodo, Monto: p.Monto})
+	}
+	return &dto.VentaResponse{
+		ID:             v.ID.String(),
+		NumeroTicket:   v.NumeroTicket,
+		Items:          items,
+		Subtotal:       v.Subtotal,
+		DescuentoTotal: v.DescuentoTotal,
+		Total:          v.Total,
+		Pagos:          pagos,
+		Estado:         v.Estado,
+		ConflictoStock: v.ConflictoStock,
+		CreatedAt:      v.CreatedAt.Format("2006-01-02T15:04:05Z"),
+	}
 }

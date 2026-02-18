@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"blendpos/internal/dto"
 	"blendpos/internal/repository"
@@ -47,6 +48,12 @@ func (s *cajaService) ObtenerReporte(ctx context.Context, sesionID uuid.UUID) (*
 }
 
 func (s *cajaService) FindSesionAbierta(ctx context.Context, sesionID uuid.UUID) error {
-	// TODO (Phase 3)
+	sesion, err := s.repo.FindSesionByID(ctx, sesionID)
+	if err != nil {
+		return errors.New("sesión de caja no encontrada")
+	}
+	if sesion.Estado != "abierta" {
+		return errors.New("No hay sesion de caja abierta")
+	}
 	return nil
 }

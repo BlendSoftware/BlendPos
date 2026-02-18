@@ -51,7 +51,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	// Worker dispatcher — injected into services that enqueue async jobs
 	dispatcher := worker.NewDispatcher(rdb, afipClient, mailer)
 
-	ventaSvc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, dispatcher)
+	ventaSvc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, dispatcher)
 	facturacionSvc := service.NewFacturacionService(comprobanteRepo, dispatcher)
 	proveedorSvc := service.NewProveedorService(proveedorRepo, productoRepo)
 

@@ -128,7 +128,7 @@ func (s *inventarioService) DesarmeManual(ctx context.Context, req dto.DesarmeMa
 	unidadesGeneradas := req.CantidadPadres * vinculo.UnidadesPorPadre
 
 	// Execute both stock changes in a single DB transaction
-	txErr := s.repo.DB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	txErr := runTx(ctx, s.repo.DB(), func(tx *gorm.DB) error {
 		if err := s.repo.UpdateStockTx(tx, vinculo.ProductoPadreID, -req.CantidadPadres); err != nil {
 			return err
 		}
@@ -170,10 +170,51 @@ func (s *inventarioService) ObtenerAlertas(ctx context.Context) ([]dto.AlertaSto
 }
 
 func (s *inventarioService) DescontarStockTx(ctx context.Context, productoID uuid.UUID, cantidad int, tx interface{}) error {
-	// TODO (Phase 3): automatic disassembly logic lives here — see arquitectura.md §6.4
 	gormTx, ok := tx.(*gorm.DB)
 	if !ok {
 		return errors.New("tx debe ser *gorm.DB")
 	}
+
+	// Check current stock
+	producto, err := s.repo.FindByID(ctx, productoID)
+	if err != nil {
+		return fmt.Errorf("producto no encontrado: %w", err)
+	}
+
+	// If sufficient stock, simple decrement
+	if producto.StockActual >= cantidad {
+		return s.repo.UpdateStockTx(gormTx, productoID, -cantidad)
+	}
+
+	// Insufficient stock — attempt automatic disassembly if a vinculo with desarme_auto exists
+	vinculo, err := s.repo.FindVinculoByHijoID(ctx, productoID)
+	if err != nil {
+		// No auto-desarme link; record conflict but still decrement (may go negative — flagged as conflictoStock)
+		return s.repo.UpdateStockTx(gormTx, productoID, -cantidad)
+	}
+
+	// Calculate how many parent units to disassemble to cover the deficit
+	deficit := cantidad - producto.StockActual
+	padresNecesarios := (deficit + vinculo.UnidadesPorPadre - 1) / vinculo.UnidadesPorPadre // ceiling div
+
+	padre, err := s.repo.FindByID(ctx, vinculo.ProductoPadreID)
+	if err != nil {
+		return fmt.Errorf("producto padre no encontrado: %w", err)
+	}
+
+	if padre.StockActual < padresNecesarios {
+		// Not enough parents either — proceed with conflict flag (caller tracks conflictoStock)
+		return s.repo.UpdateStockTx(gormTx, productoID, -cantidad)
+	}
+
+	// Disassemble: decrement padre, add units to hijo, then decrement hijo
+	unidadesGeneradas := padresNecesarios * vinculo.UnidadesPorPadre
+	if err := s.repo.UpdateStockTx(gormTx, vinculo.ProductoPadreID, -padresNecesarios); err != nil {
+		return err
+	}
+	if err := s.repo.UpdateStockTx(gormTx, productoID, unidadesGeneradas); err != nil {
+		return err
+	}
+	// Now decrement requested quantity
 	return s.repo.UpdateStockTx(gormTx, productoID, -cantidad)
 }
