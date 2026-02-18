@@ -22,12 +22,12 @@ type VentaService interface {
 }
 
 type ventaService struct {
-	repo       repository.VentaRepository
-	inventario InventarioService
-	caja       CajaService
-	cajaRepo   repository.CajaRepository
+	repo         repository.VentaRepository
+	inventario   InventarioService
+	caja         CajaService
+	cajaRepo     repository.CajaRepository
 	productoRepo repository.ProductoRepository
-	dispatcher *worker.Dispatcher
+	dispatcher   *worker.Dispatcher
 }
 
 func NewVentaService(

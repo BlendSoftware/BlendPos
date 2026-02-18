@@ -61,32 +61,6 @@ func (h *InventarioHandler) ObtenerAlertas(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ── Stubs: remaining handlers ─────────────────────────────────────────────────
-
-type CajaHandler struct{ svc service.CajaService }
-
-func NewCajaHandler(svc service.CajaService) *CajaHandler { return &CajaHandler{svc: svc} }
-
-func (h *CajaHandler) Abrir(c *gin.Context) {
-	// TODO (Phase 4)
-	c.JSON(http.StatusNotImplemented, apierror.New("not implemented"))
-}
-
-func (h *CajaHandler) Arqueo(c *gin.Context) {
-	// TODO (Phase 4)
-	c.JSON(http.StatusNotImplemented, apierror.New("not implemented"))
-}
-
-func (h *CajaHandler) ObtenerReporte(c *gin.Context) {
-	// TODO (Phase 4)
-	c.JSON(http.StatusNotImplemented, apierror.New("not implemented"))
-}
-
-func (h *CajaHandler) RegistrarMovimiento(c *gin.Context) {
-	// TODO (Phase 4)
-	c.JSON(http.StatusNotImplemented, apierror.New("not implemented"))
-}
-
 type FacturacionHandler struct{ svc service.FacturacionService }
 
 func NewFacturacionHandler(svc service.FacturacionService) *FacturacionHandler {

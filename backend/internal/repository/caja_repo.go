@@ -55,6 +55,28 @@ func (r *cajaRepo) ListMovimientos(ctx context.Context, sesionCajaID uuid.UUID) 
 }
 
 func (r *cajaRepo) SumMovimientosByMetodo(ctx context.Context, sesionCajaID uuid.UUID) (map[string]decimal.Decimal, error) {
-	// TODO (Phase 4): implement GROUP BY metodo_pago SUM(monto)
-	return map[string]decimal.Decimal{}, nil
+	type row struct {
+		MetodoPago string
+		Total      decimal.Decimal
+	}
+	var rows []row
+	err := r.db.WithContext(ctx).
+		Model(&model.MovimientoCaja{}).
+		Select("metodo_pago, SUM(monto) as total").
+		Where("sesion_caja_id = ? AND metodo_pago IS NOT NULL", sesionCajaID).
+		Group("metodo_pago").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := map[string]decimal.Decimal{
+		"efectivo":      decimal.Zero,
+		"debito":        decimal.Zero,
+		"credito":       decimal.Zero,
+		"transferencia": decimal.Zero,
+	}
+	for _, r := range rows {
+		result[r.MetodoPago] = r.Total
+	}
+	return result, nil
 }

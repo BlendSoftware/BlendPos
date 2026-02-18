@@ -28,7 +28,7 @@ type stubVentaRepo struct {
 
 func newStubVentaRepo() *stubVentaRepo {
 	return &stubVentaRepo{
-		ventas:    make(map[uuid.UUID]*model.Venta),
+		ventas:     make(map[uuid.UUID]*model.Venta),
 		offlineIdx: make(map[string]*model.Venta),
 	}
 }
