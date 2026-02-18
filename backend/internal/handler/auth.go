@@ -5,10 +5,10 @@ import (
 
 	"blendpos/internal/apierror"
 	"blendpos/internal/dto"
-	"blendpos/internal/middleware"
 	"blendpos/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type AuthHandler struct{ svc service.AuthService }
@@ -82,13 +82,32 @@ func (h *UsuariosHandler) Listar(c *gin.Context) {
 }
 
 func (h *UsuariosHandler) Actualizar(c *gin.Context) {
-	// TODO (Phase 1)
-	c.JSON(http.StatusNotImplemented, apierror.New("not implemented"))
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID invalido"))
+		return
+	}
+	var req dto.ActualizarUsuarioRequest
+	if !bindAndValidate(c, &req) {
+		return
+	}
+	resp, err := h.svc.ActualizarUsuario(c.Request.Context(), id, req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *UsuariosHandler) Desactivar(c *gin.Context) {
-	claims := middleware.GetClaims(c)
-	_ = claims
-	// TODO (Phase 1)
-	c.JSON(http.StatusNotImplemented, apierror.New("not implemented"))
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID invalido"))
+		return
+	}
+	if err := h.svc.DesactivarUsuario(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
+		return
+	}
+	c.Status(http.StatusNoContent)
 }

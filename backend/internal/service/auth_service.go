@@ -20,6 +20,7 @@ type AuthService interface {
 	Refresh(ctx context.Context, refreshToken string) (*dto.LoginResponse, error)
 	CrearUsuario(ctx context.Context, req dto.CrearUsuarioRequest) (*dto.UsuarioResponse, error)
 	ListarUsuarios(ctx context.Context) ([]dto.UsuarioResponse, error)
+	ActualizarUsuario(ctx context.Context, id uuid.UUID, req dto.ActualizarUsuarioRequest) (*dto.UsuarioResponse, error)
 	DesactivarUsuario(ctx context.Context, id uuid.UUID) error
 }
 
@@ -152,6 +153,39 @@ func (s *authService) ListarUsuarios(ctx context.Context) ([]dto.UsuarioResponse
 		}
 	}
 	return resp, nil
+}
+
+func (s *authService) ActualizarUsuario(ctx context.Context, id uuid.UUID, req dto.ActualizarUsuarioRequest) (*dto.UsuarioResponse, error) {
+	user, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, errors.New("usuario no encontrado")
+	}
+	if req.Nombre != "" {
+		user.Nombre = req.Nombre
+	}
+	if req.Email != nil {
+		user.Email = req.Email
+	}
+	if req.Rol != "" {
+		user.Rol = req.Rol
+	}
+	if req.PuntoDeVenta != nil {
+		user.PuntoDeVenta = req.PuntoDeVenta
+	}
+	if req.Password != "" {
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+		if err != nil {
+			return nil, err
+		}
+		user.PasswordHash = string(hash)
+	}
+	if err := s.repo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+	return &dto.UsuarioResponse{
+		ID: user.ID.String(), Username: user.Username, Nombre: user.Nombre,
+		Rol: user.Rol, PuntoDeVenta: user.PuntoDeVenta,
+	}, nil
 }
 
 func (s *authService) DesactivarUsuario(ctx context.Context, id uuid.UUID) error {

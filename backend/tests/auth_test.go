@@ -21,6 +21,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -316,4 +317,84 @@ func TestDesactivarUsuario(t *testing.T) {
 
 	_, err = repo.FindByUsername(context.Background(), "goodbye")
 	assert.Error(t, err, "soft-deleted user must not be findable")
+}
+
+// ── Tests: ActualizarUsuario ──────────────────────────────────────────────────
+
+func TestActualizarUsuario_Nombre(t *testing.T) {
+	repo := newStubRepo()
+	u := seedUser(t, repo, "johndoe", "pass12345", "cajero")
+	svc := service.NewAuthService(repo, newTestCfg())
+
+	resp, err := svc.ActualizarUsuario(context.Background(), u.ID, dto.ActualizarUsuarioRequest{
+		Nombre: "John Updated",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "John Updated", resp.Nombre)
+	assert.Equal(t, "cajero", resp.Rol) // rol unchanged
+}
+
+func TestActualizarUsuario_Rol(t *testing.T) {
+	repo := newStubRepo()
+	u := seedUser(t, repo, "promoted", "pass12345", "cajero")
+	svc := service.NewAuthService(repo, newTestCfg())
+
+	resp, err := svc.ActualizarUsuario(context.Background(), u.ID, dto.ActualizarUsuarioRequest{
+		Rol: "supervisor",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "supervisor", resp.Rol)
+}
+
+func TestActualizarUsuario_CambiaPassword(t *testing.T) {
+	repo := newStubRepo()
+	u := seedUser(t, repo, "passchange", "oldpassword", "cajero")
+	svc := service.NewAuthService(repo, newTestCfg())
+
+	_, err := svc.ActualizarUsuario(context.Background(), u.ID, dto.ActualizarUsuarioRequest{
+		Password: "newpassword1",
+	})
+	require.NoError(t, err)
+
+	// Old password must no longer work; new password must work
+	_, err = svc.Login(context.Background(), dto.LoginRequest{Username: "passchange", Password: "oldpassword"})
+	assert.Error(t, err, "old password should be rejected after update")
+
+	_, err = svc.Login(context.Background(), dto.LoginRequest{Username: "passchange", Password: "newpassword1"})
+	assert.NoError(t, err, "new password should be accepted")
+}
+
+func TestActualizarUsuario_NoExiste(t *testing.T) {
+	repo := newStubRepo()
+	svc := service.NewAuthService(repo, newTestCfg())
+
+	_, err := svc.ActualizarUsuario(context.Background(), uuid.New(), dto.ActualizarUsuarioRequest{
+		Nombre: "Ghost",
+	})
+	assert.Error(t, err)
+}
+
+// ── Tests: LoginRateLimiter ───────────────────────────────────────────────────
+
+func TestLoginRateLimiter_BlocksAfterFiveAttempts(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/login", middleware.LoginRateLimiter(), func(c *gin.Context) {
+		c.JSON(http.StatusUnauthorized, nil) // simulates failed login
+	})
+
+	for i := 1; i <= 5; i++ {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodPost, "/login", bytes.NewReader([]byte(`{}`)))
+		req.RemoteAddr = "10.0.0.1:1234" // same IP
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code, "attempt %d should pass the limiter", i)
+	}
+
+	// 6th attempt must be blocked
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/login", bytes.NewReader([]byte(`{}`)))
+	req.RemoteAddr = "10.0.0.1:1234"
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusTooManyRequests, w.Code, "6th attempt should be rate-limited")
 }

@@ -74,7 +74,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	// Auth (public)
 	auth := r.Group("/v1/auth")
 	{
-		auth.POST("/login", authH.Login)
+		auth.POST("/login", middleware.LoginRateLimiter(), authH.Login)
 		auth.POST("/refresh", authH.Refresh)
 	}
 

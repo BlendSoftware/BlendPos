@@ -20,8 +20,8 @@ import (
 // ── Full in-memory CajaRepository ────────────────────────────────────────────
 
 type fullCajaRepo struct {
-	sesiones     map[uuid.UUID]*model.SesionCaja
-	movimientos  []model.MovimientoCaja
+	sesiones    map[uuid.UUID]*model.SesionCaja
+	movimientos []model.MovimientoCaja
 }
 
 func newFullCajaRepo() *fullCajaRepo {
