@@ -41,9 +41,9 @@ urllib.request.urlretrieve(\
     cd /tmp && rm -rf *fip*2.7.1874* pyafipws.tar.gz
 
 COPY *.py .
-# Copiar certificados: cert individual, CA intermedia, y bundle (cert+CA)
-COPY certs/afip_with_chain.pem /certs/
-COPY certs/afip_intermediate.pem /certs/
+# /certs se provee en runtime via volume mount (docker-compose.yml).
+# No copiamos certs en la imagen por seguridad; solo creamos el directorio.
+RUN mkdir -p /certs
 
 # Non-root user
 RUN useradd -m -u 1001 afipsidecar && \
