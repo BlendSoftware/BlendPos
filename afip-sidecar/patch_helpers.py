@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
 """
 Parcha específicamente el archivo helpers.py de pysimplesoap.
-C Corrige el problema de write() que espera str pero recibe bytes en Python 3.
+
+Parche 1 — write mode:
+  Corrige el problema de write() que espera str pero recibe bytes en Python 3.
+  Cambia open(..., "w") → open(..., "wb") para escritura de caché WSDL.
+
+Parche 2 — Struct pickle safety:
+  Struct hereda de dict. Al hacer pickle.load(), Python restaura primero los
+  pares key-value del dict (llamando __setitem__) y DESPUÉS restaura __dict__
+  del objeto. Esto significa que cuando __setitem__ se ejecuta durante el
+  unpickling, self._Struct__keys todavía no existe → AttributeError.
+  Se agrega un guard en __setitem__ e insert_setitem que inicializa __keys
+  si aún no está presente, haciendo el unpickling seguro.
 """
 import os
+import re
 import sys
 import site
 
@@ -20,49 +32,72 @@ def find_helpers_py():
 def patch_helpers(path):
     """Aplica parches al archivo helpers.py."""
     print(f"Parcheando {path}...")
-    
+
     with open(path, 'r', encoding='utf-8', errors='replace') as f:
-        lines = f.readlines()
-    
-    modified = False
-    new_lines = []
-    
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        
-        # Buscar el patrón where se abre un archivo para escribir XML
-        # Normalmente aparece como: with open(cache, "w") as f:
-        # Debe cambiar a: with open(cache, "wb") as f:
-        if ('open(' in line and ',"w")' in line) or ('open(' in line and ", 'w')" in line):
-            original = line
-            line = line.replace(',"w")', ',"wb")').replace(", 'w')", ", 'wb')")
-            if line != original:
-                print(f"  ✓ Línea {i+1}: Cambiado 'w' -> 'wb'")
-                modified = True
-        
-        # También buscar f = open(..., "w") sin with
-        if 'open(' in line and '"w"' in line and '=' in line:
-            original = line
-            line = line.replace('"w"', '"wb"')
-            if line != original:
-                print(f"  ✓ Línea {i+1}: Cambiado 'w' -> 'wb' (sin with)")
-                modified = True
-        
-        if 'open(' in line and "'w'" in line and '=' in line:
-            original = line
-            line = line.replace("'w'", "'wb'")
-            if line != original:
-                print(f"  ✓ Línea {i+1}: Cambiado 'w' -> 'wb' (sin with, comillas simples)")
-                modified = True
-        
-        new_lines.append(line)
-        i += 1
-    
-    if modified:
+        content = f.read()
+
+    original = content
+    modified_flags = []
+
+    # ── Parche 1: write mode "w" → "wb" ──────────────────────────────────────
+    for old, new in [(',"w")', ',"wb")'), (", 'w')", ", 'wb')")]:
+        if old in content:
+            content = content.replace(old, new)
+            modified_flags.append(f"✓ Cambiado '{old}' -> '{new}' (write mode)")
+
+    for old, new in [('"w"', '"wb"'), ("'w'", "'wb'")]:
+        # Solo en contextos de open(...) con asignación (evitar falsos positivos)
+        pattern = r'(open\([^)]+)' + re.escape(old) + r'(\))'
+        replaced = re.sub(pattern, r'\g<1>' + new + r'\2', content)
+        if replaced != content:
+            content = replaced
+            modified_flags.append(f"✓ Cambiado open(..., {old}) -> open(..., {new})")
+
+    # ── Parche 2: Struct pickle safety ───────────────────────────────────────
+    # Reemplaza __setitem__ para que sea seguro durante unpickling
+    old_setitem = (
+        "    def __setitem__(self, key, value):\n"
+        "        if key not in self.__keys:\n"
+        "            self.__keys.append(key)\n"
+        "        dict.__setitem__(self, key, value)"
+    )
+    new_setitem = (
+        "    def __setitem__(self, key, value):\n"
+        "        # Guard para pickle safety: durante unpickling de subclases de dict,\n"
+        "        # __setitem__ se invoca antes de que __dict__ sea restaurado.\n"
+        "        if '_Struct__keys' not in self.__dict__:\n"
+        "            self.__dict__['_Struct__keys'] = []\n"
+        "        if key not in self.__keys:\n"
+        "            self.__keys.append(key)\n"
+        "        dict.__setitem__(self, key, value)"
+    )
+    if old_setitem in content:
+        content = content.replace(old_setitem, new_setitem)
+        modified_flags.append("✓ Struct.__setitem__: agregado guard para pickle safety")
+
+    # También parchear insert_setitem si existe
+    old_insert = (
+        "        if key not in self.__keys:\n"
+        "            self.__keys.insert(index, key)\n"
+        "        dict.__setitem__(self, key, value)"
+    )
+    new_insert = (
+        "        if '_Struct__keys' not in self.__dict__:\n"
+        "            self.__dict__['_Struct__keys'] = []\n"
+        "        if key not in self.__keys:\n"
+        "            self.__keys.insert(index, key)\n"
+        "        dict.__setitem__(self, key, value)"
+    )
+    if old_insert in content and new_insert not in content:
+        content = content.replace(old_insert, new_insert)
+        modified_flags.append("✓ Struct.insert_setitem: agregado guard para pickle safety")
+
+    if content != original:
         with open(path, 'w', encoding='utf-8') as f:
-            f.writelines(new_lines)
-        print(f"✓ Archivo parcheado exitosamente")
+            f.write(content)
+        for msg in modified_flags:
+            print(f"  {msg}")
+        print(f"✓ Archivo parcheado exitosamente ({len(modified_flags)} parches)")
         return True
     else:
         print("⚠ No se encontraron cambios necesarios")
@@ -73,6 +108,6 @@ if __name__ == '__main__':
     if not helpers_path:
         print("ERROR: No se encontró pysimplesoap/helpers.py en site-packages")
         sys.exit(1)
-    
+
     success = patch_helpers(helpers_path)
     sys.exit(0 if success else 1)

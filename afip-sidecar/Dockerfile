@@ -59,4 +59,7 @@ EXPOSE 8001
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]
+# Limpiar cacché de pickles stale al inicio: los .pkl de pysimplesoap/pyafipws pueden
+# quedar incompatibles entre reinicios (name-mangling de Python 3 en Struct.__keys).
+# El .xml del WSDL se conserva, el .pkl se regenera limpio en cada arranque.
+CMD ["sh", "-c", "find /usr/local/lib/python3.11/site-packages/pyafipws/cache -name '*.pkl' -delete 2>/dev/null; exec uvicorn main:app --host 0.0.0.0 --port 8001"]
