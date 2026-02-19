@@ -8,119 +8,274 @@ Internal service only — NOT exposed externally.
 Go backend calls POST /facturar with invoice data.
 """
 
+# IMPORTANTE: Importar py3_compat PRIMERO para monkey-patch hashlib
+import py3_compat
+
 from contextlib import asynccontextmanager
-from typing import Optional
 import logging
 import os
+import sys
+from typing import Dict, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
+
+# Import local modules
+from schemas import FacturarRequest, FacturarResponse, HealthResponse
+from afip_client import AFIPClient
+
+# ── Logging setup ─────────────────────────────────────────────────────────────
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
 
 logger = logging.getLogger("afip-sidecar")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-# ── Pydantic schemas ──────────────────────────────────────────────────────────
+# ── Global AFIP client ────────────────────────────────────────────────────────
 
-class FacturarRequest(BaseModel):
-    cuit_emisor: str = Field(..., description="CUIT del emisor (sin guiones)")
-    punto_de_venta: int = Field(..., ge=1)
-    tipo_comprobante: int = Field(6, description="6=Factura B, 11=Factura C, 1=Factura A")
-    tipo_doc_receptor: int = Field(99, description="99=Consumidor final, 80=CUIT")
-    nro_doc_receptor: str = Field("0", description="CUIT del receptor o 0 para CF")
-    nombre_receptor: Optional[str] = None
-    concepto: int = Field(1, description="1=Productos, 2=Servicios, 3=Ambos")
-    importe_sin_iva: float = Field(..., ge=0)
-    importe_iva: float = Field(0, ge=0)
-    importe_total: float = Field(..., ge=0)
-    moneda: str = Field("PES", description="PES=Pesos argentinos")
-    cot_moneda: float = Field(1.0)
-
-
-class FacturarResponse(BaseModel):
-    cae: str
-    cae_vencimiento: str  # YYYYMMDD
-    resultado: str        # "A" = aprobado, "R" = rechazado
-    numero_comprobante: int
-    observaciones: Optional[str] = None
-
-
-# ── AFIP client wrapper ───────────────────────────────────────────────────────
-
-class AFIPClient:
-    """
-    Wraps pyafipws WSAA + WSFEV1.
-    Instantiated once at startup; token cached and auto-renewed.
-    """
-
-    def __init__(self):
-        self.homologacion = os.getenv("AFIP_HOMOLOGACION", "true").lower() == "true"
-        self.cert_path = os.getenv("AFIP_CERT_PATH", "/certs/afip.crt")
-        self.key_path = os.getenv("AFIP_KEY_PATH", "/certs/afip.key")
-        self._wsfev1 = None
-        logger.info("AFIPClient initialized — homologacion=%s", self.homologacion)
-
-    def _get_wsfev1(self):
-        """
-        TODO Phase 5: Initialize pyafipws WSFEV1 with active WSAA token.
-        Pattern:
-            from pyafipws.wsfev1 import WSFEv1
-            from pyafipws.wsaa import WSAA
-            wsaa = WSAA()
-            ta = wsaa.Autenticar("wsfe", self.cert_path, self.key_path, wsdl=...)
-            wsfe = WSFEv1()
-            wsfe.Conectar(wsdl=..., ta=ta)
-            return wsfe
-        """
-        raise NotImplementedError("Phase 5: pyafipws integration pending")
-
-    def facturar(self, req: FacturarRequest) -> FacturarResponse:
-        """TODO Phase 5: Call WSFEV1.CAESolicitar and return CAE."""
-        raise NotImplementedError("Phase 5: facturación pending")
-
-
-afip_client: AFIPClient
+afip_client: AFIPClient = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Lifecycle manager para FastAPI.
+    Inicializa el cliente AFIP al startup.
+    """
     global afip_client
-    afip_client = AFIPClient()
+    
+    logger.info("=" * 60)
+    logger.info("Iniciando BlendPOS AFIP Sidecar...")
+    logger.info("=" * 60)
+    
+    # Leer configuración desde env vars
+    cuit_emisor = os.getenv("AFIP_CUIT_EMISOR", "")
+    cert_path = os.getenv("AFIP_CERT_PATH", "/certs/afip.crt")
+    key_path = os.getenv("AFIP_KEY_PATH", "/certs/afip.key")
+    homologacion = os.getenv("AFIP_HOMOLOGACION", "true").lower() == "true"
+    cache_dir = os.getenv("AFIP_CACHE_DIR", "/tmp/afip_cache")
+    
+    # Validar configuración requerida
+    if not cuit_emisor:
+        logger.error("ERROR: Variable AFIP_CUIT_EMISOR no configurada")
+        raise ValueError("AFIP_CUIT_EMISOR es requerido")
+    
+    # Inicializar cliente
+    try:
+        afip_client = AFIPClient(
+            cuit_emisor=cuit_emisor,
+            cert_path=cert_path,
+            key_path=key_path,
+            homologacion=homologacion,
+            cache_dir=cache_dir
+        )
+        
+        logger.info("✓ Cliente AFIP inicializado correctamente")
+        logger.info(f"  - CUIT Emisor: {cuit_emisor}")
+        logger.info(f"  - Modo: {'HOMOLOGACIÓN' if homologacion else 'PRODUCCIÓN'}")
+        logger.info(f"  - Certificado: {cert_path}")
+        
+        # Autenticar proactivamente al iniciar
+        try:
+            auth_result = afip_client.autenticar()
+            logger.info(f"✓ Autenticación WSAA exitosa — Token válido hasta: {auth_result['expiracion']}")
+        except Exception as e:
+            logger.warning(f"⚠ No se pudo autenticar en startup (se reintentará en primera factura): {e}")
+        
+    except Exception as e:
+        logger.error(f"✗ Error fatal al inicializar cliente AFIP: {e}")
+        raise
+    
+    logger.info("=" * 60)
+    logger.info("Sidecar listo — Escuchando en puerto 8001")
+    logger.info("=" * 60)
+    
     yield
+    
+    # Cleanup (si fuera necesario)
+    logger.info("Deteniendo AFIP Sidecar...")
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="BlendPOS AFIP Sidecar",
-    version="0.1.0",
-    description="Internal AFIP WSAA+WSFEV1 microservice",
+    version="1.0.0",
+    description="Microservicio interno de integración AFIP (WSAA + WSFEV1)",
     lifespan=lifespan,
-    docs_url="/docs" if os.getenv("AFIP_HOMOLOGACION", "true") == "true" else None
+    # Swagger solo en homologación
+    docs_url="/docs" if os.getenv("AFIP_HOMOLOGACION", "true").lower() == "true" else None,
+    redoc_url="/redoc" if os.getenv("AFIP_HOMOLOGACION", "true").lower() == "true" else None
+)
+
+# CORS para requests del backend Go (aunque es red interna)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción restringir al host del backend
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-@app.get("/health")
-def health():
-    return {"ok": True, "service": "afip-sidecar", "homologacion": os.getenv("AFIP_HOMOLOGACION", "true")}
+# ── Exception handlers ────────────────────────────────────────────────────────
+
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request: Request, exc: ValidationError):
+    """Handler para errores de validación de Pydantic"""
+    logger.warning(f"Error de validación: {exc.errors()}")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "validation_error",
+            "detail": exc.errors(),
+            "message": "Los datos enviados no cumplen con el contrato esperado"
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handler global para excepciones no capturadas"""
+    logger.exception(f"Excepción no capturada en {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "detail": str(exc),
+            "message": "Error interno del servidor"
+        }
+    )
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    """
+    Health check del servicio.
+    Verifica conectividad con AFIP y estado del token.
+    """
+    homologacion = os.getenv("AFIP_HOMOLOGACION", "true").lower() == "true"
+    mode = "homologacion" if homologacion else "produccion"
+    
+    # Probar conexión AFIP
+    afip_status = afip_client.probar_conexion() if afip_client else {}
+    
+    return HealthResponse(
+        ok=True,
+        service="afip-sidecar",
+        mode=mode,
+        afip_conectado=afip_status.get('conectado', False),
+        ultima_autenticacion=afip_status.get('ultima_autenticacion')
+    )
 
 
 @app.post("/facturar", response_model=FacturarResponse)
-def facturar(req: FacturarRequest):
+def facturar(req: FacturarRequest) -> FacturarResponse:
     """
-    Issue an electronic invoice via AFIP WSFEV1.
-    Called exclusively by the Go backend worker.
+    Emite una factura electrónica en AFIP via WSFEV1.
+    
+    Este endpoint es llamado exclusivamente por el worker de Go
+    cuando una venta necesita ser facturada.
+    
+    Flujo:
+    1. Valida el payload (Pydantic)
+    2. Autentica con WSAA si el token expiró
+    3. Solicita CAE a WSFEV1
+    4. Retorna el CAE o los errores de AFIP
+    
+    Raises:
+        HTTPException 400: Datos inválidos
+        HTTPException 502: Error comunicación con AFIP
+        HTTPException 503: AFIP no disponible
     """
+    if not afip_client:
+        logger.error("Cliente AFIP no inicializado")
+        raise HTTPException(
+            status_code=503,
+            detail="Cliente AFIP no disponible"
+        )
+    
+    logger.info(
+        f"→ Solicitud de factura recibida — PV: {req.punto_de_venta}, "
+        f"Tipo: {req.tipo_comprobante}, Total: ${req.importe_total:.2f}"
+    )
+    
     try:
+        # Llamar al cliente AFIP
         result = afip_client.facturar(req)
+        
+        # Log del resultado
+        if result.resultado == 'A':
+            logger.info(
+                f"✓ Factura aprobada — CAE: {result.cae}, "
+                f"Nro: {result.numero_comprobante}"
+            )
+        else:
+            logger.warning(
+                f"✗ Factura rechazada — Resultado: {result.resultado}, "
+                f"Obs: {len(result.observaciones or [])}"
+            )
+        
         return result
-    except NotImplementedError as e:
-        raise HTTPException(status_code=501, detail=str(e))
+        
+    except FileNotFoundError as e:
+        # Certificados no encontrados
+        logger.error(f"Error de certificados: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Configuración de certificados inválida: {str(e)}"
+        )
+        
+    except ValueError as e:
+        # Error de validación
+        logger.error(f"Error de validación: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+        
     except Exception as e:
-        logger.exception("Error al facturar: %s", e)
-        raise HTTPException(status_code=502, detail=f"AFIP error: {str(e)}")
+        # Error general de comunicación con AFIP
+        logger.exception(f"Error al facturar: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Error comunicación con AFIP: {str(e)}"
+        )
 
+
+@app.get("/")
+def root() -> Dict[str, str]:
+    """Endpoint root con información básica"""
+    return {
+        "service": "BlendPOS AFIP Sidecar",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "health": "GET /health",
+            "facturar": "POST /facturar"
+        }
+    }
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=False)
+    
+    port = int(os.getenv("AFIP_PORT", "8001"))
+    
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        log_level="info",
+        access_log=True,
+        reload=False  # No reload en producción
+    )

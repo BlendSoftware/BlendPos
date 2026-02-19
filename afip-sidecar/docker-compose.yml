@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  afip-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blendpos-afip-sidecar
+    ports:
+      - "8001:8001"
+    environment:
+      # Configuración básica
+      AFIP_CUIT_EMISOR: ${AFIP_CUIT_EMISOR:-20123456789}
+      AFIP_HOMOLOGACION: ${AFIP_HOMOLOGACION:-true}
+      AFIP_PORT: 8001
+      
+      # Rutas de certificados (montados como volumen)
+      AFIP_CERT_PATH: /certs/afip.crt
+      AFIP_KEY_PATH: /certs/afip.key
+      
+      # Cache
+      AFIP_CACHE_DIR: /tmp/afip_cache
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    
+    volumes:
+      # Montar certificados desde host (read-only por seguridad)
+      - ./certs:/certs:ro
+      
+      # Cache persistente de tokens WSAA
+      - afip-cache:/tmp/afip_cache
+    
+    networks:
+      - blendpos-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  afip-cache:
+    driver: local
+
+networks:
+  blendpos-network:
+    name: blendpos-network
+    driver: bridge

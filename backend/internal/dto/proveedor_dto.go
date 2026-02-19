@@ -41,6 +41,7 @@ type PrecioPreviewItem struct {
 	PrecioVentaActual decimal.Decimal `json:"precio_venta_actual"`
 	PrecioVentaNuevo  decimal.Decimal `json:"precio_venta_nuevo"`
 	DiferenciaCosto   decimal.Decimal `json:"diferencia_costo"`
+	MargenNuevo       decimal.Decimal `json:"margen_nuevo"`
 }
 
 type ActualizacionMasivaResponse struct {

@@ -15,6 +15,13 @@ type ProveedorRepository interface {
 	List(ctx context.Context) ([]model.Proveedor, error)
 	Update(ctx context.Context, p *model.Proveedor) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
+
+	// Price history — append-only (RF-26)
+	CreateHistorialPrecio(ctx context.Context, h *model.HistorialPrecio) error
+	ListHistorialPorProducto(ctx context.Context, productoID uuid.UUID) ([]model.HistorialPrecio, error)
+
+	// DB exposes the underlying *gorm.DB so services can open transactions.
+	DB() *gorm.DB
 }
 
 type proveedorRepo struct{ db *gorm.DB }
@@ -33,7 +40,7 @@ func (r *proveedorRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.Prov
 
 func (r *proveedorRepo) List(ctx context.Context) ([]model.Proveedor, error) {
 	var proveedores []model.Proveedor
-	err := r.db.WithContext(ctx).Where("activo = true").Find(&proveedores).Error
+	err := r.db.WithContext(ctx).Where("activo = true").Order("razon_social ASC").Find(&proveedores).Error
 	return proveedores, err
 }
 
@@ -44,3 +51,19 @@ func (r *proveedorRepo) Update(ctx context.Context, p *model.Proveedor) error {
 func (r *proveedorRepo) SoftDelete(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Model(&model.Proveedor{}).Where("id = ?", id).Update("activo", false).Error
 }
+
+func (r *proveedorRepo) CreateHistorialPrecio(ctx context.Context, h *model.HistorialPrecio) error {
+	return r.db.WithContext(ctx).Create(h).Error
+}
+
+func (r *proveedorRepo) ListHistorialPorProducto(ctx context.Context, productoID uuid.UUID) ([]model.HistorialPrecio, error) {
+	var historial []model.HistorialPrecio
+	err := r.db.WithContext(ctx).
+		Where("producto_id = ?", productoID).
+		Order("created_at DESC").
+		Limit(50).
+		Find(&historial).Error
+	return historial, err
+}
+
+func (r *proveedorRepo) DB() *gorm.DB { return r.db }

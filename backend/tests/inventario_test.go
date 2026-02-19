@@ -133,6 +133,23 @@ func (r *stubProductoRepo) UpdateStockTx(_ *gorm.DB, id uuid.UUID, delta int) er
 	return nil
 }
 
+func (r *stubProductoRepo) UpdatePreciosTx(_ *gorm.DB, id uuid.UUID, nuevoCosto, nuevaVenta, margen interface{}) error {
+	p, ok := r.productos[id]
+	if !ok {
+		return errors.New("record not found")
+	}
+	if c, ok := nuevoCosto.(decimal.Decimal); ok {
+		p.PrecioCosto = c
+	}
+	if v, ok := nuevaVenta.(decimal.Decimal); ok {
+		p.PrecioVenta = v
+	}
+	if m, ok := margen.(decimal.Decimal); ok {
+		p.MargenPct = m
+	}
+	return nil
+}
+
 func (r *stubProductoRepo) DB() *gorm.DB {
 	// In-memory stub: return a zero-value DB so Transaction callback can still be invoked
 	// by the service — but for unit tests we skip DesarmeManual's full TX path.

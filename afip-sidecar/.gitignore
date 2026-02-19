@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Entorno virtual
+.venv/
+venv/
+ENV/
+env/
+
+# Variables de entorno (CRÍTICO: nunca commitear)
+.env
+
+# Certificados AFIP (CRÍTICO: nunca commitear)
+*.crt
+*.key
+*.csr
+certs/
+*.pem
+*.p12
+*.pfx
+certs/
+certificates/
+
+# Cache de AFIP
+/tmp/
+*.xml
+ta_*.xml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json

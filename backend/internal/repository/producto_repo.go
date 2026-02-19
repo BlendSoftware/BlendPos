@@ -31,6 +31,9 @@ type ProductoRepository interface {
 	// Used inside transactions — callers must pass the tx instance
 	UpdateStockTx(tx *gorm.DB, id uuid.UUID, delta int) error
 
+	// UpdatePreciosTx actualiza precio_costo, precio_venta y margen_pct dentro de una tx.
+	UpdatePreciosTx(tx *gorm.DB, id uuid.UUID, nuevoCosto, nuevaVenta, margen interface{}) error
+
 	// DB exposes the underlying *gorm.DB so services can open transactions.
 	DB() *gorm.DB
 }
@@ -127,6 +130,14 @@ func (r *productoRepo) ListVinculos(ctx context.Context) ([]model.ProductoHijo, 
 func (r *productoRepo) UpdateStockTx(tx *gorm.DB, id uuid.UUID, delta int) error {
 	return tx.Model(&model.Producto{}).Where("id = ?", id).
 		Update("stock_actual", gorm.Expr("stock_actual + ?", delta)).Error
+}
+
+func (r *productoRepo) UpdatePreciosTx(tx *gorm.DB, id uuid.UUID, nuevoCosto, nuevaVenta, margen interface{}) error {
+	return tx.Model(&model.Producto{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"precio_costo": nuevoCosto,
+		"precio_venta": nuevaVenta,
+		"margen_pct":   margen,
+	}).Error
 }
 
 func (r *productoRepo) DB() *gorm.DB { return r.db }
