@@ -175,6 +175,22 @@ def patch_wsaa(path):
         content = content.replace(old_signtra, new_signtra)
         print(f"  ✓ Corregido str(tra) → bytes.decode() en SignTRA (Python 3 fix)")
 
+    # PASO 12: Corregir open(fn, "w").write(ta) donde ta es bytes (Python 3)
+    # LoginCMS devuelve ta_xml = loginCmsReturn.encode("utf-8") → bytes
+    # open("w") no acepta bytes, hay que abrir en "wb"
+    old_write_ta = '                    open(fn, "w").write(ta)'
+    new_write_ta = '                    open(fn, "wb").write(ta if isinstance(ta, bytes) else ta.encode("utf-8"))'
+    if old_write_ta in content:
+        content = content.replace(old_write_ta, new_write_ta)
+        print(f"  ✓ Corregido open(fn, 'w').write(ta) → open(fn, 'wb') para Python 3")
+
+    # También corregir la lectura del ticket guardado
+    old_read_ta = '                ta = open(fn, "r").read()'
+    new_read_ta = '                ta = open(fn, "rb").read()'
+    if old_read_ta in content:
+        content = content.replace(old_read_ta, new_read_ta)
+        print(f"  ✓ Corregido open(fn, 'r').read() → open(fn, 'rb') para Python 3")
+
     if content != original:
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)

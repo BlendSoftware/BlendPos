@@ -159,10 +159,21 @@ class AFIPClient:
                 raise
             
             if not ta:
+                excepcion = wsaa.Excepcion or ""
+                # coe.alreadyAuthenticated: AFIP dice que ya existe un TA válido para este cert.
+                # Ocurre cuando el token anterior fue emitido pero no se guardó en disco (crash).
+                # El TA expira automáticamente (máx. 5hs). No es un error fatal.
+                if "alreadyAuthenticated" in excepcion:
+                    logger.warning(
+                        "WSAA informa que ya existe un TA válido para este certificado. "
+                        "Esto ocurre si el token anterior no se guardó correctamente. "
+                        "La autenticación se reintentará automáticamente cuando el TA expire (~5hs)."
+                    )
+                    raise Exception(f"WSAA_ALREADY_AUTHENTICATED: {excepcion}")
                 # Si wsaa capturó una excepción interna, intentar obtener más info
                 if hasattr(wsaa, 'Traceback') and wsaa.Traceback:
                     logger.error("Traceback de pyafipws:\n%s", wsaa.Traceback)
-                raise Exception(f"WSAA auth falló: {wsaa.Excepcion}")
+                raise Exception(f"WSAA auth falló: {excepcion}")
             
             # Extraer token y sign del ticket
             self._token = wsaa.Token
