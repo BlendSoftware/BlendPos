@@ -85,6 +85,96 @@ def patch_wsaa(path):
         content = content.replace(old_md5, new_md5)
         print(f"  ✓ Corregido hashlib.md5() para Python 3 (encode UTF-8)")
 
+    # PASO 6: Corregir M2Crypto BIO.MemoryBuffer que requiere bytes, no str
+    # open().read() devuelve str en Python 3; hay que leer en modo binario
+    old_read_key = "                privatekey = open(privatekey).read()"
+    new_read_key = "                privatekey = open(privatekey, 'rb').read()"
+    if old_read_key in content:
+        content = content.replace(old_read_key, new_read_key)
+        print(f"  ✓ Corregido open(privatekey).read() → open(privatekey, 'rb').read()")
+
+    old_read_crt = "                cert = open(cert).read()"
+    new_read_crt = "                cert = open(cert, 'rb').read()"
+    if old_read_crt in content:
+        content = content.replace(old_read_crt, new_read_crt)
+        print(f"  ✓ Corregido open(cert).read() → open(cert, 'rb').read()")
+
+    # Protección extra: si privatekey/cert llegan como str (PEM en memoria), encodear antes de BIO
+    old_key_bio = "        key_bio = BIO.MemoryBuffer(privatekey)"
+    new_key_bio = "        key_bio = BIO.MemoryBuffer(privatekey.encode('utf-8') if isinstance(privatekey, str) else privatekey)"
+    if old_key_bio in content:
+        content = content.replace(old_key_bio, new_key_bio)
+        print(f"  ✓ Corregido BIO.MemoryBuffer(privatekey) para Python 3")
+
+    old_crt_bio = "        crt_bio = BIO.MemoryBuffer(cert)"
+    new_crt_bio = "        crt_bio = BIO.MemoryBuffer(cert.encode('utf-8') if isinstance(cert, str) else cert)"
+    if old_crt_bio in content:
+        content = content.replace(old_crt_bio, new_crt_bio)
+        print(f"  ✓ Corregido BIO.MemoryBuffer(cert) para Python 3")
+
+    # PASO 7: Corregir email.message_from_string() → message_from_bytes()
+    # out.read() devuelve bytes en Python 3/M2Crypto pero message_from_string espera str
+    old_msg = "        msg = email.message_from_string(out.read())"
+    new_msg = "        _out_data = out.read(); msg = email.message_from_bytes(_out_data) if isinstance(_out_data, bytes) else email.message_from_string(_out_data)"
+    if old_msg in content:
+        content = content.replace(old_msg, new_msg)
+        print(f"  ✓ Corregido email.message_from_string() → message_from_bytes() para Python 3")
+
+    # PASO 8: Corregir BIO.MemoryBuffer(tra) — tra puede ser str cuando viene de SignTRA
+    old_buf = "        buf = BIO.MemoryBuffer(tra)             # Crear un buffer desde el texto"
+    new_buf = "        buf = BIO.MemoryBuffer(tra.encode('utf-8') if isinstance(tra, str) else tra)  # Python 3 compat"
+    if old_buf in content:
+        content = content.replace(old_buf, new_buf)
+        print(f"  ✓ Corregido BIO.MemoryBuffer(tra) para Python 3")
+    else:
+        # Variante sin comentario al final
+        old_buf2 = "        buf = BIO.MemoryBuffer(tra)"
+        new_buf2 = "        buf = BIO.MemoryBuffer(tra.encode('utf-8') if isinstance(tra, str) else tra)"
+        if old_buf2 in content and new_buf2 not in content:
+            content = content.replace(old_buf2, new_buf2)
+            print(f"  ✓ Corregido BIO.MemoryBuffer(tra) para Python 3 (variante sin comentario)")
+
+    # PASO 9: Normalizar tipos str/bytes al inicio del path M2Crypto (if BIO:)
+    # SignTRA envía cert/privatekey como bytes (encode('latin1')); hay que decodificar
+    # a str para que la lógica de "startswith('-----BEGIN')" funcione
+    # Buscamos la línea del startswith y anteponemos la normalización
+    old_normalize = '        if not privatekey.startswith("-----BEGIN RSA PRIVATE KEY-----"):'
+    new_normalize = (
+        "        # Normalización Python 3: decodificar bytes a str si llegaron como bytes\n"
+        "        if isinstance(privatekey, bytes):\n"
+        "            privatekey = privatekey.decode('utf-8', errors='replace')\n"
+        "        if isinstance(cert, bytes):\n"
+        "            cert = cert.decode('utf-8', errors='replace')\n"
+        '        if not privatekey.startswith("-----BEGIN RSA PRIVATE KEY-----"):'
+    )
+    if old_normalize in content and new_normalize not in content:
+        content = content.replace(old_normalize, new_normalize)
+        print(f"  ✓ Agregada normalización bytes→str para cert/privatekey (Python 3)")
+
+    # PASO 10: Agregar timezone a generationTime y expirationTime en create_tra
+    # AFIP's WSAA schema requires xsd:dateTime WITH timezone (e.g. 2026-02-19T21:50:38+00:00)
+    # .isoformat() without timezone gives naive datetime → xml.bad schema error
+    old_gen_tz = "tra.header.add_child('generationTime',str(datetime.datetime.fromtimestamp(int(time.time())-ttl).isoformat()))"
+    new_gen_tz = "tra.header.add_child('generationTime',str(datetime.datetime.fromtimestamp(int(time.time())-ttl).astimezone().isoformat()))"
+    if old_gen_tz in content:
+        content = content.replace(old_gen_tz, new_gen_tz)
+        print(f"  ✓ generationTime: agregada timezone con .astimezone()")
+
+    old_exp_tz = "tra.header.add_child('expirationTime',str(datetime.datetime.fromtimestamp(int(time.time())+ttl).isoformat()))"
+    new_exp_tz = "tra.header.add_child('expirationTime',str(datetime.datetime.fromtimestamp(int(time.time())+ttl).astimezone().isoformat()))"
+    if old_exp_tz in content:
+        content = content.replace(old_exp_tz, new_exp_tz)
+        print(f"  ✓ expirationTime: agregada timezone con .astimezone()")
+
+    # PASO 11: Corregir str(tra) en SignTRA — si tra es bytes, str(bytes) = "b'...'" (invalido)
+    # CreateTRA devuelve bytes en Python 3. str(bytes) produce "b'<?xml...'" con b' prefix
+    # que AFIP rechaza con xml.bad. Fix: usar decode() para bytes.
+    old_signtra = "        return sign_tra(str(tra),cert.encode('latin1'),privatekey.encode('latin1'),passphrase.encode(\"utf8\"))"
+    new_signtra = "        tra_str = tra.decode('utf-8') if isinstance(tra, bytes) else str(tra);  return sign_tra(tra_str,cert.encode('latin1'),privatekey.encode('latin1'),passphrase.encode(\"utf8\"))"
+    if old_signtra in content:
+        content = content.replace(old_signtra, new_signtra)
+        print(f"  ✓ Corregido str(tra) → bytes.decode() en SignTRA (Python 3 fix)")
+
     if content != original:
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)

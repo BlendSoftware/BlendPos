@@ -61,7 +61,7 @@ services:
     ports:
       - "8001:8001"
     environment:
-      AFIP_CUIT_EMISOR: "20471955575"
+      AFIP_CUIT_EMISOR: "20442477060"
       AFIP_HOMOLOGACION: "true"
       AFIP_CERT_PATH: /certs/afip.crt
       AFIP_KEY_PATH: /certs/afip.key
