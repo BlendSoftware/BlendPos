@@ -11,6 +11,7 @@ import (
 
 	"blendpos/internal/config"
 	"blendpos/internal/infra"
+	"blendpos/internal/repository"
 	"blendpos/internal/router"
 	"blendpos/internal/worker"
 
@@ -37,10 +38,23 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to connect to redis")
 	}
 
-	// Start goroutine worker pool for async tasks (invoicing, email, PDF)
+	// Start goroutine worker pool for async tasks (invoicing, email, PDF).
+	// Worker handlers are wired here (composition root) so that the pool
+	// has full access to all infrastructure dependencies (RF-17, RF-19, RF-21).
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker.StartWorkerPool(ctx, rdb, cfg.WorkerPoolSize)
+
+	afipClient := infra.NewAFIPClient(cfg.AFIPSidecarURL)
+	mailer := infra.NewMailer(cfg)
+	dispatcher := worker.NewDispatcher(rdb, afipClient, mailer)
+	comprobanteRepo := repository.NewComprobanteRepository(db)
+	ventaRepo := repository.NewVentaRepository(db)
+
+	workerHandlers := &worker.WorkerHandlers{
+		Facturacion: worker.NewFacturacionWorker(afipClient, comprobanteRepo, ventaRepo, dispatcher, cfg.PDFStoragePath),
+		Email:       worker.NewEmailWorker(mailer),
+	}
+	worker.StartWorkerPool(ctx, rdb, workerHandlers, cfg.WorkerPoolSize)
 
 	r := router.New(cfg, db, rdb)
 

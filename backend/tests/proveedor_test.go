@@ -396,8 +396,10 @@ func TestImportarCSV_Upsert(t *testing.T) {
 	assert.Equal(t, 1, resp.Actualizadas)
 	assert.Equal(t, 1, resp.Creadas)
 	assert.Equal(t, 0, resp.Errores)
-	// Precio debe haber cambiado
-	assert.Equal(t, decimal.NewFromFloat(90), prodRepo.productos[existing.ID].PrecioCosto)
+	// Precio debe haber cambiado — usar .Equal() para comparar decimals independientemente
+	// de su representación interna (90 vs 9000e-2 son matemáticamente equivalentes)
+	assert.True(t, decimal.NewFromFloat(90).Equal(prodRepo.productos[existing.ID].PrecioCosto),
+		"PrecioCosto esperado 90.00, obtenido: %s", prodRepo.productos[existing.ID].PrecioCosto.String())
 }
 
 func TestImportarCSV_FilaConError(t *testing.T) {

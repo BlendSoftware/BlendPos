@@ -3,6 +3,7 @@ package handler
 import (
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"blendpos/internal/apierror"
@@ -83,9 +84,23 @@ func (h *FacturacionHandler) ObtenerComprobante(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// DescargarPDF GET /v1/facturacion/pdf/:id
+// Serves the generated PDF receipt as a file download (AC-06.4).
 func (h *FacturacionHandler) DescargarPDF(c *gin.Context) {
-	// TODO (Phase 5)
-	c.JSON(http.StatusNotImplemented, apierror.New("not implemented"))
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID inválido"))
+		return
+	}
+	pdfPath, err := h.svc.ObtenerPDFPath(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, apierror.New(err.Error()))
+		return
+	}
+	fileName := filepath.Base(pdfPath)
+	c.Header("Content-Disposition", "attachment; filename=\""+fileName+"\"")
+	c.Header("Content-Type", "application/pdf")
+	c.File(pdfPath)
 }
 
 type ProveedoresHandler struct{ svc service.ProveedorService }

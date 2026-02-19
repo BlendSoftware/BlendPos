@@ -57,16 +57,24 @@ func (d *Dispatcher) enqueue(ctx context.Context, queue, jobType string, payload
 	return d.rdb.LPush(ctx, queue, encoded).Err()
 }
 
+// WorkerHandlers holds the concrete implementations for each job type.
+// Both fields are optional — nil means that job type is currently a no-op.
+type WorkerHandlers struct {
+	Facturacion *FacturacionWorker
+	Email       *EmailWorker
+}
+
 // StartWorkerPool launches numWorkers goroutines consuming both queues.
 // Each goroutine blocks on BRPOP — zero CPU when idle.
-func StartWorkerPool(ctx context.Context, rdb *redis.Client, numWorkers int) {
+// handlers may be nil in test environments (jobs will be logged but not processed).
+func StartWorkerPool(ctx context.Context, rdb *redis.Client, handlers *WorkerHandlers, numWorkers int) {
 	for i := 0; i < numWorkers; i++ {
-		go runWorker(ctx, rdb, i)
+		go runWorker(ctx, rdb, handlers, i)
 	}
 	log.Info().Msgf("worker pool started with %d workers", numWorkers)
 }
 
-func runWorker(ctx context.Context, rdb *redis.Client, id int) {
+func runWorker(ctx context.Context, rdb *redis.Client, handlers *WorkerHandlers, id int) {
 	queues := []string{QueueFacturacion, QueueEmail}
 	for {
 		select {
@@ -82,17 +90,38 @@ func runWorker(ctx context.Context, rdb *redis.Client, id int) {
 			if len(result) < 2 {
 				continue
 			}
-			processJob(ctx, result[0], result[1])
+			processJob(ctx, handlers, result[0], result[1])
 		}
 	}
 }
 
-func processJob(ctx context.Context, queue, raw string) {
+func processJob(ctx context.Context, handlers *WorkerHandlers, queue, raw string) {
 	var job Job
 	if err := json.Unmarshal([]byte(raw), &job); err != nil {
 		log.Error().Str("queue", queue).Err(err).Msg("failed to unmarshal job")
 		return
 	}
-	// Specific handlers are wired in Phase 5
 	log.Info().Str("type", job.Type).Str("queue", queue).Msg("processing job")
+
+	if handlers == nil {
+		log.Warn().Str("type", job.Type).Msg("processJob: no handlers registered — job dropped")
+		return
+	}
+
+	switch job.Type {
+	case "facturacion":
+		if handlers.Facturacion != nil {
+			handlers.Facturacion.Process(ctx, job.Payload)
+		} else {
+			log.Warn().Msg("processJob: FacturacionWorker not configured — job dropped")
+		}
+	case "email":
+		if handlers.Email != nil {
+			handlers.Email.Process(ctx, job.Payload)
+		} else {
+			log.Warn().Msg("processJob: EmailWorker not configured — job dropped")
+		}
+	default:
+		log.Warn().Str("type", job.Type).Str("queue", queue).Msg("processJob: unknown job type")
+	}
 }
