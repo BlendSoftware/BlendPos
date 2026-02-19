@@ -15,6 +15,7 @@ COPY requirements-base.txt requirements.txt patch_setuppy.py patch_wsaa.py patch
 RUN pip install --no-cache-dir -r requirements-base.txt
 
 # Parches para pysimplesoap (Python 2 -> 3 compatibility)
+# patch_helpers.py también parchea client.py (hashlib.md5 Python 3 fix)
 RUN python3 /app/patch_pysimplesoap.py && \
     python3 /app/patch_helpers.py
 
