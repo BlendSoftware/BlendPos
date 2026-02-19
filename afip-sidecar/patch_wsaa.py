@@ -76,6 +76,15 @@ def patch_wsaa(path):
         content = content.replace(old_exception_handling2, new_exception_handling)
         print(f"  ✓ Corregido manejo de excepción errno (v2)")
     
+    # PASO 5: Corregir hashlib.md5() que en Python 3 requiere bytes, no str
+    # La línea original: hashlib.md5(service + crt + key).hexdigest()
+    # En Python 3 hashlib.md5() lanza TypeError: Strings must be encoded before hashing
+    old_md5 = 'hashlib.md5(service + crt + key).hexdigest()'
+    new_md5 = 'hashlib.md5((service + crt + key).encode("utf-8")).hexdigest()'
+    if old_md5 in content:
+        content = content.replace(old_md5, new_md5)
+        print(f"  ✓ Corregido hashlib.md5() para Python 3 (encode UTF-8)")
+
     if content != original:
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)

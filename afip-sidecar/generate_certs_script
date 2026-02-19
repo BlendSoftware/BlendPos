@@ -1,0 +1,18 @@
+$CUIT = "20471955575"   # <-- CAMBIAR ESTE NUMERO por el CUIT del cliente
+$certsPath = "c:\Users\Usuario\Desktop\BLEND SOFTWARE\BlendPos\afip-sidecar\certs"
+
+docker run --rm -v "${certsPath}:/certs" --entrypoint openssl alpine/openssl genrsa -out /certs/afip.key 2048
+docker run --rm -v "${certsPath}:/certs" --entrypoint openssl alpine/openssl req -new -key /certs/afip.key -out /certs/afip.csr -subj "/C=AR/O=BlendPOS/CN=wsfe/serialNumber=CUIT $CUIT"
+docker run --rm -v "${certsPath}:/certs" --entrypoint openssl alpine/openssl x509 -req -days 365 -in /certs/afip.csr -signkey /certs/afip.key -out /certs/afip.crt
+Write-Host "Listo. CSR generado para CUIT $CUIT"
+Get-Content "${certsPath}\afip.csr" | Set-Clipboard
+Write-Host "CSR copiado al portapapeles."
+
+
+# Flujo completo por cliente: (No copiar esta parte)
+
+# 1. Cambiar $CUIT → correr el bloque arriba
+# 2. Pegar el CSR en el portal AFIP del cliente → descargar el .crt
+# 3. Copy-Item "$env:USERPROFILE\Downloads\<archivo>.crt" "${certsPath}\afip.crt"
+# 4. Actualizar AFIP_CUIT_EMISOR en el .env
+# 5. docker compose restart afip-sidecar
