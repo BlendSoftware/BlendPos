@@ -18,7 +18,6 @@ import { useSaleStore } from '../store/useSaleStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCajaStore } from '../store/useCajaStore';
 import { usePosFocus } from '../hooks/usePosFocus';
-import { findProductByBarcode, MOCK_PRODUCTS } from '../api/mockProducts';
 import { findCatalogProductByBarcode, searchCatalogProducts, seedCatalogFromMocksIfEmpty } from '../offline/catalog';
 import { getPrecioPorBarcode } from '../services/api/products';
 
@@ -57,8 +56,8 @@ export function PosTerminal() {
 
     // Al montar, sincronizar sesión de caja con el backend (limpia localStorage obsoleto)
     useEffect(() => {
-        restaurar().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        restaurar().catch(() => { });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Mostrar modal de apertura de caja si no hay sesión activa
@@ -67,7 +66,8 @@ export function PosTerminal() {
         if (!sesionId) setCajaModalOpen(true);
     }, [sesionId]);
 
-    // Seed catálogo desde API (o mocks como fallback)
+    // Sincronizar catálogo desde el backend en cada apertura del POS.
+    // Esto mantiene el POS siempre en sync con Gestión de Productos.
     useEffect(() => {
         seedCatalogFromMocksIfEmpty().catch(console.warn);
     }, []);
@@ -88,37 +88,28 @@ export function PosTerminal() {
             const trimmed = value.trim();
             if (!trimmed) return false;
 
-            // 1️⃣ Intentar por API real (solo si hay backend configurado y online)
-            if (import.meta.env.VITE_API_URL && navigator.onLine) {
+            // 1️⃣ Precio en tiempo real desde el backend (con datos frescos)
+            if (import.meta.env.VITE_API_BASE && navigator.onLine) {
                 try {
                     const apiProduct = await getPrecioPorBarcode(trimmed);
-                    // getPrecioPorBarcode lanza error si no encuentra → catch abajo
-                    // Si llega aquí, hay un producto válido. Buscar en catálogo local para obtener el id.
                     const local = await findCatalogProductByBarcode(trimmed);
                     if (local) {
                         addItem({ id: local.id, nombre: apiProduct.nombre, precio: apiProduct.precio_venta, codigoBarras: trimmed });
                         return true;
                     }
                 } catch {
-                    // No encontrado en API → continuar con fallbacks locales
+                    // No encontrado por barcode exacto → continuar
                 }
             }
 
-            // 2️⃣ Intentar por código de barras exacto en IndexedDB
+            // 2️⃣ Catálogo local (IndexedDB sincronizado desde backend) — por barcode
             const product = await findCatalogProductByBarcode(trimmed);
             if (product) {
                 addItem({ id: product.id, nombre: product.nombre, precio: product.precio, codigoBarras: product.codigoBarras });
                 return true;
             }
 
-            // 3️⃣ Fallback: mock lookup por barcode (por si el seed aún no terminó)
-            const productMock = findProductByBarcode(trimmed);
-            if (productMock) {
-                addItem({ id: productMock.id, nombre: productMock.nombre, precio: productMock.precio, codigoBarras: productMock.codigoBarras });
-                return true;
-            }
-
-            // 4️⃣ Fallback: buscar por nombre parcial en IndexedDB
+            // 3️⃣ Catálogo local — búsqueda por nombre parcial
             const results = await searchCatalogProducts(trimmed, 1);
             const match = results[0];
             if (match) {
@@ -126,16 +117,7 @@ export function PosTerminal() {
                 return true;
             }
 
-            // 5️⃣ Fallback: mock búsqueda por nombre (por si el seed aún no terminó)
-            const matchMock = MOCK_PRODUCTS.find((p) =>
-                p.nombre.toLowerCase().includes(trimmed.toLowerCase())
-            );
-            if (matchMock) {
-                addItem({ id: matchMock.id, nombre: matchMock.nombre, precio: matchMock.precio, codigoBarras: matchMock.codigoBarras });
-                return true;
-            }
-
-            // Producto no encontrado: notificación de error
+            // Producto no encontrado
             notifications.show({
                 title: 'Producto no encontrado',
                 message: `No se encontró ningún producto para: "${trimmed}"`,
@@ -224,12 +206,12 @@ export function PosTerminal() {
 
                 case 'Escape':
                     e.preventDefault();
-                    if (isPaymentModalOpen)       closePaymentModal();
+                    if (isPaymentModalOpen) closePaymentModal();
                     else if (isPriceCheckModalOpen) closePriceCheckModal();
-                    else if (isDiscountModalOpen)  closeDiscountModal();
-                    else if (historyOpen)          setHistoryOpen(false);
-                    else if (searchVisible)        closeSearch();
-                    else if (cart.length > 0)      clearCart();
+                    else if (isDiscountModalOpen) closeDiscountModal();
+                    else if (historyOpen) setHistoryOpen(false);
+                    else if (searchVisible) closeSearch();
+                    else if (cart.length > 0) clearCart();
                     break;
 
                 case 'ArrowUp':

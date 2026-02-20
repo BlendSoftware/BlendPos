@@ -3,8 +3,8 @@ package dto
 // ─── Request DTOs ────────────────────────────────────────────────────────────
 
 type LoginRequest struct {
-	Username string `json:"username" validate:"required,min=3"`
-	Password string `json:"password" validate:"required,min=6"`
+	Username string `json:"username" validate:"required,min=1"`
+	Password string `json:"password" validate:"required,min=4"`
 }
 
 type RefreshRequest struct {
@@ -12,10 +12,10 @@ type RefreshRequest struct {
 }
 
 type CrearUsuarioRequest struct {
-	Username     string  `json:"username"  validate:"required,min=3,max=30"`
+	Username     string  `json:"username"  validate:"required,min=1,max=150"`
 	Nombre       string  `json:"nombre"    validate:"required,min=2,max=100"`
 	Email        *string `json:"email"     validate:"omitempty,email"`
-	Password     string  `json:"password"  validate:"required,min=8"`
+	Password     string  `json:"password"  validate:"required,min=4"`
 	Rol          string  `json:"rol"       validate:"required,oneof=cajero supervisor administrador"`
 	PuntoDeVenta *int    `json:"punto_de_venta"`
 }

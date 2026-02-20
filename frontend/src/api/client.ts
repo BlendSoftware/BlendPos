@@ -5,8 +5,9 @@
 // cada módulo por llamadas a apiClient.get/post/put/delete.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// VITE_API_URL debe apuntar al backend Go, SIN path final (ej: http://localhost:8080)
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8000';
+// VITE_API_BASE debe apuntar al backend Go, SIN path final (ej: http://localhost:8000)
+const BASE_URL = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
+
 
 // Lee el token JWT del store persistido en localStorage sin importar Zustand
 function getToken(): string | null {

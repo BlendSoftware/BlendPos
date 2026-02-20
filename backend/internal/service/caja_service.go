@@ -188,6 +188,42 @@ func (s *cajaService) FindSesionAbierta(ctx context.Context, sesionID uuid.UUID)
 	return nil
 }
 
+// ── GetActiva ─────────────────────────────────────────────────────────────────
+// Returns the active (open) session for the given user, or nil if none exists.
+
+func (s *cajaService) GetActiva(ctx context.Context, usuarioID uuid.UUID) (*dto.ReporteCajaResponse, error) {
+	sesion, err := s.repo.FindSesionAbiertaPorUsuario(ctx, usuarioID)
+	if err != nil {
+		return nil, nil // no open session is not an error
+	}
+	return s.buildReporte(ctx, sesion)
+}
+
+// ── Historial ─────────────────────────────────────────────────────────────────
+// Returns a paginated list of past sessions (any state), newest first.
+
+func (s *cajaService) Historial(ctx context.Context, page, limit int) ([]dto.ReporteCajaResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	sesiones, _, err := s.repo.ListSesiones(ctx, page, limit)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.ReporteCajaResponse, 0, len(sesiones))
+	for i := range sesiones {
+		rep, err := s.buildReporte(ctx, &sesiones[i])
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, *rep)
+	}
+	return result, nil
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // clasificarDesvio returns "normal" | "advertencia" | "critico"

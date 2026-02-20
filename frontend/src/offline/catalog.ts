@@ -4,8 +4,8 @@ import { listarProductos } from '../services/api/products';
 
 const SEED_LIMIT = 5000;
 
-/** Descarga el catálogo del backend y lo guarda en IndexedDB */
-export async function seedCatalogFromAPI(): Promise<void> {
+/** Descarga el catálogo completo del backend y reemplaza IndexedDB. */
+export async function seedCatalogFromAPI(): Promise<boolean> {
     try {
         const resp = await listarProductos({ limit: SEED_LIMIT, page: 1 });
         if (resp.data && resp.data.length > 0) {
@@ -15,22 +15,28 @@ export async function seedCatalogFromAPI(): Promise<void> {
                 nombre: p.nombre,
                 precio: typeof p.precio_venta === 'number' ? p.precio_venta : parseFloat(p.precio_venta as unknown as string),
             }));
+            // Reemplazar todo el catálogo local con lo que viene del backend
+            await db.products.clear();
             await db.products.bulkPut(seed);
+            return true;
         }
+        return false;
     } catch (err) {
         console.warn('[BlendPOS] No se pudo sincronizar catálogo desde API:', err);
+        return false;
     }
 }
 
+/**
+ * Sincroniza el catálogo SIEMPRE desde el backend.
+ * Si el backend falla, usa mocks como fallback (solo si IndexedDB está vacío).
+ * Se llama en cada mount del POS → productos siempre sincronizados con gestión.
+ */
 export async function seedCatalogFromMocksIfEmpty(): Promise<void> {
-    // Intentar sincronizar desde backend primero (si VITE_API_URL está configurada)
-    if (import.meta.env.VITE_API_URL) {
-        await seedCatalogFromAPI();
-        const count = await db.products.count();
-        if (count > 0) return;
-    }
+    const synced = await seedCatalogFromAPI();
+    if (synced) return;
 
-    // Fallback: mocks locales
+    // Fallback: mocks locales solo si IndexedDB está vacío
     const count = await db.products.count();
     if (count > 0) return;
 
@@ -44,15 +50,18 @@ export async function seedCatalogFromMocksIfEmpty(): Promise<void> {
     await db.products.bulkPut(seed);
 }
 
+/** Fuerza una re-sincronización completa del catálogo desde el backend. */
+export async function forceRefreshCatalog(): Promise<void> {
+    await seedCatalogFromAPI();
+}
+
 export async function findCatalogProductByBarcode(barcode: string): Promise<LocalProduct | undefined> {
     const trimmed = barcode.trim();
     if (!trimmed) return undefined;
 
-    // Fast path via index
     const byBarcode = await db.products.where('codigoBarras').equals(trimmed).first();
     if (byBarcode) return byBarcode;
 
-    // Fallback: some datasets may have missing barcode index consistency
     const byScan = await db.products.filter((p) => p.codigoBarras === trimmed).first();
     return byScan;
 }
@@ -64,8 +73,6 @@ export async function searchCatalogProducts(query: string, limit = 200): Promise
         return db.products.limit(limit).toArray();
     }
 
-    // Dexie doesn't do full-text by default; for mocks this is fine.
-    // We keep it simple: scan + filter.
     const all = await db.products.toArray();
     return all
         .filter((p) => p.nombre.toLowerCase().includes(q) || p.codigoBarras.includes(query.trim()))
