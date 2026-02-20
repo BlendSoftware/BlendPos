@@ -19,6 +19,7 @@ type VentaService interface {
 	RegistrarVenta(ctx context.Context, usuarioID uuid.UUID, req dto.RegistrarVentaRequest) (*dto.VentaResponse, error)
 	AnularVenta(ctx context.Context, id uuid.UUID, motivo string) error
 	SyncBatch(ctx context.Context, usuarioID uuid.UUID, req dto.SyncBatchRequest) ([]dto.VentaResponse, error)
+	ListVentas(ctx context.Context, filter dto.VentaFilter) (*dto.VentaListResponse, error)
 }
 
 type ventaService struct {
@@ -287,7 +288,66 @@ func (s *ventaService) SyncBatch(ctx context.Context, usuarioID uuid.UUID, req d
 	return results, nil
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ListVentas returns a paginated list of sales, filtered by date and estado.
+// Default filter: today's completed sales.
+func (s *ventaService) ListVentas(ctx context.Context, filter dto.VentaFilter) (*dto.VentaListResponse, error) {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.Limit < 1 {
+		filter.Limit = 50
+	}
+	if filter.Estado == "" {
+		filter.Estado = "completada"
+	}
+	ventas, total, err := s.repo.List(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.VentaListItem, 0, len(ventas))
+	for _, v := range ventas {
+		items = append(items, *ventaToListItem(&v))
+	}
+	return &dto.VentaListResponse{
+		Data:  items,
+		Total: total,
+		Page:  filter.Page,
+		Limit: filter.Limit,
+	}, nil
+}
+
+func ventaToListItem(v *model.Venta) *dto.VentaListItem {
+	items := make([]dto.ItemVentaResponse, 0, len(v.Items))
+	for _, item := range v.Items {
+		nombre := ""
+		if item.Producto != nil {
+			nombre = item.Producto.Nombre
+		}
+		items = append(items, dto.ItemVentaResponse{
+			Producto:       nombre,
+			Cantidad:       item.Cantidad,
+			PrecioUnitario: item.PrecioUnitario,
+			Subtotal:       item.Subtotal,
+		})
+	}
+	pagos := make([]dto.PagoRequest, 0, len(v.Pagos))
+	for _, p := range v.Pagos {
+		pagos = append(pagos, dto.PagoRequest{Metodo: p.Metodo, Monto: p.Monto})
+	}
+	return &dto.VentaListItem{
+		ID:             v.ID.String(),
+		NumeroTicket:   v.NumeroTicket,
+		SesionCajaID:   v.SesionCajaID.String(),
+		UsuarioID:      v.UsuarioID.String(),
+		Total:          v.Total,
+		DescuentoTotal: v.DescuentoTotal,
+		Subtotal:       v.Subtotal,
+		Estado:         v.Estado,
+		Items:          items,
+		Pagos:          pagos,
+		CreatedAt:      v.CreatedAt.Format("2006-01-02T15:04:05Z"),
+	}
+}
 
 func ventaToResponse(v *model.Venta) *dto.VentaResponse {
 	items := make([]dto.ItemVentaResponse, 0, len(v.Items))

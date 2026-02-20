@@ -1,0 +1,15 @@
+.summary {
+    background-color: var(--mantine-color-dark-6);
+    border-radius: var(--mantine-radius-md);
+    padding: var(--mantine-spacing-md);
+}
+
+.quickBadge {
+    cursor: pointer;
+    transition: all 100ms ease;
+    user-select: none;
+}
+
+.quickBadge:hover {
+    transform: scale(1.05);
+}

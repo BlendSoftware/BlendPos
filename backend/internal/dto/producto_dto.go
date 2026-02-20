@@ -74,3 +74,9 @@ type ConsultaPreciosResponse struct {
 	Categoria       string          `json:"categoria"`
 	Promocion       *string         `json:"promocion"`
 }
+
+// AjustarStockRequest is used by PATCH /v1/productos/:id/stock (RF-09 / manual adjustment).
+type AjustarStockRequest struct {
+	Delta  int    `json:"delta"  validate:"required,ne=0"`
+	Motivo string `json:"motivo" validate:"required,min=3"`
+}

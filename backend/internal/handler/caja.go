@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"blendpos/internal/apierror"
 	"blendpos/internal/dto"
@@ -109,4 +110,42 @@ func (h *CajaHandler) RegistrarMovimiento(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// GetActiva returns the currently open cash session for the authenticated user.
+func (h *CajaHandler) GetActiva(c *gin.Context) {
+	claims := middleware.GetClaims(c)
+	usuarioID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID de usuario inválido"))
+		return
+	}
+	resp, err := h.svc.GetActiva(c.Request.Context(), usuarioID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, apierror.New(err.Error()))
+		return
+	}
+	if resp == nil {
+		c.JSON(http.StatusNotFound, apierror.New("Sin sesión activa"))
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// Historial returns a paginated list of closed cash sessions.
+func (h *CajaHandler) Historial(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	resp, err := h.svc.Historial(c.Request.Context(), page, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, apierror.New(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": resp, "page": page, "limit": limit})
 }

@@ -20,6 +20,10 @@ type CajaService interface {
 	ObtenerReporte(ctx context.Context, sesionID uuid.UUID) (*dto.ReporteCajaResponse, error)
 	// FindSesionAbierta is called by VentaService to validate an open session
 	FindSesionAbierta(ctx context.Context, sesionID uuid.UUID) error
+	// GetActiva returns the active session for a given user, or nil if none.
+	GetActiva(ctx context.Context, usuarioID uuid.UUID) (*dto.ReporteCajaResponse, error)
+	// Historial returns a paginated list of past sessions (any state).
+	Historial(ctx context.Context, page, limit int) ([]dto.ReporteCajaResponse, error)
 }
 
 type cajaService struct {

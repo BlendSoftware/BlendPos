@@ -13,11 +13,13 @@ import (
 type CajaRepository interface {
 	CreateSesion(ctx context.Context, s *model.SesionCaja) error
 	FindSesionAbiertaPorPDV(ctx context.Context, puntoDeVenta int) (*model.SesionCaja, error)
+	FindSesionAbiertaPorUsuario(ctx context.Context, usuarioID uuid.UUID) (*model.SesionCaja, error)
 	FindSesionByID(ctx context.Context, id uuid.UUID) (*model.SesionCaja, error)
 	UpdateSesion(ctx context.Context, s *model.SesionCaja) error
 	CreateMovimiento(ctx context.Context, m *model.MovimientoCaja) error
 	ListMovimientos(ctx context.Context, sesionCajaID uuid.UUID) ([]model.MovimientoCaja, error)
 	SumMovimientosByMetodo(ctx context.Context, sesionCajaID uuid.UUID) (map[string]decimal.Decimal, error)
+	ListSesiones(ctx context.Context, page, limit int) ([]model.SesionCaja, int64, error)
 }
 
 type cajaRepo struct{ db *gorm.DB }
@@ -79,4 +81,24 @@ func (r *cajaRepo) SumMovimientosByMetodo(ctx context.Context, sesionCajaID uuid
 		result[r.MetodoPago] = r.Total
 	}
 	return result, nil
+}
+
+func (r *cajaRepo) FindSesionAbiertaPorUsuario(ctx context.Context, usuarioID uuid.UUID) (*model.SesionCaja, error) {
+	var s model.SesionCaja
+	err := r.db.WithContext(ctx).Where("usuario_id = ? AND estado = 'abierta'", usuarioID).First(&s).Error
+	return &s, err
+}
+
+func (r *cajaRepo) ListSesiones(ctx context.Context, page, limit int) ([]model.SesionCaja, int64, error) {
+	var sesiones []model.SesionCaja
+	var total int64
+	offset := (page - 1) * limit
+	if err := r.db.WithContext(ctx).Model(&model.SesionCaja{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := r.db.WithContext(ctx).
+		Order("opened_at DESC").
+		Offset(offset).Limit(limit).
+		Find(&sesiones).Error
+	return sesiones, total, err
 }

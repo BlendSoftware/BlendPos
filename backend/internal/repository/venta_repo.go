@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 
+	"blendpos/internal/dto"
 	"blendpos/internal/model"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ type VentaRepository interface {
 	FindByOfflineID(ctx context.Context, offlineID string) (*model.Venta, error)
 	UpdateEstado(ctx context.Context, id uuid.UUID, estado string) error
 	NextTicketNumber(ctx context.Context, tx *gorm.DB) (int, error)
+	List(ctx context.Context, filter dto.VentaFilter) ([]model.Venta, int64, error)
 	DB() *gorm.DB // exposes the DB for transaction creation in service layer
 }
 
@@ -49,4 +51,33 @@ func (r *ventaRepo) NextTicketNumber(ctx context.Context, tx *gorm.DB) (int, err
 	var num int
 	err := tx.WithContext(ctx).Raw("SELECT nextval('ventas_numero_ticket_seq')").Scan(&num).Error
 	return num, err
+}
+
+func (r *ventaRepo) List(ctx context.Context, filter dto.VentaFilter) ([]model.Venta, int64, error) {
+	var ventas []model.Venta
+	var total int64
+	offset := (filter.Page - 1) * filter.Limit
+
+	q := r.db.WithContext(ctx).Model(&model.Venta{})
+
+	if filter.Estado != "" && filter.Estado != "all" {
+		q = q.Where("estado = ?", filter.Estado)
+	}
+	if filter.Fecha != "" {
+		q = q.Where("DATE(created_at) = ?", filter.Fecha)
+	} else {
+		// Default: today
+		q = q.Where("DATE(created_at) = CURRENT_DATE")
+	}
+
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := q.Preload("Items.Producto").Preload("Pagos").
+		Order("created_at DESC").
+		Offset(offset).Limit(filter.Limit).
+		Find(&ventas).Error
+
+	return ventas, total, err
 }

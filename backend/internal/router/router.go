@@ -87,6 +87,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	{
 		// Roles: cajero, supervisor, administrador — declared per-endpoint
 		v1.POST("/ventas", middleware.RequireRole("cajero", "supervisor", "administrador"), ventasH.RegistrarVenta)
+		v1.GET("/ventas", middleware.RequireRole("cajero", "supervisor", "administrador"), ventasH.ListarVentas)
 		v1.DELETE("/ventas/:id", middleware.RequireRole("supervisor", "administrador"), ventasH.AnularVenta)
 
 		prods := v1.Group("/productos", middleware.RequireRole("administrador"))
@@ -96,6 +97,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 			prods.GET("/:id", productosH.ObtenerPorID)
 			prods.PUT("/:id", productosH.Actualizar)
 			prods.DELETE("/:id", productosH.Desactivar)
+			prods.PATCH("/:id/stock", productosH.AjustarStock)
 		}
 
 		inv := v1.Group("/inventario", middleware.RequireRole("administrador", "supervisor"))
@@ -112,6 +114,8 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 			caja.POST("/arqueo", middleware.RequireRole("cajero", "supervisor", "administrador"), cajaH.Arqueo)
 			caja.GET("/:id/reporte", middleware.RequireRole("cajero", "supervisor", "administrador"), cajaH.ObtenerReporte)
 			caja.POST("/movimiento", middleware.RequireRole("cajero", "supervisor", "administrador"), cajaH.RegistrarMovimiento)
+			caja.GET("/activa", middleware.RequireRole("cajero", "supervisor", "administrador"), cajaH.GetActiva)
+			caja.GET("/historial", middleware.RequireRole("supervisor", "administrador"), cajaH.Historial)
 		}
 
 		fact := v1.Group("/facturacion", middleware.RequireRole("administrador", "supervisor"))

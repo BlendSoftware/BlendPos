@@ -1,0 +1,183 @@
+/* Layout flex propio para evitar offsets rotos del AppShell */
+
+.shell {
+    height: 100vh;
+    display: flex;
+    background: var(--mantine-color-dark-9);
+}
+
+.overlay {
+    display: none;
+}
+
+.sidebar {
+    width: 230px;
+    flex: 0 0 230px;
+    background: var(--mantine-color-dark-8);
+    border-right: 1px solid var(--mantine-color-dark-6);
+    padding: var(--mantine-spacing-sm) var(--mantine-spacing-xs);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+}
+
+.main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.navHeader {
+    padding: var(--mantine-spacing-sm) var(--mantine-spacing-xs);
+    margin-bottom: var(--mantine-spacing-xs);
+    border-bottom: 1px solid var(--mantine-color-dark-6);
+}
+
+.brand {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--mantine-color-blue-4);
+}
+
+.brandSub {
+    font-size: 0.7rem;
+    color: var(--mantine-color-dimmed);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.navLink {
+    display: flex;
+    align-items: center;
+    gap: var(--mantine-spacing-sm);
+    padding: 10px var(--mantine-spacing-sm);
+    border-radius: var(--mantine-radius-sm);
+    text-decoration: none;
+    color: var(--mantine-color-dark-1);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+}
+
+.navLink:hover {
+    background: var(--mantine-color-dark-6);
+    color: var(--mantine-color-white);
+}
+
+.navLinkActive {
+    background: var(--mantine-color-blue-9);
+    color: var(--mantine-color-blue-3);
+}
+
+.navLinkActive:hover {
+    background: var(--mantine-color-blue-8);
+    color: var(--mantine-color-blue-2);
+}
+
+.navSection {
+    margin-top: var(--mantine-spacing-sm);
+    padding-top: var(--mantine-spacing-sm);
+    border-top: 1px solid var(--mantine-color-dark-6);
+}
+
+.navSectionLabel {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--mantine-color-dimmed);
+    padding: 0 var(--mantine-spacing-sm);
+    margin-bottom: 4px;
+}
+
+.header {
+    flex: 0 0 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--mantine-spacing-md);
+    height: 100%;
+    border-bottom: 1px solid var(--mantine-color-dark-6);
+    background: var(--mantine-color-dark-8);
+}
+
+.content {
+    flex: 1;
+    overflow: auto;
+    background: var(--mantine-color-dark-9);
+    padding: var(--mantine-spacing-xl);
+}
+
+.userMenu {
+    display: flex;
+    align-items: center;
+    gap: var(--mantine-spacing-sm);
+}
+
+.rolBadge {
+    font-size: 0.65rem;
+}
+
+.navLinkDanger {
+    display: flex;
+    align-items: center;
+    gap: var(--mantine-spacing-sm);
+    padding: 10px var(--mantine-spacing-sm);
+    border-radius: var(--mantine-radius-sm);
+    text-decoration: none;
+    color: var(--mantine-color-red-4);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+}
+
+.navLinkDanger:hover {
+    background: var(--mantine-color-dark-6);
+    color: var(--mantine-color-red-3);
+}
+
+/* Mobile: sidebar overlay */
+@media (max-width: 48em) {
+    .overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        display: block;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s ease;
+        z-index: 99;
+    }
+
+    .overlayOpen {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .sidebar {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        transform: translateX(-100%);
+        transition: transform 0.15s ease;
+        z-index: 100;
+    }
+
+    .sidebarOpen {
+        transform: translateX(0);
+    }
+}

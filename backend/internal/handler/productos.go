@@ -88,3 +88,22 @@ func (h *ProductosHandler) Desactivar(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+// AjustarStock applies a stock delta to a product (positive = entry, negative = exit).
+func (h *ProductosHandler) AjustarStock(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID invalido"))
+		return
+	}
+	var req dto.AjustarStockRequest
+	if !bindAndValidate(c, &req) {
+		return
+	}
+	resp, err := h.svc.AjustarStock(c.Request.Context(), id, req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}

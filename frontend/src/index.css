@@ -1,0 +1,52 @@
+/* ═══════════════════════════════════════════════════
+   BlendPOS — Global Reset & Base Styles
+   ═══════════════════════════════════════════════════ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: var(--mantine-color-dark-7, #1a1b1e);
+  color: var(--mantine-color-text, #c1c2c5);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Remove default focus outlines — Mantine handles focus styles */
+:focus {
+  outline: none;
+}
+
+/* Scrollbar styling for internal scroll areas */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--mantine-color-dark-4, #373a40);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--mantine-color-dark-3, #495057);
+}
+
+/* Prevent text selection on POS layout (except inputs) */
+.pos-no-select {
+  user-select: none;
+}

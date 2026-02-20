@@ -1,0 +1,78 @@
+.emptyState {
+    opacity: 0.6;
+    user-select: none;
+}
+
+.tableWrapper {
+    overflow-y: auto;
+    height: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: var(--mantine-color-dark-4) transparent;
+}
+
+.table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.headerRow {
+    position: sticky;
+    top: 0;
+    background-color: var(--mantine-color-dark-7);
+    z-index: 1;
+}
+
+.row {
+    height: 52px;
+    transition: background-color 300ms ease;
+    cursor: pointer;
+}
+
+.rowHighlight {
+    animation: highlightFlash 1.5s ease-out;
+}
+
+.rowSelected {
+    background-color: rgba(24, 100, 171, 0.15) !important;
+    box-shadow: inset 3px 0 0 0 #1864ab;
+}
+
+@keyframes highlightFlash {
+    0%   { background-color: rgba(43, 138, 62, 0.35); }
+    100% { background-color: transparent; }
+}
+
+.quantityControl {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.quantityBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--mantine-color-dark-5);
+    border-radius: var(--mantine-radius-sm);
+    min-width: 34px;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: background-color 100ms;
+}
+
+.quantityBadge:hover {
+    background-color: var(--mantine-color-dark-4);
+}
+
+.deleteBtn {
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.row:hover .deleteBtn {
+    opacity: 1;
+}
+
+.rowSelected .deleteBtn {
+    opacity: 1;
+}

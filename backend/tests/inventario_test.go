@@ -156,6 +156,15 @@ func (r *stubProductoRepo) DB() *gorm.DB {
 	return nil
 }
 
+func (r *stubProductoRepo) AjustarStock(_ context.Context, id uuid.UUID, delta int) error {
+	p, ok := r.productos[id]
+	if !ok {
+		return errors.New("record not found")
+	}
+	p.StockActual += delta
+	return nil
+}
+
 // Ensure the stub satisfies the interface at compile time.
 var _ repository.ProductoRepository = (*stubProductoRepo)(nil)
 

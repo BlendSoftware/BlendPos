@@ -102,6 +102,32 @@ func (r *fullCajaRepo) SumMovimientosByMetodo(_ context.Context, sesionID uuid.U
 	return sums, nil
 }
 
+func (r *fullCajaRepo) FindSesionAbiertaPorUsuario(_ context.Context, usuarioID uuid.UUID) (*model.SesionCaja, error) {
+	for _, s := range r.sesiones {
+		if s.UsuarioID == usuarioID && s.Estado == "abierta" {
+			return s, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *fullCajaRepo) ListSesiones(_ context.Context, page, limit int) ([]model.SesionCaja, int64, error) {
+	all := make([]model.SesionCaja, 0, len(r.sesiones))
+	for _, s := range r.sesiones {
+		all = append(all, *s)
+	}
+	total := int64(len(all))
+	start := (page - 1) * limit
+	if start >= len(all) {
+		return nil, total, nil
+	}
+	end := start + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[start:end], total, nil
+}
+
 var _ repository.CajaRepository = (*fullCajaRepo)(nil)
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ type ProductoService interface {
 	Listar(ctx context.Context, filter dto.ProductoFilter) (*dto.ProductoListResponse, error)
 	Actualizar(ctx context.Context, id uuid.UUID, req dto.ActualizarProductoRequest) (*dto.ProductoResponse, error)
 	Desactivar(ctx context.Context, id uuid.UUID) error
+	AjustarStock(ctx context.Context, id uuid.UUID, req dto.AjustarStockRequest) (*dto.ProductoResponse, error)
 }
 
 type productoService struct {
@@ -215,4 +216,29 @@ func (s *productoService) Desactivar(ctx context.Context, id uuid.UUID) error {
 	}
 	s.invalidatePrecioCache(ctx, p.CodigoBarras)
 	return nil
+}
+
+// AjustarStock incrementa (delta > 0) o decrementa (delta < 0) el stock de un producto.
+// Corresponde a PATCH /v1/productos/:id/stock.
+func (s *productoService) AjustarStock(ctx context.Context, id uuid.UUID, req dto.AjustarStockRequest) (*dto.ProductoResponse, error) {
+	p, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("producto no encontrado")
+	}
+	if !p.Activo {
+		return nil, fmt.Errorf("el producto est\u00e1 desactivado")
+	}
+	nuevoStock := p.StockActual + req.Delta
+	if nuevoStock < 0 {
+		return nil, fmt.Errorf("stock insuficiente: el ajuste resultar\u00eda en stock negativo (%d)", nuevoStock)
+	}
+	if err := s.repo.AjustarStock(ctx, id, req.Delta); err != nil {
+		return nil, err
+	}
+	// Refresh the product from DB to return updated stock
+	p, err = s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return toProductoResponse(p), nil
 }

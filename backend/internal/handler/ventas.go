@@ -49,6 +49,21 @@ func (h *VentasHandler) AnularVenta(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// ListarVentas returns a paginated, filtered list of sales.
+func (h *VentasHandler) ListarVentas(c *gin.Context) {
+	var filter dto.VentaFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
+		return
+	}
+	resp, err := h.svc.ListVentas(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, apierror.New("Error al listar ventas"))
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 func (h *VentasHandler) SyncBatch(c *gin.Context) {
 	var req dto.SyncBatchRequest
 	if !bindAndValidate(c, &req) {

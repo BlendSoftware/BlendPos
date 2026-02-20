@@ -76,6 +76,14 @@ func (r *stubVentaRepo) NextTicketNumber(_ context.Context, _ *gorm.DB) (int, er
 
 func (r *stubVentaRepo) DB() *gorm.DB { return nil }
 
+func (r *stubVentaRepo) List(_ context.Context, _ dto.VentaFilter) ([]model.Venta, int64, error) {
+	all := make([]model.Venta, 0, len(r.ventas))
+	for _, v := range r.ventas {
+		all = append(all, *v)
+	}
+	return all, int64(len(all)), nil
+}
+
 var _ repository.VentaRepository = (*stubVentaRepo)(nil)
 
 // stubCajaService is a minimal CajaService stub for venta tests.
@@ -102,6 +110,14 @@ func (s *stubCajaService) FindSesionAbierta(_ context.Context, _ uuid.UUID) erro
 	return nil
 }
 
+func (s *stubCajaService) GetActiva(_ context.Context, _ uuid.UUID) (*dto.ReporteCajaResponse, error) {
+	return nil, nil
+}
+
+func (s *stubCajaService) Historial(_ context.Context, _, _ int) ([]*dto.ReporteCajaResponse, error) {
+	return nil, nil
+}
+
 var _ service.CajaService = (*stubCajaService)(nil)
 
 // stubCajaRepo captures created movimientos for assertion.
@@ -126,6 +142,14 @@ func (r *stubCajaRepo) ListMovimientos(_ context.Context, _ uuid.UUID) ([]model.
 }
 func (r *stubCajaRepo) SumMovimientosByMetodo(_ context.Context, _ uuid.UUID) (map[string]decimal.Decimal, error) {
 	return nil, nil
+}
+
+func (r *stubCajaRepo) FindSesionAbiertaPorUsuario(_ context.Context, _ uuid.UUID) (*model.SesionCaja, error) {
+	return nil, nil
+}
+
+func (r *stubCajaRepo) ListSesiones(_ context.Context, _, _ int) ([]model.SesionCaja, int64, error) {
+	return nil, 0, nil
 }
 
 var _ repository.CajaRepository = (*stubCajaRepo)(nil)

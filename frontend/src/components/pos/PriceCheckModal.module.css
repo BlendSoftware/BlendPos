@@ -1,0 +1,26 @@
+.resultBox {
+    background-color: var(--mantine-color-dark-6);
+    border-radius: var(--mantine-radius-md);
+    padding: var(--mantine-spacing-md);
+    border: 1px solid var(--mantine-color-dark-4);
+    animation: fadeIn 150ms ease;
+}
+
+.notFoundBox {
+    background-color: rgba(255, 160, 0, 0.05);
+    border: 1px solid rgba(255, 160, 0, 0.25);
+    border-radius: var(--mantine-radius-md);
+    padding: var(--mantine-spacing-md);
+    animation: fadeIn 150ms ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.priceBadge {
+    font-size: 1.5rem !important;
+    padding: 10px 20px !important;
+    font-variant-numeric: tabular-nums;
+}

@@ -34,6 +34,9 @@ type ProductoRepository interface {
 	// UpdatePreciosTx actualiza precio_costo, precio_venta y margen_pct dentro de una tx.
 	UpdatePreciosTx(tx *gorm.DB, id uuid.UUID, nuevoCosto, nuevaVenta, margen interface{}) error
 
+	// AjustarStock incrementa o decrementa stock_actual sin transaccion externa.
+	AjustarStock(ctx context.Context, id uuid.UUID, delta int) error
+
 	// DB exposes the underlying *gorm.DB so services can open transactions.
 	DB() *gorm.DB
 }
@@ -141,3 +144,9 @@ func (r *productoRepo) UpdatePreciosTx(tx *gorm.DB, id uuid.UUID, nuevoCosto, nu
 }
 
 func (r *productoRepo) DB() *gorm.DB { return r.db }
+
+func (r *productoRepo) AjustarStock(ctx context.Context, id uuid.UUID, delta int) error {
+	return r.db.WithContext(ctx).Model(&model.Producto{}).
+		Where("id = ? AND activo = true", id).
+		Update("stock_actual", gorm.Expr("stock_actual + ?", delta)).Error
+}

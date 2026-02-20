@@ -2,6 +2,38 @@ package dto
 
 import "github.com/shopspring/decimal"
 
+// ─── Filter / List ──────────────────────────────────────────────────────────
+
+// VentaFilter is bound from query string of GET /v1/ventas.
+type VentaFilter struct {
+	Fecha  string `form:"fecha"`              // YYYY-MM-DD; empty = today
+	Estado string `form:"estado,default=completada"` // completada | anulada | all
+	Page   int    `form:"page,default=1"   validate:"min=1"`
+	Limit  int    `form:"limit,default=50" validate:"min=1,max=200"`
+}
+
+// VentaListItem is returned inside VentaListResponse for GET /v1/ventas.
+type VentaListItem struct {
+	ID             string              `json:"id"`
+	NumeroTicket   int                 `json:"numero_ticket"`
+	SesionCajaID   string              `json:"sesion_caja_id"`
+	UsuarioID      string              `json:"usuario_id"`
+	Total          decimal.Decimal     `json:"total"`
+	DescuentoTotal decimal.Decimal     `json:"descuento_total"`
+	Subtotal       decimal.Decimal     `json:"subtotal"`
+	Estado         string              `json:"estado"`
+	Items          []ItemVentaResponse `json:"items"`
+	Pagos          []PagoRequest       `json:"pagos"`
+	CreatedAt      string              `json:"created_at"`
+}
+
+type VentaListResponse struct {
+	Data  []VentaListItem `json:"data"`
+	Total int64           `json:"total"`
+	Page  int             `json:"page"`
+	Limit int             `json:"limit"`
+}
+
 // ─── Request DTOs ────────────────────────────────────────────────────────────
 
 type ItemVentaRequest struct {

@@ -1,0 +1,57 @@
+.posLayout {
+    display: grid;
+    grid-template-rows: 60px 1fr 42px;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    background-color: var(--mantine-color-dark-7);
+}
+
+.mainContent {
+    display: grid;
+    grid-template-columns: 70fr 30fr;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.salesSection {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+    padding: var(--mantine-spacing-sm);
+}
+
+.scannerInput {
+    flex-shrink: 0;
+    margin-bottom: var(--mantine-spacing-sm);
+}
+
+.scannerInputField {
+    font-size: 16px;
+    height: 44px;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.scannerInputField:focus {
+    border-width: 2px;
+    border-color: #1864ab;
+    box-shadow: 0 0 0 3px rgba(24, 100, 171, 0.25);
+}
+
+.searchInputField {
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+    border-color: var(--mantine-color-blue-7);
+}
+
+.searchInputField:focus {
+    border-width: 2px;
+    border-color: #1864ab;
+    box-shadow: 0 0 0 3px rgba(24, 100, 171, 0.25);
+}
+
+.tableArea {
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+}
