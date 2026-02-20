@@ -164,11 +164,7 @@ class AFIPClient:
                 # Ocurre cuando el token anterior fue emitido pero no se guardó en disco (crash).
                 # El TA expira automáticamente (máx. 5hs). No es un error fatal.
                 if "alreadyAuthenticated" in excepcion:
-                    logger.warning(
-                        "WSAA informa que ya existe un TA válido para este certificado. "
-                        "Esto ocurre si el token anterior no se guardó correctamente. "
-                        "La autenticación se reintentará automáticamente cuando el TA expire (~5hs)."
-                    )
+                    # No loguear como ERROR — es un estado temporal esperado
                     raise Exception(f"WSAA_ALREADY_AUTHENTICATED: {excepcion}")
                 # Si wsaa capturó una excepción interna, intentar obtener más info
                 if hasattr(wsaa, 'Traceback') and wsaa.Traceback:

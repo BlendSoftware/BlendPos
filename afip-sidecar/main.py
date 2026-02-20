@@ -39,6 +39,33 @@ logger = logging.getLogger("afip-sidecar")
 # ── Global AFIP client ────────────────────────────────────────────────────────
 
 afip_client: AFIPClient = None
+_retry_task = None
+
+
+async def _retry_auth_background():
+    """Tarea background: reintenta autenticación WSAA cada 5 min hasta lograrla."""
+    import asyncio
+    retry_intervals = [60, 120, 300, 300, 300]  # 1m, 2m, 5m, 5m, 5m...
+    idx = 0
+    while True:
+        wait = retry_intervals[min(idx, len(retry_intervals) - 1)]
+        await asyncio.sleep(wait)
+        if afip_client is None:
+            continue
+        if afip_client._token_valido():
+            logger.info("✓ Token WSAA válido — deteniendo retry background")
+            return
+        try:
+            result = afip_client.autenticar(forzar=True)
+            logger.info(f"✓ Retry auth exitoso — Token válido hasta: {result['expiracion']}")
+            return  # Éxito — detener el loop
+        except Exception as e:
+            msg = str(e)
+            if "WSAA_ALREADY_AUTHENTICATED" in msg:
+                logger.info(f"⏳ Retry auth: TA previo aún activo en AFIP, esperando {wait}s más...")
+            else:
+                logger.warning(f"⚠ Retry auth falló: {e}")
+        idx += 1
 
 
 @asynccontextmanager
@@ -47,24 +74,25 @@ async def lifespan(app: FastAPI):
     Lifecycle manager para FastAPI.
     Inicializa el cliente AFIP al startup.
     """
-    global afip_client
-    
+    global afip_client, _retry_task
+    import asyncio
+
     logger.info("=" * 60)
     logger.info("Iniciando BlendPOS AFIP Sidecar...")
     logger.info("=" * 60)
-    
+
     # Leer configuración desde env vars
     cuit_emisor = os.getenv("AFIP_CUIT_EMISOR", "")
     cert_path = os.getenv("AFIP_CERT_PATH", "/certs/afip.crt")
     key_path = os.getenv("AFIP_KEY_PATH", "/certs/afip.key")
     homologacion = os.getenv("AFIP_HOMOLOGACION", "true").lower() == "true"
     cache_dir = os.getenv("AFIP_CACHE_DIR", "/tmp/afip_cache")
-    
+
     # Validar configuración requerida
     if not cuit_emisor:
         logger.error("ERROR: Variable AFIP_CUIT_EMISOR no configurada")
         raise ValueError("AFIP_CUIT_EMISOR es requerido")
-    
+
     # Inicializar cliente
     try:
         afip_client = AFIPClient(
@@ -74,30 +102,42 @@ async def lifespan(app: FastAPI):
             homologacion=homologacion,
             cache_dir=cache_dir
         )
-        
+
         logger.info("✓ Cliente AFIP inicializado correctamente")
         logger.info(f"  - CUIT Emisor: {cuit_emisor}")
         logger.info(f"  - Modo: {'HOMOLOGACIÓN' if homologacion else 'PRODUCCIÓN'}")
         logger.info(f"  - Certificado: {cert_path}")
-        
-        # Autenticar proactivamente al iniciar
+
+        # Intentar autenticar en startup
         try:
             auth_result = afip_client.autenticar()
             logger.info(f"✓ Autenticación WSAA exitosa — Token válido hasta: {auth_result['expiracion']}")
         except Exception as e:
-            logger.warning(f"⚠ No se pudo autenticar en startup (se reintentará en primera factura): {e}")
-        
+            msg = str(e)
+            if "WSAA_ALREADY_AUTHENTICATED" in msg:
+                logger.warning(
+                    "⏳ AFIP ya posee un TA activo para este certificado (emitido en sesión anterior). "
+                    "El retry automático obtendrá un nuevo token cuando expire (~cada 5 min)."
+                )
+            else:
+                logger.warning(f"⚠ No se pudo autenticar en startup: {e}")
+            # Lanzar retry background
+            _retry_task = asyncio.create_task(_retry_auth_background())
+            logger.info("🔄 Tarea de retry WSAA iniciada en background")
+
     except Exception as e:
         logger.error(f"✗ Error fatal al inicializar cliente AFIP: {e}")
         raise
-    
+
     logger.info("=" * 60)
     logger.info("Sidecar listo — Escuchando en puerto 8001")
     logger.info("=" * 60)
-    
+
     yield
-    
-    # Cleanup (si fuera necesario)
+
+    # Cleanup
+    if _retry_task and not _retry_task.done():
+        _retry_task.cancel()
     logger.info("Deteniendo AFIP Sidecar...")
 
 
