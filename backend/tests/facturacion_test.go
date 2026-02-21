@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"blendpos/internal/dto"
 	"blendpos/internal/infra"
 	"blendpos/internal/model"
 	"blendpos/internal/repository"
@@ -117,6 +118,9 @@ func (r *stubVentaRepoFacturacion) UpdateEstado(_ context.Context, id uuid.UUID,
 }
 func (r *stubVentaRepoFacturacion) NextTicketNumber(_ context.Context, _ *gorm.DB) (int, error) {
 	return 1, nil
+}
+func (r *stubVentaRepoFacturacion) List(_ context.Context, _ dto.VentaFilter) ([]model.Venta, int64, error) {
+	return nil, 0, nil
 }
 func (r *stubVentaRepoFacturacion) DB() *gorm.DB { return nil }
 

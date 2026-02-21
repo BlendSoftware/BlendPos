@@ -114,7 +114,7 @@ func (s *stubCajaService) GetActiva(_ context.Context, _ uuid.UUID) (*dto.Report
 	return nil, nil
 }
 
-func (s *stubCajaService) Historial(_ context.Context, _, _ int) ([]*dto.ReporteCajaResponse, error) {
+func (s *stubCajaService) Historial(_ context.Context, _, _ int) ([]dto.ReporteCajaResponse, error) {
 	return nil, nil
 }
 
