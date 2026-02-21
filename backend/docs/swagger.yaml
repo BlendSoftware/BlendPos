@@ -1,0 +1,808 @@
+basePath: /
+definitions:
+  apierror.APIError:
+    properties:
+      detail:
+        type: string
+    type: object
+  dto.AbrirCajaRequest:
+    properties:
+      monto_inicial:
+        minimum: 0
+        type: number
+      punto_de_venta:
+        minimum: 1
+        type: integer
+    required:
+    - monto_inicial
+    - punto_de_venta
+    type: object
+  dto.AnularVentaRequest:
+    properties:
+      motivo:
+        minLength: 5
+        type: string
+    required:
+    - motivo
+    type: object
+  dto.ArqueoRequest:
+    properties:
+      declaracion:
+        $ref: '#/definitions/dto.DeclaracionArqueo'
+      observaciones:
+        type: string
+      sesion_caja_id:
+        type: string
+    required:
+    - declaracion
+    - sesion_caja_id
+    type: object
+  dto.ArqueoResponse:
+    properties:
+      desvio:
+        $ref: '#/definitions/dto.DesvioResponse'
+      estado:
+        type: string
+      monto_declarado:
+        $ref: '#/definitions/dto.MontosPorMetodo'
+      monto_esperado:
+        $ref: '#/definitions/dto.MontosPorMetodo'
+      sesion_caja_id:
+        type: string
+    type: object
+  dto.ConsultaPreciosResponse:
+    properties:
+      categoria:
+        type: string
+      nombre:
+        type: string
+      precio_venta:
+        type: number
+      promocion:
+        type: string
+      stock_disponible:
+        type: integer
+    type: object
+  dto.CrearUsuarioRequest:
+    properties:
+      email:
+        type: string
+      nombre:
+        maxLength: 100
+        minLength: 2
+        type: string
+      password:
+        minLength: 4
+        type: string
+      punto_de_venta:
+        type: integer
+      rol:
+        enum:
+        - cajero
+        - supervisor
+        - administrador
+        type: string
+      username:
+        maxLength: 150
+        minLength: 1
+        type: string
+    required:
+    - nombre
+    - password
+    - rol
+    - username
+    type: object
+  dto.DeclaracionArqueo:
+    properties:
+      credito:
+        minimum: 0
+        type: number
+      debito:
+        minimum: 0
+        type: number
+      efectivo:
+        minimum: 0
+        type: number
+      transferencia:
+        minimum: 0
+        type: number
+    type: object
+  dto.DesvioResponse:
+    properties:
+      clasificacion:
+        description: normal | advertencia | critico
+        type: string
+      monto:
+        type: number
+      porcentaje:
+        type: number
+    type: object
+  dto.HistorialPrecioItem:
+    properties:
+      costo_antes:
+        type: number
+      costo_despues:
+        type: number
+      created_at:
+        type: string
+      id:
+        type: string
+      motivo:
+        type: string
+      porcentaje_aplicado:
+        type: number
+      producto_id:
+        type: string
+      proveedor_id:
+        type: string
+      proveedor_nombre:
+        type: string
+      venta_antes:
+        type: number
+      venta_despues:
+        type: number
+    type: object
+  dto.HistorialPrecioListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/dto.HistorialPrecioItem'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  dto.ItemVentaRequest:
+    properties:
+      cantidad:
+        minimum: 1
+        type: integer
+      descuento:
+        minimum: 0
+        type: number
+      producto_id:
+        type: string
+    required:
+    - cantidad
+    - producto_id
+    type: object
+  dto.ItemVentaResponse:
+    properties:
+      cantidad:
+        type: integer
+      precio_unitario:
+        type: number
+      producto:
+        type: string
+      subtotal:
+        type: number
+    type: object
+  dto.LoginRequest:
+    properties:
+      password:
+        minLength: 4
+        type: string
+      username:
+        minLength: 1
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  dto.LoginResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        description: seconds
+        type: integer
+      refresh_token:
+        type: string
+      token_type:
+        type: string
+      user:
+        $ref: '#/definitions/dto.UsuarioResponse'
+    type: object
+  dto.MontosPorMetodo:
+    properties:
+      credito:
+        type: number
+      debito:
+        type: number
+      efectivo:
+        type: number
+      total:
+        type: number
+      transferencia:
+        type: number
+    type: object
+  dto.MovimientoManualRequest:
+    properties:
+      descripcion:
+        minLength: 3
+        type: string
+      metodo_pago:
+        enum:
+        - efectivo
+        - debito
+        - credito
+        - transferencia
+        type: string
+      monto:
+        type: number
+      sesion_caja_id:
+        type: string
+      tipo:
+        enum:
+        - ingreso_manual
+        - egreso_manual
+        type: string
+    required:
+    - descripcion
+    - metodo_pago
+    - monto
+    - sesion_caja_id
+    - tipo
+    type: object
+  dto.PagoRequest:
+    properties:
+      metodo:
+        enum:
+        - efectivo
+        - debito
+        - credito
+        - transferencia
+        type: string
+      monto:
+        type: number
+    required:
+    - metodo
+    - monto
+    type: object
+  dto.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  dto.RegistrarVentaRequest:
+    properties:
+      cliente_email:
+        description: 'ClienteEmail: optional — when present, the facturacion worker
+          mails the PDF receipt.'
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/dto.ItemVentaRequest'
+        minItems: 1
+        type: array
+      offline_id:
+        description: OfflineID is set by the PWA when registering a sale created offline
+        type: string
+      pagos:
+        items:
+          $ref: '#/definitions/dto.PagoRequest'
+        minItems: 1
+        type: array
+      sesion_caja_id:
+        type: string
+    required:
+    - items
+    - pagos
+    - sesion_caja_id
+    type: object
+  dto.ReporteCajaResponse:
+    properties:
+      closed_at:
+        type: string
+      desvio:
+        $ref: '#/definitions/dto.DesvioResponse'
+      estado:
+        type: string
+      monto_declarado:
+        $ref: '#/definitions/dto.MontosPorMetodo'
+      monto_esperado:
+        $ref: '#/definitions/dto.MontosPorMetodo'
+      monto_inicial:
+        type: number
+      observaciones:
+        type: string
+      opened_at:
+        type: string
+      punto_de_venta:
+        type: integer
+      sesion_caja_id:
+        type: string
+      usuario:
+        type: string
+    type: object
+  dto.SyncBatchRequest:
+    properties:
+      ventas:
+        items:
+          $ref: '#/definitions/dto.RegistrarVentaRequest'
+        minItems: 1
+        type: array
+    required:
+    - ventas
+    type: object
+  dto.UsuarioResponse:
+    properties:
+      id:
+        type: string
+      nombre:
+        type: string
+      punto_de_venta:
+        type: integer
+      rol:
+        type: string
+      username:
+        type: string
+    type: object
+  dto.VentaListItem:
+    properties:
+      created_at:
+        type: string
+      descuento_total:
+        type: number
+      estado:
+        type: string
+      id:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/dto.ItemVentaResponse'
+        type: array
+      numero_ticket:
+        type: integer
+      pagos:
+        items:
+          $ref: '#/definitions/dto.PagoRequest'
+        type: array
+      sesion_caja_id:
+        type: string
+      subtotal:
+        type: number
+      total:
+        type: number
+      usuario_id:
+        type: string
+    type: object
+  dto.VentaListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/dto.VentaListItem'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  dto.VentaResponse:
+    properties:
+      conflicto_stock:
+        type: boolean
+      created_at:
+        type: string
+      descuento_total:
+        type: number
+      estado:
+        type: string
+      id:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/dto.ItemVentaResponse'
+        type: array
+      numero_ticket:
+        type: integer
+      pagos:
+        items:
+          $ref: '#/definitions/dto.PagoRequest'
+        type: array
+      subtotal:
+        type: number
+      total:
+        type: number
+      vuelto:
+        type: number
+    type: object
+host: localhost:8000
+info:
+  contact:
+    email: soporte@blendpos.ar
+    name: Soporte BlendPOS
+  description: Backend REST API para BlendPOS — punto de venta con soporte offline,
+    facturación AFIP y gestión de inventario.
+  license:
+    name: Private
+  termsOfService: https://blendpos.ar/terms
+  title: BlendPOS API
+  version: "1.0"
+paths:
+  /v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Credenciales
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.LoginResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      summary: Login de usuario
+      tags:
+      - auth
+  /v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Intercambia un refresh token válido por un nuevo access token.
+      parameters:
+      - description: Refresh token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.LoginResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      summary: Renovar token JWT
+      tags:
+      - auth
+  /v1/caja/{id}/reporte:
+    get:
+      parameters:
+      - description: ID de sesion
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ReporteCajaResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      security:
+      - BearerAuth: []
+      summary: Obtiene el reporte de una sesion de caja
+      tags:
+      - caja
+  /v1/caja/abrir:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Datos de apertura
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AbrirCajaRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.ReporteCajaResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      security:
+      - BearerAuth: []
+      summary: Abre una nueva sesion de caja
+      tags:
+      - caja
+  /v1/caja/arqueo:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Declaracion de arqueo
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ArqueoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ArqueoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      security:
+      - BearerAuth: []
+      summary: Realiza el arqueo ciego y cierra la sesion
+      tags:
+      - caja
+  /v1/caja/movimiento:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Movimiento manual
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.MovimientoManualRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      security:
+      - BearerAuth: []
+      summary: Registra un ingreso o egreso manual en caja
+      tags:
+      - caja
+  /v1/precio/{barcode}:
+    get:
+      parameters:
+      - description: Codigo de barras
+        in: path
+        name: barcode
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ConsultaPreciosResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      summary: Consulta de precio por codigo de barras (sin autenticacion)
+      tags:
+      - precio
+  /v1/productos/{id}/historial-precios:
+    get:
+      description: Retorna el historial inmutable de cambios de precio de un producto,
+        ordenado por fecha descendente.
+      parameters:
+      - description: UUID del producto
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Página (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Registros por página (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.HistorialPrecioListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      security:
+      - BearerAuth: []
+      summary: Historial de precios de un producto
+      tags:
+      - productos
+  /v1/usuarios:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Datos del usuario
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CrearUsuarioRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.UsuarioResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      security:
+      - BearerAuth: []
+      summary: Crear usuario
+      tags:
+      - usuarios
+  /v1/ventas:
+    get:
+      description: Retorna lista paginada de ventas filtrada por fecha y estado.
+      parameters:
+      - description: 'Fecha YYYY-MM-DD (default: hoy)'
+        in: query
+        name: fecha
+        type: string
+      - description: completada | anulada | all
+        in: query
+        name: estado
+        type: string
+      - description: Página (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Registros por página (default 50)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.VentaListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      security:
+      - BearerAuth: []
+      summary: Listar ventas
+      tags:
+      - ventas
+    post:
+      consumes:
+      - application/json
+      description: 'Crea una venta ACID: descuenta stock, crea movimientos de caja
+        y despacha facturación AFIP asíncrona.'
+      parameters:
+      - description: Detalle de la venta
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RegistrarVentaRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.VentaResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      security:
+      - BearerAuth: []
+      summary: Registrar una nueva venta
+      tags:
+      - ventas
+  /v1/ventas/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 'Anula una venta: restaura stock y genera movimientos de caja inversos.'
+      parameters:
+      - description: UUID de la venta
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Motivo de anulación
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AnularVentaRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      security:
+      - BearerAuth: []
+      summary: Anular venta
+      tags:
+      - ventas
+  /v1/ventas/sync-batch:
+    post:
+      consumes:
+      - application/json
+      description: Procesa un lote de ventas creadas offline. Idempotente por offline_id.
+        Aplica auto-compensación de stock (déficit ≤ 3 unidades).
+      parameters:
+      - description: Lote de ventas
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SyncBatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.VentaResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apierror.APIError'
+      security:
+      - BearerAuth: []
+      summary: Sincronizar ventas offline
+      tags:
+      - ventas
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: 'Ingrese el token JWT con el prefijo "Bearer": Bearer <token>'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

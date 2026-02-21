@@ -212,9 +212,13 @@ func (s *ventaService) RegistrarVenta(ctx context.Context, usuarioID uuid.UUID, 
 
 	// 6. Async facturacion job (best-effort — fire & forget)
 	if s.dispatcher != nil {
-		_ = s.dispatcher.EnqueueFacturacion(ctx, map[string]interface{}{
+		payload := map[string]interface{}{
 			"venta_id": venta.ID.String(),
-		})
+		}
+		if req.ClienteEmail != nil && *req.ClienteEmail != "" {
+			payload["cliente_email"] = *req.ClienteEmail
+		}
+		_ = s.dispatcher.EnqueueFacturacion(ctx, payload)
 	}
 
 	// Build response
@@ -270,22 +274,79 @@ func (s *ventaService) AnularVenta(ctx context.Context, id uuid.UUID, motivo str
 
 // ── SyncBatch ─────────────────────────────────────────────────────────────────
 // Processes a batch of offline sales. Idempotent: uses offline_id deduplication.
+//
+// Auto-compensation rules (Fase 8):
+//   - Stock deficit ≤ conflictoStockThreshold units: auto-compensate (accept sale,
+//     allow stock to go negative, flag for supervisor review).
+//   - Stock deficit > conflictoStockThreshold units: reject the sale entirely.
+//   - If more than maxConflictRatio of the batch would be conflicts, reject the
+//     remainder to prevent runaway negative inventory.
+
+const (
+	conflictoStockThreshold = 3   // max auto-compensable deficit per item
+	maxConflictRatio        = 0.5 // max fraction of batch allowed to have conflicts
+)
 
 func (s *ventaService) SyncBatch(ctx context.Context, usuarioID uuid.UUID, req dto.SyncBatchRequest) ([]dto.VentaResponse, error) {
 	results := make([]dto.VentaResponse, 0, len(req.Ventas))
+	conflictCount := 0
+	maxConflicts := int(float64(len(req.Ventas)) * maxConflictRatio)
+	if maxConflicts < 1 {
+		maxConflicts = 1
+	}
+
 	for _, ventaReq := range req.Ventas {
-		resp, err := s.RegistrarVenta(ctx, usuarioID, ventaReq)
+		// Pre-flight stock check to classify the conflict before touching the DB.
+		exceeded, err := s.checkStockExceedsThreshold(ctx, ventaReq)
 		if err != nil {
-			// Mark as conflict, continue processing remaining sales
-			results = append(results, dto.VentaResponse{
-				ConflictoStock: true,
-				Estado:         "error",
-			})
+			results = append(results, dto.VentaResponse{ConflictoStock: true, Estado: "error"})
 			continue
+		}
+
+		if exceeded {
+			// Deficit > threshold — reject sale, do not decrement stock.
+			conflictCount++
+			results = append(results, dto.VentaResponse{ConflictoStock: true, Estado: "rechazada"})
+			continue
+		}
+
+		// Check if we've already hit the max conflict quota (even for auto-compensable)
+		if conflictCount >= maxConflicts {
+			results = append(results, dto.VentaResponse{ConflictoStock: true, Estado: "rechazada"})
+			continue
+		}
+
+		resp, regErr := s.RegistrarVenta(ctx, usuarioID, ventaReq)
+		if regErr != nil {
+			results = append(results, dto.VentaResponse{ConflictoStock: true, Estado: "error"})
+			continue
+		}
+		if resp.ConflictoStock {
+			conflictCount++
 		}
 		results = append(results, *resp)
 	}
 	return results, nil
+}
+
+// checkStockExceedsThreshold returns true when ANY item in the sale has a deficit
+// strictly greater than conflictoStockThreshold, meaning the sale must be rejected.
+func (s *ventaService) checkStockExceedsThreshold(ctx context.Context, req dto.RegistrarVentaRequest) (bool, error) {
+	for _, item := range req.Items {
+		pid, err := uuid.Parse(item.ProductoID)
+		if err != nil {
+			continue
+		}
+		p, err := s.productoRepo.FindByID(ctx, pid)
+		if err != nil {
+			return false, err
+		}
+		deficit := item.Cantidad - p.StockActual
+		if deficit > conflictoStockThreshold {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ListVentas returns a paginated list of sales, filtered by date and estado.

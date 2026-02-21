@@ -6,7 +6,7 @@ import "github.com/shopspring/decimal"
 
 // VentaFilter is bound from query string of GET /v1/ventas.
 type VentaFilter struct {
-	Fecha  string `form:"fecha"`              // YYYY-MM-DD; empty = today
+	Fecha  string `form:"fecha"`                     // YYYY-MM-DD; empty = today
 	Estado string `form:"estado,default=completada"` // completada | anulada | all
 	Page   int    `form:"page,default=1"   validate:"min=1"`
 	Limit  int    `form:"limit,default=50" validate:"min=1,max=200"`
@@ -52,7 +52,9 @@ type RegistrarVentaRequest struct {
 	Items        []ItemVentaRequest `json:"items"          validate:"required,min=1,dive"`
 	Pagos        []PagoRequest      `json:"pagos"          validate:"required,min=1,dive"`
 	// OfflineID is set by the PWA when registering a sale created offline
-	OfflineID *string `json:"offline_id" validate:"omitempty,uuid"`
+	OfflineID *string `json:"offline_id"    validate:"omitempty,uuid"`
+	// ClienteEmail: optional — when present, the facturacion worker mails the PDF receipt.
+	ClienteEmail *string `json:"cliente_email" validate:"omitempty,email"`
 }
 
 type AnularVentaRequest struct {

@@ -80,6 +80,8 @@ export interface RegistrarVentaRequest {
     items: ItemVentaRequest[];
     pagos: PagoRequest[];
     offline_id?: string;
+    /** Optional — when provided the backend emails the PDF receipt to this address. */
+    cliente_email?: string;
 }
 
 // ── API Calls ─────────────────────────────────────────────────────────────────

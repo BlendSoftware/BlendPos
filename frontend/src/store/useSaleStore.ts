@@ -84,6 +84,8 @@ interface SaleState {
         pagos?: PagoDetalle[];
         efectivoRecibido?: number;
         vuelto?: number;
+        /** Optional customer email — backend will mail the PDF receipt. */
+        clienteEmail?: string;
     }) => SaleRecord;
     setCajero: (nombre: string) => void;
 }
@@ -311,6 +313,7 @@ export const useSaleStore = create<SaleState>()(
                     monto: p.monto,
                 })),
                 offline_id: record.id,
+                ...(pago.clienteEmail ? { cliente_email: pago.clienteEmail } : {}),
             }).catch((err) => console.warn('[BlendPOS] Error registrando venta en backend:', err));
         }
 

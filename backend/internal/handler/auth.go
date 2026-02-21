@@ -38,6 +38,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// Refresh godoc
+// @Summary      Renovar token JWT
+// @Description  Intercambia un refresh token válido por un nuevo access token.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body body dto.RefreshRequest true "Refresh token"
+// @Success      200  {object} dto.LoginResponse
+// @Failure      401  {object} apierror.APIError
+// @Router       /v1/auth/refresh [post]
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req dto.RefreshRequest
 	if !bindAndValidate(c, &req) {
@@ -59,6 +69,16 @@ func NewUsuariosHandler(svc service.AuthService) *UsuariosHandler {
 	return &UsuariosHandler{svc: svc}
 }
 
+// Crear godoc
+// @Summary      Crear usuario
+// @Tags         usuarios
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body body dto.CrearUsuarioRequest true "Datos del usuario"
+// @Success      201  {object} dto.UsuarioResponse
+// @Failure      400  {object} apierror.APIError
+// @Router       /v1/usuarios [post]
 func (h *UsuariosHandler) Crear(c *gin.Context) {
 	var req dto.CrearUsuarioRequest
 	if !bindAndValidate(c, &req) {

@@ -1,6 +1,8 @@
 package router
 
 import (
+	"time"
+
 	"blendpos/internal/config"
 	"blendpos/internal/handler"
 	"blendpos/internal/infra"
@@ -8,6 +10,9 @@ import (
 	"blendpos/internal/repository"
 	"blendpos/internal/service"
 	"blendpos/internal/worker"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -29,6 +34,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	r.Use(middleware.Recovery())
 	r.Use(middleware.CORS())
 	r.Use(middleware.ErrorHandler())
+	r.Use(middleware.RateLimiter(200, time.Minute)) // 200 req/min per IP
 
 	// ── Infrastructure ───────────────────────────────────────────────────────
 	afipClient := infra.NewAFIPClient(cfg.AFIPSidecarURL)
@@ -41,6 +47,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	cajaRepo := repository.NewCajaRepository(db)
 	comprobanteRepo := repository.NewComprobanteRepository(db)
 	proveedorRepo := repository.NewProveedorRepository(db)
+	historialPrecioRepo := repository.NewHistorialPrecioRepository(db)
 
 	// ── Services ─────────────────────────────────────────────────────────────
 	authSvc := service.NewAuthService(usuarioRepo, cfg)
@@ -65,6 +72,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	proveedoresH := handler.NewProveedoresHandler(proveedorSvc)
 	usuariosH := handler.NewUsuariosHandler(authSvc)
 	consultaH := handler.NewConsultaPreciosHandler(productoRepo, rdb)
+	historialPreciosH := handler.NewHistorialPreciosHandler(historialPrecioRepo)
 
 	// ── Routes ───────────────────────────────────────────────────────────────
 
@@ -98,6 +106,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 			prods.PUT("/:id", productosH.Actualizar)
 			prods.DELETE("/:id", productosH.Desactivar)
 			prods.PATCH("/:id/stock", productosH.AjustarStock)
+			prods.GET("/:id/historial-precios", historialPreciosH.ListarPorProducto)
 		}
 
 		inv := v1.Group("/inventario", middleware.RequireRole("administrador", "supervisor"))
@@ -146,6 +155,11 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 
 		// Offline sync endpoint (PWA SyncEngine)
 		v1.POST("/ventas/sync-batch", middleware.RequireRole("cajero", "supervisor", "administrador"), ventasH.SyncBatch)
+	}
+
+	// Swagger UI — only enabled outside production
+	if cfg.Env != "production" {
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	}
 
 	return r

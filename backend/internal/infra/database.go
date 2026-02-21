@@ -40,7 +40,26 @@ func NewDatabase(dsn string) (*gorm.DB, error) {
 		&model.VentaPago{},
 		&model.Comprobante{},
 		&model.Proveedor{},
+		&model.HistorialPrecio{},
 	)
 
 	return db, nil
+}
+
+// RunMigrations applies GORM AutoMigrate for all models. Used in integration
+// tests where a fresh containerised DB needs the full schema without SQL files.
+func RunMigrations(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&model.Producto{},
+		&model.ProductoHijo{},
+		&model.Usuario{},
+		&model.SesionCaja{},
+		&model.MovimientoCaja{},
+		&model.Venta{},
+		&model.VentaItem{},
+		&model.VentaPago{},
+		&model.Comprobante{},
+		&model.Proveedor{},
+		&model.HistorialPrecio{},
+	)
 }

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import {
     Modal, Stack, Text, Group, Button, Divider, Select, NumberInput,
-    Badge, Box, Alert
+    Badge, Box, Alert, TextInput, Collapse
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { CreditCard, Check, X, Wallet, AlertCircle, CheckCircle } from 'lucide-react';
+import { CreditCard, Check, X, Wallet, AlertCircle, CheckCircle, Mail } from 'lucide-react';
 import { useSaleStore } from '../../store/useSaleStore';
 import type { MetodoPago, PagoDetalle } from '../../store/useSaleStore';
 import styles from './PaymentModal.module.css';
@@ -31,6 +31,9 @@ export function PaymentModal() {
     const [mixtoDebito, setMixtoDebito] = useState<number | string>('');
     const [mixtoCredito, setMixtoCredito] = useState<number | string>('');
     const [mixtoQr, setMixtoQr] = useState<number | string>('');
+    const [clienteEmail, setClienteEmail] = useState('');
+
+    const isEmailValid = clienteEmail === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clienteEmail);
 
     const toNumber = (val: number | string): number =>
         (typeof val === 'string' ? parseFloat(val) || 0 : val) || 0;
@@ -78,6 +81,7 @@ export function PaymentModal() {
             setMixtoDebito('');
             setMixtoCredito('');
             setMixtoQr('');
+            setClienteEmail('');
         }
     }, [isOpen]);
 
@@ -115,6 +119,7 @@ export function PaymentModal() {
             pagos,
             efectivoRecibido: efectivoRecibidoToSave,
             vuelto: vueltoCalc,
+            clienteEmail: clienteEmail.trim() || undefined,
         });
         closePaymentModal();
         notifications.show({
@@ -352,6 +357,20 @@ export function PaymentModal() {
                     </Stack>
                 )}
 
+                {/* Email opcional para recibo digital (RF-21) */}
+                <Collapse in>
+                    <TextInput
+                        label="Email del cliente (opcional)"
+                        description="Si se indica, se enviará el comprobante por email."
+                        placeholder="cliente@ejemplo.com"
+                        value={clienteEmail}
+                        onChange={(e) => setClienteEmail(e.currentTarget.value)}
+                        leftSection={<Mail size={16} />}
+                        error={!isEmailValid ? 'Email inválido' : undefined}
+                        size="sm"
+                    />
+                </Collapse>
+
                 <Group grow mt="xs">
                     <Button
                         variant="outline"
@@ -367,7 +386,7 @@ export function PaymentModal() {
                         size="lg"
                         leftSection={<Check size={18} />}
                         onClick={handleConfirmPayment}
-                        disabled={!canConfirm}
+                        disabled={!canConfirm || !isEmailValid}
                     >
                         Confirmar Pago
                     </Button>
