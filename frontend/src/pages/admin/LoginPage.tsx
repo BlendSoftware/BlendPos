@@ -15,12 +15,12 @@ export function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/admin/dashboard';
+    const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
 
     const form = useForm({
         initialValues: { email: '', password: '' },
         validate: {
-            email: (v) => (/^\S+@\S+$/.test(v) ? null : 'Email inválido'),
+            email: (v) => (v.trim().length >= 2 ? null : 'Ingrese usuario o email'),
             password: (v) => (v.length >= 4 ? null : 'Mínimo 4 caracteres'),
         },
     });
@@ -31,7 +31,16 @@ export function LoginPage() {
         const ok = await login(email, password);
         setLoading(false);
         if (ok) {
-            navigate(from, { replace: true });
+            // Redirigir según rol: admin/supervisor van al panel admin,
+            // salvo que ya venían de una ruta admin específica.
+            const updatedUser = useAuthStore.getState().user;
+            const isAdminRole = updatedUser?.rol === 'admin' || updatedUser?.rol === 'supervisor';
+            const isAdminRoute = from.startsWith('/admin');
+            if (isAdminRole && !isAdminRoute) {
+                navigate('/admin/dashboard', { replace: true });
+            } else {
+                navigate(from === '/login' ? '/' : from, { replace: true });
+            }
         } else {
             setError('Credenciales inválidas o usuario inactivo.');
         }
@@ -59,8 +68,8 @@ export function LoginPage() {
                     <form onSubmit={handleSubmit}>
                         <Stack gap="md">
                             <TextInput
-                                label="Email"
-                                placeholder="usuario@blendpos.com"
+                                label="Usuario o Email"
+                                placeholder="admin"
                                 {...form.getInputProps('email')}
                                 data-autofocus
                             />
@@ -76,7 +85,7 @@ export function LoginPage() {
                     </form>
 
                     <Text c="dimmed" size="xs" mt="lg" ta="center">
-                        Demo: admin@blendpos.com / 1234
+                        Demo: admin / blendpos2026
                     </Text>
                 </Paper>
             </Box>

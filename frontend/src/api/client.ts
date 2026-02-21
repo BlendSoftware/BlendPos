@@ -49,10 +49,15 @@ async function request<T>(
     const response = await fetch(url, { ...init, headers });
 
     if (response.status === 401) {
-        // Token expirado → limpiar sesión y redirigir al login
-        localStorage.removeItem('blendpos-auth');
-        window.location.href = '/login';
-        throw new Error('Sesión expirada. Redirigiendo al login…');
+        // Solo redirigir si había un token (sesión expirada), no si era anónimo.
+        // Evita el loop: llamada sin token → 401 → reload → 401 → ...
+        if (token) {
+            localStorage.removeItem('blendpos-auth');
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
+        }
+        throw new Error('Sesión expirada o no autorizado.');
     }
 
     if (!response.ok) {

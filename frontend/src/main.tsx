@@ -17,9 +17,7 @@ import { posTheme } from './theme';
 import App from './App';
 import './index.css';
 import './pwa';
-import { seedCatalogFromMocksIfEmpty } from './offline/catalog';
-
-seedCatalogFromMocksIfEmpty().catch(console.warn);
+// El catálogo se sincroniza al montar el PosTerminal (solo cuando el usuario ya está autenticado).
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
