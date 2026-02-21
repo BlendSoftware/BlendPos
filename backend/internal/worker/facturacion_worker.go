@@ -36,6 +36,7 @@ type FacturacionWorker struct {
 	ventaRepo       repository.VentaRepository
 	dispatcher      *Dispatcher
 	pdfStoragePath  string
+	cuitEmisor      string
 }
 
 // NewFacturacionWorker wires all dependencies for the billing worker.
@@ -45,6 +46,7 @@ func NewFacturacionWorker(
 	ventaRepo repository.VentaRepository,
 	dispatcher *Dispatcher,
 	pdfStoragePath string,
+	cuitEmisor string,
 ) *FacturacionWorker {
 	return &FacturacionWorker{
 		afipClient:      afipClient,
@@ -52,6 +54,7 @@ func NewFacturacionWorker(
 		ventaRepo:       ventaRepo,
 		dispatcher:      dispatcher,
 		pdfStoragePath:  pdfStoragePath,
+		cuitEmisor:      cuitEmisor,
 	}
 }
 
@@ -101,13 +104,17 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 	var afipResp *infra.AFIPResponse
 	afipErr := withRetry(ctx, 3, func(attempt int) error {
 		afipPayload := infra.AFIPPayload{
-			TipoCBTE:   11, // Factura C — consumidor final
-			PuntoVenta: 1,
-			CUIT:       "", // loaded from AFIP sidecar env vars
-			MontoNeto:  venta.Total.InexactFloat64(),
-			MontoIVA:   0,
-			MontoTotal: venta.Total.InexactFloat64(),
-			VentaID:    payload.VentaID,
+			CUITEmisor:      w.cuitEmisor,
+			PuntoDeVenta:    1,
+			TipoComprobante: 11, // Factura C — consumidor final
+			TipoDocReceptor: 99, // 99 = Consumidor Final
+			NroDocReceptor:  "0",
+			Concepto:        1, // Productos
+			ImporteNeto:     venta.Total.InexactFloat64(),
+			ImporteExento:   0,
+			ImporteIVA:      0,
+			ImporteTotal:    venta.Total.InexactFloat64(),
+			VentaID:         payload.VentaID,
 		}
 		resp, err := w.afipClient.Facturar(ctx, afipPayload)
 		if err != nil {

@@ -92,6 +92,15 @@ def patch_helpers(path):
         content = content.replace(old_insert, new_insert)
         modified_flags.append("✓ Struct.insert_setitem: agregado guard para pickle safety")
 
+    # ── Parche 3: sort_dict KeyError: 0 (Python 2→3 compat) ─────────────────
+    # od[k][0] asume que od[k] es una lista; en Python 3 puede ser un dict
+    # cuando el esquema WSDL define elementos de lista como dicts anidados.
+    old_sort = "                    v = [sort_dict(od[k][0], v1) for v1 in v]"
+    new_sort = "                    v = [sort_dict(od[k][0] if isinstance(od[k], list) else od[k], v1) for v1 in v]"
+    if old_sort in content:
+        content = content.replace(old_sort, new_sort)
+        modified_flags.append("✓ sort_dict: od[k][0] → isinstance check para Python 3 compat (KeyError: 0)")
+
     if content != original:
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)

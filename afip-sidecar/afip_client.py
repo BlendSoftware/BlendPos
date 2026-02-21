@@ -338,6 +338,14 @@ class AFIPClient:
                 moneda_ctz=req.cotizacion_moneda
             )
             
+            # RG 5616: Condición IVA del receptor (requerido desde 2024)
+            # 5 = Consumidor Final (para tipo_doc=99)
+            # El valor se toma del request; por defecto 5 para doc_tipo=99
+            condicion_iva = getattr(req, 'condicion_iva_receptor_id', None)
+            if condicion_iva is None:
+                condicion_iva = 5 if req.tipo_doc_receptor == 99 else 1  # 1=IVA Responsable Inscripto
+            wsfe.factura['condicion_iva_receptor_id'] = condicion_iva
+            
             # Agregar IVA si corresponde
             if req.importe_iva > 0:
                 # Alícuota 21% (código 5 en AFIP)

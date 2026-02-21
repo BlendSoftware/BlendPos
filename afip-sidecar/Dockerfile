@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libc6-dev linux-libc-dev openssl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-base.txt requirements.txt patch_setuppy.py patch_wsaa.py patch_wsaa_openssl2.py patch_wsaa_b64.py patch_utils.py patch_pysimplesoap.py patch_helpers.py ./
+COPY requirements-base.txt requirements.txt patch_setuppy.py patch_wsaa.py patch_wsaa_openssl2.py patch_wsaa_b64.py patch_utils.py patch_pysimplesoap.py patch_helpers.py patch_wsfev1_final.py ./
 
 # Instalar deps base
 RUN pip install --no-cache-dir -r requirements-base.txt
@@ -39,6 +39,7 @@ urllib.request.urlretrieve(\
     python3 /app/patch_wsaa_openssl2.py && \
     python3 /app/patch_wsaa_b64.py && \
     python3 /app/patch_utils.py && \
+    python3 /app/patch_wsfev1_final.py && \
     cd /tmp && rm -rf *fip*2.7.1874* pyafipws.tar.gz
 
 COPY *.py .

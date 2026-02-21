@@ -49,6 +49,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: dev_secret_change_in_production
       AFIP_SIDECAR_URL: http://afip-sidecar:8001
+      AFIP_CUIT_EMISOR: "20442477060"
     depends_on:
       postgres:
         condition: service_healthy

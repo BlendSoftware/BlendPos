@@ -28,6 +28,8 @@ type Venta struct {
 	Pagos []VentaPago `gorm:"foreignKey:VentaID"`
 }
 
+func (Venta) TableName() string { return "ventas" }
+
 // VentaItem is one line of a sale. Price is captured at sale time.
 type VentaItem struct {
 	ID             uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -41,6 +43,8 @@ type VentaItem struct {
 	Producto *Producto `gorm:"foreignKey:ProductoID"`
 }
 
+func (VentaItem) TableName() string { return "venta_items" }
+
 // VentaPago records one payment method applied to a sale.
 // Metodo: "efectivo" | "debito" | "credito" | "transferencia"
 type VentaPago struct {
@@ -49,3 +53,5 @@ type VentaPago struct {
 	Metodo  string          `gorm:"type:varchar(20);not null"`
 	Monto   decimal.Decimal `gorm:"type:decimal(12,2);not null"`
 }
+
+func (VentaPago) TableName() string { return "venta_pagos" }

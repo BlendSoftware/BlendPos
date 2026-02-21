@@ -25,6 +25,7 @@ type Config struct {
 
 	// AFIP Sidecar
 	AFIPSidecarURL string `mapstructure:"AFIP_SIDECAR_URL"`
+	AFIPCUITEmisor string `mapstructure:"AFIP_CUIT_EMISOR"`
 
 	// SMTP
 	SMTPHost     string `mapstructure:"SMTP_HOST"`

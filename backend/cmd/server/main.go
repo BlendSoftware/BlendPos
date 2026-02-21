@@ -51,7 +51,7 @@ func main() {
 	ventaRepo := repository.NewVentaRepository(db)
 
 	workerHandlers := &worker.WorkerHandlers{
-		Facturacion: worker.NewFacturacionWorker(afipClient, comprobanteRepo, ventaRepo, dispatcher, cfg.PDFStoragePath),
+		Facturacion: worker.NewFacturacionWorker(afipClient, comprobanteRepo, ventaRepo, dispatcher, cfg.PDFStoragePath, cfg.AFIPCUITEmisor),
 		Email:       worker.NewEmailWorker(mailer),
 	}
 	worker.StartWorkerPool(ctx, rdb, workerHandlers, cfg.WorkerPoolSize)

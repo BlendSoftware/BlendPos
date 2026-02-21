@@ -11,14 +11,19 @@ import (
 
 // AFIPPayload is sent by the Go worker pool to the AFIP Python Sidecar.
 // The Sidecar handles WSAA + WSFEV1 and returns the CAE.
+// Field names must match the sidecar's FacturarRequest Pydantic schema.
 type AFIPPayload struct {
-	TipoCBTE   int     `json:"tipo_cbte"` // 6=Factura B, 1=Factura A, 11=Factura C
-	PuntoVenta int     `json:"punto_vta"`
-	CUIT       string  `json:"cuit"`
-	MontoNeto  float64 `json:"monto_neto"`
-	MontoIVA   float64 `json:"monto_iva"`
-	MontoTotal float64 `json:"monto_total"`
-	VentaID    string  `json:"venta_id"`
+	CUITEmisor      string  `json:"cuit_emisor"`       // CUIT del emisor (sin guiones)
+	PuntoDeVenta    int     `json:"punto_de_venta"`    // Punto de venta autorizado
+	TipoComprobante int     `json:"tipo_comprobante"`  // 1=FacturaA, 6=FacturaB, 11=FacturaC
+	TipoDocReceptor int     `json:"tipo_doc_receptor"` // 96=DNI, 80=CUIT, 99=ConsumidorFinal
+	NroDocReceptor  string  `json:"nro_doc_receptor"`  // DNI/CUIT del receptor, "0" para Consumidor Final
+	Concepto        int     `json:"concepto"`          // 1=Productos, 2=Servicios, 3=Ambos
+	ImporteNeto     float64 `json:"importe_neto"`      // Monto gravado sin IVA
+	ImporteExento   float64 `json:"importe_exento"`    // Monto exento de IVA
+	ImporteIVA      float64 `json:"importe_iva"`       // Monto de IVA
+	ImporteTotal    float64 `json:"importe_total"`     // Total (neto+exento+iva)
+	VentaID         string  `json:"venta_id"`
 }
 
 // AFIPResponse is returned by the Python Sidecar after querying WSFEV1.
