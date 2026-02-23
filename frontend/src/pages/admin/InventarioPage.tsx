@@ -103,7 +103,14 @@ export function InventarioPage() {
 
     // stockCritico computed from alertas API (fallback to local if backend unavailable)
     const stockCritico = alertas.length > 0
-        ? alertas.map((a) => ({ id: a.producto_id, nombre: a.nombre, codigoBarras: a.codigo_barras, stock: a.stock_actual, stockMinimo: a.stock_minimo, deficit: a.deficit }))
+        ? alertas.map((a) => ({
+            id: a.producto_id,
+            nombre: a.nombre,
+            codigoBarras: a.codigo_barras ?? '',
+            stock: a.stock_actual,
+            stockMinimo: a.stock_minimo,
+            deficit: a.deficit ?? Math.max(0, a.stock_minimo - a.stock_actual),
+          }))
         : productos.filter((p) => p.activo && p.stock <= p.stockMinimo).map((p) => ({ id: p.id, nombre: p.nombre, codigoBarras: p.codigoBarras, stock: p.stock, stockMinimo: p.stockMinimo, deficit: p.stockMinimo - p.stock }));
 
     const productosSelect = useMemo(
@@ -124,10 +131,10 @@ export function InventarioPage() {
     const ejecutarDesarmeLocal = async () => {
         if (!desarmeVinculo) return;
         try {
-            const resp = await apiEjecutarDesarme({ vinculo_id: desarmeVinculo.id, cantidad: 1 });
+            const resp = await apiEjecutarDesarme({ vinculo_id: desarmeVinculo.id, cantidad_padres: 1 });
             notifications.show({
                 title: 'Desarme realizado',
-                message: `${resp.unidades_acreditadas} unidades acreditadas`,
+                message: `${resp.unidades_generadas} unidades acreditadas`,
                 color: 'teal',
             });
             setConfirmOpen(false);

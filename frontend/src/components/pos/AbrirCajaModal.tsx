@@ -15,7 +15,7 @@ interface Props {
 }
 
 export function AbrirCajaModal({ opened, onSuccess }: Props) {
-    const { abrir, loading, error } = useCajaStore();
+    const { abrir, restaurar, loading, error } = useCajaStore();
 
     const [puntoDeVenta, setPuntoDeVenta] = useState<number | string>(1);
     const [montoInicial, setMontoInicial] = useState<number | string>(0);
@@ -30,8 +30,16 @@ export function AbrirCajaModal({ opened, onSuccess }: Props) {
         try {
             await abrir({ punto_de_venta: pdv, monto_inicial: monto });
             onSuccess();
-        } catch {
-            // El store ya setea `error` en su catch — no se necesita nada más aquí
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : '';
+            // Si ya existe una caja abierta en ese PDV, recuperar la sesión activa
+            if (msg.toLowerCase().includes('ya existe una caja abierta')) {
+                await restaurar().catch(() => {});
+                // Only close modal if restaurar() actually recovered a session
+                const { sesionId } = useCajaStore.getState();
+                if (sesionId) onSuccess();
+            }
+            // El store ya setea `error` en su catch para otros casos
         }
     };
 

@@ -22,19 +22,18 @@ export interface VinculoResponse {
 
 export interface DesarmeManualResponse {
     vinculo_id: string;
-    cantidad_desarmada: number;
-    unidades_acreditadas: number;
-    stock_padre_nuevo: number;
-    stock_hijo_nuevo: number;
+    padres_desarmados: number;
+    unidades_generadas: number;
 }
 
 export interface AlertaStockResponse {
     producto_id: string;
     nombre: string;
-    codigo_barras: string;
+    codigo_barras?: string;
     stock_actual: number;
     stock_minimo: number;
-    deficit: number;
+    deficit?: number;
+    precio_venta?: number;
 }
 
 // ── Request Types ─────────────────────────────────────────────────────────────
@@ -48,7 +47,7 @@ export interface CrearVinculoRequest {
 
 export interface DesarmeManualRequest {
     vinculo_id: string;
-    cantidad: number;
+    cantidad_padres: number;
 }
 
 // ── API Calls ─────────────────────────────────────────────────────────────────

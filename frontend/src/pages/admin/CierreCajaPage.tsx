@@ -31,6 +31,7 @@ export function CierreCajaPage() {
     const [historial, setHistorial] = useState<ReporteCajaResponse[]>([]);
     const [loadingHistorial, setLoadingHistorial] = useState(false);
     const [activeTab, setActiveTab] = useState<string | null>('arqueo');
+    const [desvioCritico, setDesvioCritico] = useState(false);
 
     // Cargar reporte de la sesión activa
     useEffect(() => {
@@ -74,10 +75,20 @@ export function CierreCajaPage() {
             return;
         }
         const contado = values.items.reduce((s, i) => s + i.denominacion * i.cantidad, 0);
+        // Los medios digitales (débito, crédito, transferencia) se confirman del sistema
+        // ya que el operador no puede "contar" tarjetas como billetes.
+        const debitoSistema = Number(reporte?.monto_esperado?.debito ?? 0);
+        const creditoSistema = Number(reporte?.monto_esperado?.credito ?? 0);
+        const transferenciaSistema = Number(reporte?.monto_esperado?.transferencia ?? 0);
         try {
             const resp = await cerrar({
                 sesion_caja_id: sesionId,
-                declaracion: { efectivo: contado, debito: 0, credito: 0, transferencia: 0 },
+                declaracion: {
+                    efectivo: contado,
+                    debito: debitoSistema,
+                    credito: creditoSistema,
+                    transferencia: transferenciaSistema,
+                },
                 observaciones: values.observaciones || undefined,
             });
             setApiResult(resp);
@@ -89,10 +100,18 @@ export function CierreCajaPage() {
                 icon: <CheckCircle size={16} />,
             });
         } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error desconocido';
+            const esCritico = msg.toLowerCase().includes('desvío crítico') || msg.toLowerCase().includes('desvio critico');
+            if (esCritico) {
+                setDesvioCritico(true);
+            }
             notifications.show({
-                title: 'Error al cerrar caja',
-                message: err instanceof Error ? err.message : 'Error desconocido',
-                color: 'red',
+                title: esCritico ? 'Desvío crítico detectado' : 'Error al cerrar caja',
+                message: esCritico
+                    ? 'El efectivo contado difiere más del 5% del esperado. Completá el campo "Observaciones" para continuar.'
+                    : msg,
+                color: 'orange',
+                autoClose: 7000,
             });
         }
     });
@@ -132,6 +151,25 @@ export function CierreCajaPage() {
                                     Contá el efectivo y completá las denominaciones.
                                 </Alert>
 
+                                {/* Resumen de pagos digitales del sistema */}
+                                {reporte && (
+                                    <Paper p="md" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-7)' }}>
+                                        <Text size="sm" fw={600} mb="xs" c="dimmed">Medios digitales (confirmados por el sistema)</Text>
+                                        <SimpleGrid cols={3} spacing="sm">
+                                            {[
+                                                { label: 'Débito', value: Number(reporte.monto_esperado?.debito ?? 0) },
+                                                { label: 'Crédito', value: Number(reporte.monto_esperado?.credito ?? 0) },
+                                                { label: 'Transferencia', value: Number(reporte.monto_esperado?.transferencia ?? 0) },
+                                            ].map(({ label, value }) => (
+                                                <Paper key={label} p="sm" radius="sm" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                                                    <Text size="xs" c="dimmed">{label}</Text>
+                                                    <Text fw={700} c="blue.4">{formatARS(value)}</Text>
+                                                </Paper>
+                                            ))}
+                                        </SimpleGrid>
+                                    </Paper>
+                                )}
+
                                 <Paper p="lg" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
                                     <Title order={5} mb="md">Conteo de denominaciones</Title>
                                     <Stack gap="sm">
@@ -166,10 +204,17 @@ export function CierreCajaPage() {
                                     </Group>
                                 </Paper>
 
+                                {desvioCritico && (
+                                    <Alert color="orange" variant="filled" icon={<AlertTriangle size={16} />} title="Desvío crítico (>5%)">
+                                        El monto contado difiere significativamente del esperado. Completá las observaciones
+                                        explicando la diferencia para poder enviar el arqueo.
+                                    </Alert>
+                                )}
                                 <Textarea
-                                    label="Observaciones (opcional)"
+                                    label={desvioCritico ? 'Observaciones del supervisor (REQUERIDO)' : 'Observaciones (opcional)'}
                                     placeholder="Ej: faltante por cambio a cliente, etc."
                                     rows={3}
+                                    styles={desvioCritico ? { input: { borderColor: 'var(--mantine-color-orange-5)', borderWidth: 2 } } : undefined}
                                     {...form.getInputProps('observaciones')}
                                 />
 

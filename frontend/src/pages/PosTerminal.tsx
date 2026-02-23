@@ -18,7 +18,7 @@ import { useSaleStore } from '../store/useSaleStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCajaStore } from '../store/useCajaStore';
 import { usePosFocus } from '../hooks/usePosFocus';
-import { findCatalogProductByBarcode, searchCatalogProducts, seedCatalogFromMocksIfEmpty } from '../offline/catalog';
+import { findCatalogProductByBarcode, searchCatalogProducts, seedCatalogFromMocksIfEmpty, forceRefreshCatalog } from '../offline/catalog';
 import { getPrecioPorBarcode } from '../services/api/products';
 
 import styles from './PosTerminal.module.css';
@@ -27,6 +27,7 @@ export function PosTerminal() {
     const scannerRef = useRef<HTMLInputElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
     const [searchVisible, setSearchVisible] = useState(false);
+    const [searchInitialQuery, setSearchInitialQuery] = useState('');
     const [historyOpen, setHistoryOpen] = useState(false);
 
     const {
@@ -64,12 +65,14 @@ export function PosTerminal() {
     const [cajaModalOpen, setCajaModalOpen] = useState(false);
     useEffect(() => {
         if (!sesionId) setCajaModalOpen(true);
+        else setCajaModalOpen(false); // Auto-cerrar si restaurar() recuperó la sesión
     }, [sesionId]);
 
     // Sincronizar catálogo desde el backend en cada apertura del POS.
-    // Esto mantiene el POS siempre en sync con Gestión de Productos.
+    // Usa forceRefreshCatalog para garantizar que nuevos productos del admin
+    // sean siempre visibles sin importar el estado del IndexedDB local.
     useEffect(() => {
-        seedCatalogFromMocksIfEmpty().catch(console.warn);
+        forceRefreshCatalog().catch(() => seedCatalogFromMocksIfEmpty().catch(console.warn));
     }, []);
 
     // Sync the cashier name from the auth store into the sale store
@@ -157,12 +160,16 @@ export function PosTerminal() {
         [handleAddProduct]
     );
 
-    const openSearch = useCallback(() => {
+    const openSearch = useCallback((initialQuery = '') => {
+        setSearchInitialQuery(initialQuery);
         setSearchVisible(true);
     }, []);
 
     const closeSearch = useCallback(() => {
         setSearchVisible(false);
+        setSearchInitialQuery('');
+        // Clear the scanner input when closing search
+        if (scannerRef.current) scannerRef.current.value = '';
         setTimeout(() => scannerRef.current?.focus(), 50);
     }, []);
 
@@ -287,6 +294,13 @@ export function PosTerminal() {
                         className={styles.scannerInput}
                         classNames={{ input: styles.scannerInputField }}
                         onKeyDown={handleScannerKeyDown}
+                        onChange={(e) => {
+                            const val = e.currentTarget.value;
+                            // Si el valor contiene letras, abrir búsqueda automáticamente
+                            if (val && /[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]/.test(val) && !searchVisible && !anyModalOpen) {
+                                openSearch(val);
+                            }
+                        }}
                         autoFocus
                     />
 
@@ -316,7 +330,7 @@ export function PosTerminal() {
 
             {/* ── Búsqueda flotante (F2) ──────────────────────────── */}
             {searchVisible && (
-                <ProductSearch onClose={closeSearch} inputRef={searchRef} />
+                <ProductSearch onClose={closeSearch} inputRef={searchRef} initialQuery={searchInitialQuery} />
             )}
         </div>
     );

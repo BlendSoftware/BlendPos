@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Group, Text, Badge, Flex, Tooltip, ActionIcon } from '@mantine/core';
-import { Wifi, WifiOff, User, Printer, PanelLeftOpen, Settings } from 'lucide-react';
+import { Wifi, WifiOff, User, Printer, PanelLeftOpen, Settings, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
 import { thermalPrinter } from '../../services/ThermalPrinterService';
 import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { usePrinterStore } from '../../store/usePrinterStore';
+import { useCajaStore } from '../../store/useCajaStore';
 import { PrinterSettingsModal } from './PrinterSettingsModal';
 import styles from './PosHeader.module.css';
 
@@ -23,8 +24,9 @@ export function PosHeader() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const { pending: syncPending, error: syncError } = useSyncStatus();
 
-    const { user, hasRole } = useAuthStore();
+    const { user, hasRole, logout } = useAuthStore();
     const { config: printerConfig } = usePrinterStore();
+    const { limpiar: limpiarCaja } = useCajaStore();
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -168,6 +170,22 @@ export function PosHeader() {
                             </ActionIcon>
                         </Tooltip>
                     )}
+
+                    {/* Logout button — visible to all roles */}
+                    <Tooltip label="Cerrar sesión" withArrow>
+                        <ActionIcon
+                            variant="subtle"
+                            color="red"
+                            size="md"
+                            onClick={() => {
+                                limpiarCaja();  // clear active session so next login shows the modal
+                                logout();
+                                navigate('/login');
+                            }}
+                        >
+                            <LogOut size={16} />
+                        </ActionIcon>
+                    </Tooltip>
 
                     {(syncPending > 0 || syncError > 0) && (
                         <Badge

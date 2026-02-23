@@ -24,7 +24,7 @@ var (
 	ipMapMu sync.Mutex
 )
 
-// LoginRateLimiter limits login attempts to 5 per minute per IP.
+// LoginRateLimiter limits login attempts to 20 per minute per IP.
 func LoginRateLimiter() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
@@ -48,7 +48,7 @@ func LoginRateLimiter() gin.HandlerFunc {
 		}
 
 		entry.count++
-		if entry.count > 5 {
+		if entry.count > 20 {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, apierror.New("Demasiados intentos de login. Intente en 1 minuto."))
 			return
 		}

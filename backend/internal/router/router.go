@@ -34,7 +34,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	r.Use(middleware.Recovery())
 	r.Use(middleware.CORS())
 	r.Use(middleware.ErrorHandler())
-	r.Use(middleware.RateLimiter(200, time.Minute)) // 200 req/min per IP
+	r.Use(middleware.RateLimiter(1000, time.Minute)) // 1000 req/min per IP
 
 	// ── Infrastructure ───────────────────────────────────────────────────────
 	afipClient := infra.NewAFIPClient(cfg.AFIPSidecarURL)
@@ -98,15 +98,18 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 		v1.GET("/ventas", middleware.RequireRole("cajero", "supervisor", "administrador"), ventasH.ListarVentas)
 		v1.DELETE("/ventas/:id", middleware.RequireRole("supervisor", "administrador"), ventasH.AnularVenta)
 
+		// GET /v1/productos — cajero/supervisor/administrador can read (catalog sync)
+		v1.GET("/productos", middleware.RequireRole("cajero", "supervisor", "administrador"), productosH.Listar)
+		v1.GET("/productos/:id", middleware.RequireRole("cajero", "supervisor", "administrador"), productosH.ObtenerPorID)
+		v1.GET("/productos/:id/historial-precios", middleware.RequireRole("cajero", "supervisor", "administrador"), historialPreciosH.ListarPorProducto)
+		// PATCH stock — supervisor or administrador
+		v1.PATCH("/productos/:id/stock", middleware.RequireRole("supervisor", "administrador"), productosH.AjustarStock)
+		// Write operations — administrador only
 		prods := v1.Group("/productos", middleware.RequireRole("administrador"))
 		{
 			prods.POST("", productosH.Crear)
-			prods.GET("", productosH.Listar)
-			prods.GET("/:id", productosH.ObtenerPorID)
 			prods.PUT("/:id", productosH.Actualizar)
 			prods.DELETE("/:id", productosH.Desactivar)
-			prods.PATCH("/:id/stock", productosH.AjustarStock)
-			prods.GET("/:id/historial-precios", historialPreciosH.ListarPorProducto)
 		}
 
 		inv := v1.Group("/inventario", middleware.RequireRole("administrador", "supervisor"))

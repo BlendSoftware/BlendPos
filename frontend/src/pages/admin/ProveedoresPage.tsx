@@ -7,7 +7,7 @@ import {
 import { useForm } from '@mantine/form';
 import { Dropzone, type FileWithPath } from '@mantine/dropzone';
 import { notifications } from '@mantine/notifications';
-import { Plus, Edit, Upload, CheckCircle, X, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Plus, Edit, Upload, CheckCircle, X, ChevronDown, ChevronUp, Search, Trash2 } from 'lucide-react';
 import {
     listarProveedores, crearProveedor, actualizarProveedor, importarCSV,
     type ProveedorResponse,
@@ -83,7 +83,7 @@ export function ProveedoresPage() {
     const form = useForm({
         initialValues: {
             razonSocial: '', cuit: '', direccion: '',
-            contactoNombre: '', contactoTelefono: '', contactoEmail: '',
+            contactoNombre: '', telefonos: [''], contactoEmail: '',
         },
         validate: {
             razonSocial: (v) => (v.trim().length >= 3 ? null : 'Requerido'),
@@ -94,25 +94,29 @@ export function ProveedoresPage() {
     const openCreate = () => {
         setEditTarget(null);
         form.reset();
+        form.setFieldValue('telefonos', ['']);
         setModalOpen(true);
     };
 
     const openEdit = (p: IProveedor) => {
         setEditTarget(p);
         const c = p.contactos[0];
+        // Split existing telefono on " / " to restore dynamic list
+        const telefonos = c?.telefono ? c.telefono.split(' / ').filter(Boolean) : [''];
         form.setValues({
             razonSocial: p.razonSocial, cuit: p.cuit, direccion: p.direccion,
-            contactoNombre: c?.nombre ?? '', contactoTelefono: c?.telefono ?? '', contactoEmail: c?.email ?? '',
+            contactoNombre: c?.nombre ?? '', telefonos: telefonos.length > 0 ? telefonos : [''], contactoEmail: c?.email ?? '',
         });
         setModalOpen(true);
     };
 
     const handleSubmit = form.onSubmit(async (values) => {
+        const telefonoJoined = values.telefonos.filter((t) => t.trim()).join(' / ');
         const req = {
             razon_social: values.razonSocial,
             cuit: values.cuit,
             direccion: values.direccion || undefined,
-            telefono: values.contactoTelefono || undefined,
+            telefono: telefonoJoined || undefined,
             email: values.contactoEmail || undefined,
         };
         try {
@@ -261,7 +265,9 @@ export function ProveedoresPage() {
                 <Tabs.Panel value="csv" pt="lg">
                     <Stack gap="md">
                         <Alert color="blue" variant="light">
-                            El CSV debe tener el formato: <strong>codigo_barras,nombre,precio_nuevo</strong> (con encabezado en la primera fila).
+                            El CSV acepta dos formatos (con encabezado en la primera fila):<br />
+                            • <strong>codigo_barras,nombre,precio_nuevo</strong> — precio de venta simplificado<br />
+                            • <strong>codigo_barras,nombre,precio_costo,precio_venta</strong> — precios completos
                         </Alert>
 
                         {!csvPreview ? (
@@ -350,10 +356,43 @@ export function ProveedoresPage() {
                         <TextInput label="Dirección" {...form.getInputProps('direccion')} />
                         <Divider label="Contacto principal" labelPosition="left" />
                         <TextInput label="Nombre" {...form.getInputProps('contactoNombre')} />
-                        <Group grow>
-                            <TextInput label="Teléfono" {...form.getInputProps('contactoTelefono')} />
-                            <TextInput label="Email" {...form.getInputProps('contactoEmail')} />
-                        </Group>
+                        <div>
+                            <Text size="sm" fw={500} mb={4}>Teléfonos</Text>
+                            <Stack gap="xs">
+                                {form.values.telefonos.map((tel, idx) => (
+                                    <Group key={idx} gap="xs">
+                                        <TextInput
+                                            placeholder={`Teléfono ${idx + 1}`}
+                                            style={{ flex: 1 }}
+                                            value={tel}
+                                            onChange={(e) => {
+                                                const updated = [...form.values.telefonos];
+                                                updated[idx] = e.currentTarget.value;
+                                                form.setFieldValue('telefonos', updated);
+                                            }}
+                                        />
+                                        {form.values.telefonos.length > 1 && (
+                                            <ActionIcon
+                                                color="red" variant="subtle" size="sm"
+                                                onClick={() => {
+                                                    const updated = form.values.telefonos.filter((_, i) => i !== idx);
+                                                    form.setFieldValue('telefonos', updated);
+                                                }}
+                                            >
+                                                <Trash2 size={14} />
+                                            </ActionIcon>
+                                        )}
+                                    </Group>
+                                ))}
+                                <Button
+                                    variant="subtle" size="xs" leftSection={<Plus size={12} />}
+                                    onClick={() => form.setFieldValue('telefonos', [...form.values.telefonos, ''])}
+                                >
+                                    Agregar teléfono
+                                </Button>
+                            </Stack>
+                        </div>
+                        <TextInput label="Email" placeholder="contacto@empresa.com" {...form.getInputProps('contactoEmail')} />
                         <Group justify="flex-end" mt="sm">
                             <Button variant="subtle" onClick={() => setModalOpen(false)}>Cancelar</Button>
                             <Button type="submit">{editTarget ? 'Guardar' : 'Crear'}</Button>

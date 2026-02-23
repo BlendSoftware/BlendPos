@@ -6,10 +6,10 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { Plus, Search, Edit, PowerOff, Power, X, AlertCircle } from 'lucide-react';
+import { Plus, Search, Edit, PowerOff, Power, X, AlertCircle, PackagePlus } from 'lucide-react';
 import { formatARS } from '../../api/mockAdmin';
 import {
-    listarProductos, crearProducto, actualizarProducto, desactivarProducto,
+    listarProductos, crearProducto, actualizarProducto, desactivarProducto, ajustarStock,
     type ProductoResponse,
 } from '../../services/api/products';
 import type { IProducto, CategoriaProducto } from '../../types';
@@ -78,6 +78,17 @@ export function GestionProductosPage() {
     const [filtroEstado, setFiltroEstado] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [apiError, setApiError] = useState<string | null>(null);
+
+    // ── Stock adjustment modal state ───────────────────────────────────────
+    const [stockModalOpen, setStockModalOpen] = useState(false);
+    const [stockTarget, setStockTarget] = useState<IProducto | null>(null);
+    const stockForm = useForm({
+        initialValues: { delta: 0, motivo: '' },
+        validate: {
+            delta: (v) => (v !== 0 ? null : 'El ajuste no puede ser 0'),
+            motivo: (v) => (v.trim().length >= 3 ? null : 'Mínimo 3 caracteres'),
+        },
+    });
 
     const fetchProductos = useCallback(async () => {
         setLoading(true);
@@ -172,6 +183,34 @@ export function GestionProductosPage() {
             });
         }
     };
+
+    const openStockModal = (p: IProducto) => {
+        setStockTarget(p);
+        stockForm.reset();
+        setStockModalOpen(true);
+    };
+
+    const handleStockSubmit = stockForm.onSubmit(async (values) => {
+        if (!stockTarget) return;
+        try {
+            const updated = await ajustarStock(stockTarget.id, values.delta, values.motivo);
+            setProductos((prev) =>
+                prev.map((p) => p.id === stockTarget.id ? { ...p, stock: updated.stock_actual } : p)
+            );
+            notifications.show({
+                title: 'Stock ajustado',
+                message: `${stockTarget.nombre}: ${values.delta > 0 ? '+' : ''}${values.delta} unidades`,
+                color: 'teal',
+            });
+            setStockModalOpen(false);
+        } catch (err) {
+            notifications.show({
+                title: 'Error',
+                message: err instanceof Error ? err.message : 'No se pudo ajustar el stock',
+                color: 'red',
+            });
+        }
+    });
 
     const handleSubmit = form.onSubmit(async (values) => {
         try {
@@ -341,6 +380,11 @@ export function GestionProductosPage() {
                                                         <Edit size={15} />
                                                     </ActionIcon>
                                                 </Tooltip>
+                                                <Tooltip label="Ajustar stock" withArrow>
+                                                    <ActionIcon variant="subtle" color="yellow" onClick={() => openStockModal(p)}>
+                                                        <PackagePlus size={15} />
+                                                    </ActionIcon>
+                                                </Tooltip>
                                                 <Tooltip label={p.activo ? 'Desactivar' : 'Activar'} withArrow>
                                                     <ActionIcon
                                                         variant="subtle"
@@ -427,6 +471,35 @@ export function GestionProductosPage() {
                         <Group justify="flex-end" mt="sm">
                             <Button variant="subtle" onClick={() => setModalOpen(false)}>Cancelar</Button>
                             <Button type="submit">{editTarget ? 'Guardar cambios' : 'Crear producto'}</Button>
+                        </Group>
+                    </Stack>
+                </form>
+            </Modal>
+            {/* ── Modal Ajuste de Stock ───────────────────────────────────── */}
+            <Modal
+                opened={stockModalOpen}
+                onClose={() => setStockModalOpen(false)}
+                title={<Text fw={700}>Ajustar stock — {stockTarget?.nombre}</Text>}
+                size="sm"
+                centered
+            >
+                <form onSubmit={handleStockSubmit}>
+                    <Stack gap="md">
+                        <Text size="sm" c="dimmed">Stock actual: <strong>{stockTarget?.stock ?? 0} ud</strong></Text>
+                        <NumberInput
+                            label="Ajuste (+/−)"
+                            description="Positivo para ingresar, negativo para retirar"
+                            allowNegative
+                            {...stockForm.getInputProps('delta')}
+                        />
+                        <TextInput
+                            label="Motivo"
+                            placeholder="Ej: recepción de mercadería, merma, etc."
+                            {...stockForm.getInputProps('motivo')}
+                        />
+                        <Group justify="flex-end">
+                            <Button variant="subtle" onClick={() => setStockModalOpen(false)}>Cancelar</Button>
+                            <Button type="submit" color="yellow">Aplicar ajuste</Button>
                         </Group>
                     </Stack>
                 </form>

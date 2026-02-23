@@ -104,8 +104,14 @@ export const useCajaStore = create<CajaState>()(
                 set({ loading: true, error: null });
                 try {
                     const resp = await cerrarCajaArqueo(data);
+                    // Limpiar toda la sesión para que el POS muestre el modal de apertura
                     set({
+                        sesionId: null,
                         estado: 'cerrada',
+                        puntoDeVenta: null,
+                        montoInicial: null,
+                        abiertaEn: null,
+                        usuarioNombre: null,
                         loading: false,
                     });
                     return resp;

@@ -28,7 +28,10 @@ func (r *usuarioRepo) Create(ctx context.Context, u *model.Usuario) error {
 
 func (r *usuarioRepo) FindByUsername(ctx context.Context, username string) (*model.Usuario, error) {
 	var u model.Usuario
-	err := r.db.WithContext(ctx).Where("username = ? AND activo = true", username).First(&u).Error
+	// Accept login by username OR email (case-insensitive email match)
+	err := r.db.WithContext(ctx).
+		Where("(username = ? OR LOWER(email::text) = LOWER(?)) AND activo = true", username, username).
+		First(&u).Error
 	return &u, err
 }
 
