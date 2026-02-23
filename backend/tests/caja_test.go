@@ -15,6 +15,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // ── Full in-memory CajaRepository ────────────────────────────────────────────
@@ -69,6 +70,15 @@ func (r *fullCajaRepo) UpdateSesion(_ context.Context, s *model.SesionCaja) erro
 }
 
 func (r *fullCajaRepo) CreateMovimiento(_ context.Context, m *model.MovimientoCaja) error {
+	if m.ID == uuid.Nil {
+		m.ID = uuid.New()
+	}
+	m.CreatedAt = time.Now()
+	r.movimientos = append(r.movimientos, *m)
+	return nil
+}
+
+func (r *fullCajaRepo) CreateMovimientoTx(_ *gorm.DB, m *model.MovimientoCaja) error {
 	if m.ID == uuid.Nil {
 		m.ID = uuid.New()
 	}

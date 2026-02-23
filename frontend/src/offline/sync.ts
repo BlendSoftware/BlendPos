@@ -30,6 +30,7 @@ function toLocalSale(sale: SaleRecord): LocalSale {
         efectivoRecibido: sale.efectivoRecibido,
         vuelto: sale.vuelto,
         cajero: sale.cajero,
+        sesionCajaId: sale.sesionCajaId,
         synced: 0,
     };
 }
@@ -108,8 +109,7 @@ export async function trySyncQueue(): Promise<void> {
     }
 }
 
-export async function getSyncStats(): Promise<{ pending: number; error: number }>
-{
+export async function getSyncStats(): Promise<{ pending: number; error: number }> {
     const [pendingAll, error] = await Promise.all([
         db.sync_queue.where('status').equals('pending').toArray(),
         db.sync_queue.where('status').equals('error').count(),

@@ -4,6 +4,9 @@
 .env
 .env.local
 .env.*.local
+afip-sidecar/.env
+frontend/.env
+backend/.env
 
 # Go
 backend/tmp/

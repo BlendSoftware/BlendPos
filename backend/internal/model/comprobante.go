@@ -28,6 +28,10 @@ type Comprobante struct {
 	// PDFPath is relative to PDF_STORAGE_PATH env var
 	PDFPath       *string `gorm:"column:pdf_path"`
 	Observaciones *string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	// Retry fields — used by retry_cron to re-attempt failed AFIP calls
+	RetryCount  int        `gorm:"not null;default:0"`
+	NextRetryAt *time.Time `gorm:"column:next_retry_at"`
+	LastError   *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }

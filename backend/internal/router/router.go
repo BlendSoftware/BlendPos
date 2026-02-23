@@ -21,7 +21,7 @@ import (
 
 // New wires all dependencies and returns a configured Gin engine.
 // Dependency graph: Handler ← Service ← Repository ← DB/Redis
-func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
+func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.CircuitBreaker) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -77,7 +77,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	// ── Routes ───────────────────────────────────────────────────────────────
 
 	// Public
-	r.GET("/health", handler.Health(db, rdb))
+	r.GET("/health", handler.Health(db, rdb, afipCB))
 
 	// Auth (public)
 	auth := r.Group("/v1/auth")

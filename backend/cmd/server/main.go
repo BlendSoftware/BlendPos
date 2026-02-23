@@ -55,6 +55,9 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to connect to redis")
 	}
 
+	// ── Circuit Breaker for AFIP Sidecar ─────────────────────────────────────
+	afipCB := infra.NewCircuitBreaker(infra.DefaultCBConfig())
+
 	// Start goroutine worker pool for async tasks (invoicing, email, PDF).
 	// Worker handlers are wired here (composition root) so that the pool
 	// has full access to all infrastructure dependencies (RF-17, RF-19, RF-21).
@@ -68,12 +71,34 @@ func main() {
 	ventaRepo := repository.NewVentaRepository(db)
 
 	workerHandlers := &worker.WorkerHandlers{
-		Facturacion: worker.NewFacturacionWorker(afipClient, comprobanteRepo, ventaRepo, dispatcher, cfg.PDFStoragePath, cfg.AFIPCUITEmisor),
+		Facturacion: worker.NewFacturacionWorker(afipClient, afipCB, comprobanteRepo, ventaRepo, dispatcher, cfg.PDFStoragePath, cfg.AFIPCUITEmisor),
 		Email:       worker.NewEmailWorker(mailer),
 	}
-	worker.StartWorkerPool(ctx, rdb, workerHandlers, cfg.WorkerPoolSize)
 
-	r := router.New(cfg, db, rdb)
+	// Separated worker pools: facturacion and email don't starve each other
+	facWorkers := cfg.FacturacionWorkers
+	if facWorkers <= 0 {
+		facWorkers = cfg.WorkerPoolSize
+	}
+	emailWorkers := cfg.EmailWorkers
+	if emailWorkers <= 0 {
+		emailWorkers = cfg.WorkerPoolSize
+	}
+	worker.StartWorkerPool(ctx, rdb, workerHandlers, worker.WorkerPoolConfig{
+		FacturacionWorkers: facWorkers,
+		EmailWorkers:       emailWorkers,
+	})
+
+	// Retry cron for pending AFIP comprobantes
+	worker.StartRetryCron(ctx, worker.RetryCronConfig{
+		ComprobanteRepo: comprobanteRepo,
+		AFIPClient:      afipClient,
+		CB:              afipCB,
+		RDB:             rdb,
+		CUITEmisor:      cfg.AFIPCUITEmisor,
+	})
+
+	r := router.New(cfg, db, rdb, afipCB)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),

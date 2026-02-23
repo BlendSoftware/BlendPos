@@ -13,6 +13,8 @@ export interface LocalSale {
     efectivoRecibido?: number;
     vuelto?: number;
     cajero: string;
+    /** ID de sesión de caja activa al momento de la venta. */
+    sesionCajaId?: string;
     synced: 0 | 1;
 }
 

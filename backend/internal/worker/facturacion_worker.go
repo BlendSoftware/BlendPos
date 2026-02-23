@@ -2,8 +2,8 @@ package worker
 
 // facturacion_worker.go
 // Processes fiscal billing jobs from QueueFacturacion.
-// Sends POST to the Python AFIP Sidecar and stores the CAE result.
-// Implements exponential backoff (max 3 retries) as required by RF-19.
+// Sends POST to the Python AFIP Sidecar (through a Circuit Breaker) and stores the CAE result.
+// When the CB is open, jobs are deferred to the retry cron via next_retry_at.
 
 import (
 	"context"
@@ -20,6 +20,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// MaxComprobanteRetries is the maximum number of retry attempts before
+// a comprobante is moved to estado='error' and pushed to the DLQ.
+const MaxComprobanteRetries = 10
+
 // FacturacionJobPayload is the job envelope sent to QueueFacturacion.
 type FacturacionJobPayload struct {
 	VentaID      string  `json:"venta_id"`
@@ -32,6 +36,7 @@ type FacturacionJobPayload struct {
 // and optionally enqueues an email job.
 type FacturacionWorker struct {
 	afipClient      *infra.AFIPClient
+	cb              *infra.CircuitBreaker
 	comprobanteRepo repository.ComprobanteRepository
 	ventaRepo       repository.VentaRepository
 	dispatcher      *Dispatcher
@@ -42,6 +47,7 @@ type FacturacionWorker struct {
 // NewFacturacionWorker wires all dependencies for the billing worker.
 func NewFacturacionWorker(
 	afipClient *infra.AFIPClient,
+	cb *infra.CircuitBreaker,
 	comprobanteRepo repository.ComprobanteRepository,
 	ventaRepo repository.VentaRepository,
 	dispatcher *Dispatcher,
@@ -50,6 +56,7 @@ func NewFacturacionWorker(
 ) *FacturacionWorker {
 	return &FacturacionWorker{
 		afipClient:      afipClient,
+		cb:              cb,
 		comprobanteRepo: comprobanteRepo,
 		ventaRepo:       ventaRepo,
 		dispatcher:      dispatcher,
@@ -62,7 +69,7 @@ func NewFacturacionWorker(
 //  1. Parse FacturacionJobPayload from the job envelope
 //  2. Fetch the Venta (with items+pagos) from DB
 //  3. Create Comprobante record with estado="pendiente"
-//  4. Call AFIP Sidecar with exponential backoff (max 3 retries, RF-19)
+//  4. Call AFIP Sidecar through Circuit Breaker
 //  5. Update Comprobante (CAE / estado / observaciones)
 //  6. Generate PDF ticket (gofpdf, AC-06.3)
 //  7. Optionally enqueue email job (AC-06.5)
@@ -100,41 +107,66 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 		return
 	}
 
-	// 3. AFIP call with exponential backoff (RF-19): attempts = 1, retry after 1s, 2s
+	// 3. AFIP call through Circuit Breaker
+	afipPayload := w.buildAFIPPayload(venta, payload.VentaID)
+	afipResp, afipErr := w.callAFIPWithCB(ctx, afipPayload)
+
+	// 4. Update Comprobante based on AFIP result
+	w.handleAFIPResult(ctx, comp, afipResp, afipErr, payload.VentaID)
+
+	// 5. Generate internal PDF ticket (AC-06.3)
+	pdfPath := w.generatePDF(ctx, venta, comp, payload.VentaID)
+
+	// 6. Async email if customer email was provided (AC-06.5)
+	if payload.ClienteEmail != nil && *payload.ClienteEmail != "" && pdfPath != "" {
+		w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath)
+	}
+}
+
+// callAFIPWithCB wraps the AFIP call in the circuit breaker.
+// If the CB is open, the call fails immediately with ErrCircuitOpen,
+// allowing the retry cron to pick it up later.
+func (w *FacturacionWorker) callAFIPWithCB(ctx context.Context, payload infra.AFIPPayload) (*infra.AFIPResponse, error) {
 	var afipResp *infra.AFIPResponse
-	afipErr := withRetry(ctx, 3, func(attempt int) error {
-		afipPayload := infra.AFIPPayload{
-			CUITEmisor:      w.cuitEmisor,
-			PuntoDeVenta:    1,
-			TipoComprobante: 11, // Factura C — consumidor final
-			TipoDocReceptor: 99, // 99 = Consumidor Final
-			NroDocReceptor:  "0",
-			Concepto:        1, // Productos
-			ImporteNeto:     venta.Total.InexactFloat64(),
-			ImporteExento:   0,
-			ImporteIVA:      0,
-			ImporteTotal:    venta.Total.InexactFloat64(),
-			VentaID:         payload.VentaID,
-		}
-		resp, err := w.afipClient.Facturar(ctx, afipPayload)
+	err := w.cb.Execute(func() error {
+		resp, err := w.afipClient.Facturar(ctx, payload)
 		if err != nil {
-			log.Warn().
-				Err(err).
-				Int("attempt", attempt+1).
-				Str("venta_id", payload.VentaID).
-				Msg("facturacion_worker: AFIP attempt failed, retrying")
 			return err
 		}
 		afipResp = resp
 		return nil
 	})
+	return afipResp, err
+}
 
-	// 4. Update Comprobante based on AFIP result
+func (w *FacturacionWorker) buildAFIPPayload(venta *model.Venta, ventaID string) infra.AFIPPayload {
+	return infra.AFIPPayload{
+		CUITEmisor:      w.cuitEmisor,
+		PuntoDeVenta:    1,
+		TipoComprobante: 11, // Factura C — consumidor final
+		TipoDocReceptor: 99, // 99 = Consumidor Final
+		NroDocReceptor:  "0",
+		Concepto:        1, // Productos
+		ImporteNeto:     venta.Total.InexactFloat64(),
+		ImporteExento:   0,
+		ImporteIVA:      0,
+		ImporteTotal:    venta.Total.InexactFloat64(),
+		VentaID:         ventaID,
+	}
+}
+
+func (w *FacturacionWorker) handleAFIPResult(ctx context.Context, comp *model.Comprobante, afipResp *infra.AFIPResponse, afipErr error, ventaID string) {
 	if afipErr != nil {
-		log.Error().Err(afipErr).Str("venta_id", payload.VentaID).Msg("facturacion_worker: AFIP failed after all retries")
-		comp.Estado = "pendiente" // stays pending for manual retry
-		obs := fmt.Sprintf("AFIP error after 3 retries: %v", afipErr)
-		comp.Observaciones = &obs
+		log.Error().Err(afipErr).Str("venta_id", ventaID).Msg("facturacion_worker: AFIP call failed")
+		comp.RetryCount++
+		errMsg := afipErr.Error()
+		comp.LastError = &errMsg
+		// Schedule for retry with exponential backoff
+		nextRetry := time.Now().Add(computeRetryBackoff(comp.RetryCount))
+		comp.NextRetryAt = &nextRetry
+		if comp.RetryCount >= MaxComprobanteRetries {
+			comp.Estado = "error"
+		}
 		_ = w.comprobanteRepo.Update(ctx, comp)
 	} else if afipResp != nil && afipResp.Resultado == "A" {
 		comp.Estado = "emitido"
@@ -143,64 +175,56 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 		if venc, err := parseFechaCAE(afipResp.CAEVencimiento); err == nil {
 			comp.CAEVencimiento = venc
 		}
+		comp.RetryCount = 0
+		comp.NextRetryAt = nil
+		comp.LastError = nil
 		_ = w.comprobanteRepo.Update(ctx, comp)
-		log.Info().Str("cae", cae).Str("venta_id", payload.VentaID).Msg("facturacion_worker: CAE obtained successfully")
+		log.Info().Str("cae", cae).Str("venta_id", ventaID).Msg("facturacion_worker: CAE obtained successfully")
 	} else if afipResp != nil {
 		comp.Estado = "rechazado"
 		obs := fmt.Sprintf("AFIP rechazó el comprobante: resultado=%s", afipResp.Resultado)
 		comp.Observaciones = &obs
 		_ = w.comprobanteRepo.Update(ctx, comp)
-		log.Warn().Str("resultado", afipResp.Resultado).Str("venta_id", payload.VentaID).Msg("facturacion_worker: AFIP rejected")
-	}
-
-	// 5. Generate internal PDF ticket (AC-06.3)
-	pdfPath, pdfErr := infra.GenerateTicketPDF(venta, w.pdfStoragePath)
-	if pdfErr != nil {
-		log.Warn().Err(pdfErr).Str("venta_id", payload.VentaID).Msg("facturacion_worker: PDF generation failed")
-	} else {
-		comp.PDFPath = &pdfPath
-		_ = w.comprobanteRepo.Update(ctx, comp)
-		log.Info().Str("pdf", pdfPath).Str("venta_id", payload.VentaID).Msg("facturacion_worker: PDF generated")
-	}
-
-	// 6. Async email if customer email was provided (AC-06.5)
-	if payload.ClienteEmail != nil && *payload.ClienteEmail != "" && pdfPath != "" {
-		emailJob := EmailJobPayload{
-			ToEmail: *payload.ClienteEmail,
-			Subject: fmt.Sprintf("Comprobante BlendPOS — Ticket #%d", venta.NumeroTicket),
-			Body:    fmt.Sprintf("Adjunto encontrarás tu comprobante de compra.\nTotal: $%.2f", venta.Total.InexactFloat64()),
-			PDFPath: pdfPath,
-		}
-		if err := w.dispatcher.EnqueueEmail(ctx, emailJob); err != nil {
-			log.Warn().Err(err).Str("email", *payload.ClienteEmail).Msg("facturacion_worker: failed to enqueue email")
-		} else {
-			log.Info().Str("email", *payload.ClienteEmail).Msg("facturacion_worker: email job enqueued")
-		}
+		log.Warn().Str("resultado", afipResp.Resultado).Str("venta_id", ventaID).Msg("facturacion_worker: AFIP rejected")
 	}
 }
 
-// withRetry calls fn up to maxAttempts times with exponential backoff.
-// Backoff schedule: attempt 1 = immediate, 2 = 1s, 3 = 2s.
-// Returns nil if any attempt succeeds; last error otherwise.
-func withRetry(ctx context.Context, maxAttempts int, fn func(attempt int) error) error {
-	var lastErr error
-	for i := 0; i < maxAttempts; i++ {
-		if i > 0 {
-			// 1s, 2s … (exponential backoff)
-			wait := time.Duration(1<<uint(i-1)) * time.Second
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(wait):
-			}
-		}
-		if err := fn(i); err != nil {
-			lastErr = err
-			continue
-		}
-		return nil
+func (w *FacturacionWorker) generatePDF(ctx context.Context, venta *model.Venta, comp *model.Comprobante, ventaID string) string {
+	pdfPath, pdfErr := infra.GenerateTicketPDF(venta, w.pdfStoragePath)
+	if pdfErr != nil {
+		log.Warn().Err(pdfErr).Str("venta_id", ventaID).Msg("facturacion_worker: PDF generation failed")
+		return ""
 	}
-	return lastErr
+	comp.PDFPath = &pdfPath
+	_ = w.comprobanteRepo.Update(ctx, comp)
+	log.Info().Str("pdf", pdfPath).Str("venta_id", ventaID).Msg("facturacion_worker: PDF generated")
+	return pdfPath
+}
+
+func (w *FacturacionWorker) enqueueEmail(ctx context.Context, venta *model.Venta, email, pdfPath string) {
+	emailJob := EmailJobPayload{
+		ToEmail: email,
+		Subject: fmt.Sprintf("Comprobante BlendPOS — Ticket #%d", venta.NumeroTicket),
+		Body:    fmt.Sprintf("Adjunto encontrarás tu comprobante de compra.\nTotal: $%.2f", venta.Total.InexactFloat64()),
+		PDFPath: pdfPath,
+	}
+	if err := w.dispatcher.EnqueueEmail(ctx, emailJob); err != nil {
+		log.Warn().Err(err).Str("email", email).Msg("facturacion_worker: failed to enqueue email")
+	} else {
+		log.Info().Str("email", email).Msg("facturacion_worker: email job enqueued")
+	}
+}
+
+// computeRetryBackoff returns exponential backoff for comprobante retries.
+// Schedule: 30s, 1m, 2m, 4m, 8m, 16m, 32m, 60m (capped).
+func computeRetryBackoff(retryCount int) time.Duration {
+	base := 30 * time.Second
+	backoff := base * time.Duration(1<<uint(retryCount-1))
+	maxBackoff := 60 * time.Minute
+	if backoff > maxBackoff {
+		return maxBackoff
+	}
+	return backoff
 }
 
 // parseFechaCAE parses the date format returned by AFIP ("YYYYMMDD").

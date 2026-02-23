@@ -8,6 +8,7 @@ import (
 	"blendpos/internal/apierror"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 // ── Login rate limiter ────────────────────────────────────────────────────────
@@ -100,5 +101,59 @@ func RateLimiter(limit int, window time.Duration) gin.HandlerFunc {
 			return
 		}
 		c.Next()
+	}
+}
+
+// ── Purge goroutine ───────────────────────────────────────────────────────────
+// Periodically removes expired entries from both rate limiter maps to prevent
+// memory leaks from accumulating IPs that never return.
+
+const purgeInterval = 5 * time.Minute
+
+func init() {
+	go purgeExpiredEntries()
+}
+
+func purgeExpiredEntries() {
+	ticker := time.NewTicker(purgeInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now()
+
+		// Purge login rate limiter map
+		ipMapMu.Lock()
+		purgedLogin := 0
+		for ip, entry := range ipMap {
+			entry.mu.Lock()
+			if now.After(entry.windowEnd) {
+				delete(ipMap, ip)
+				purgedLogin++
+			}
+			entry.mu.Unlock()
+		}
+		ipMapMu.Unlock()
+
+		// Purge API rate limiter map
+		apiRateMapMu.Lock()
+		purgedAPI := 0
+		for ip, entry := range apiRateMap {
+			entry.mu.Lock()
+			if now.After(entry.windowEnd) {
+				delete(apiRateMap, ip)
+				purgedAPI++
+			}
+			entry.mu.Unlock()
+		}
+		apiRateMapMu.Unlock()
+
+		if purgedLogin > 0 || purgedAPI > 0 {
+			log.Debug().
+				Int("login_entries_purged", purgedLogin).
+				Int("api_entries_purged", purgedAPI).
+				Int("login_entries_remaining", len(ipMap)).
+				Int("api_entries_remaining", len(apiRateMap)).
+				Msg("rate limiter maps purged")
+		}
 	}
 }

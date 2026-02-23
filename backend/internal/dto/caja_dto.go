@@ -6,7 +6,7 @@ import "github.com/shopspring/decimal"
 
 type AbrirCajaRequest struct {
 	PuntoDeVenta int             `json:"punto_de_venta" validate:"required,min=1"`
-	MontoInicial decimal.Decimal `json:"monto_inicial"  validate:"required,min=0"`
+	MontoInicial decimal.Decimal `json:"monto_inicial"  validate:"min=0"`
 }
 
 type DeclaracionArqueo struct {

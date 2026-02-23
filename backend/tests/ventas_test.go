@@ -137,6 +137,10 @@ func (r *stubCajaRepo) CreateMovimiento(_ context.Context, m *model.MovimientoCa
 	r.movimientos = append(r.movimientos, *m)
 	return nil
 }
+func (r *stubCajaRepo) CreateMovimientoTx(_ *gorm.DB, m *model.MovimientoCaja) error {
+	r.movimientos = append(r.movimientos, *m)
+	return nil
+}
 func (r *stubCajaRepo) ListMovimientos(_ context.Context, _ uuid.UUID) ([]model.MovimientoCaja, error) {
 	return r.movimientos, nil
 }

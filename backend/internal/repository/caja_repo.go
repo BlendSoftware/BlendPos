@@ -17,6 +17,7 @@ type CajaRepository interface {
 	FindSesionByID(ctx context.Context, id uuid.UUID) (*model.SesionCaja, error)
 	UpdateSesion(ctx context.Context, s *model.SesionCaja) error
 	CreateMovimiento(ctx context.Context, m *model.MovimientoCaja) error
+	CreateMovimientoTx(tx *gorm.DB, m *model.MovimientoCaja) error
 	ListMovimientos(ctx context.Context, sesionCajaID uuid.UUID) ([]model.MovimientoCaja, error)
 	SumMovimientosByMetodo(ctx context.Context, sesionCajaID uuid.UUID) (map[string]decimal.Decimal, error)
 	ListSesiones(ctx context.Context, page, limit int) ([]model.SesionCaja, int64, error)
@@ -48,6 +49,12 @@ func (r *cajaRepo) UpdateSesion(ctx context.Context, s *model.SesionCaja) error 
 
 func (r *cajaRepo) CreateMovimiento(ctx context.Context, m *model.MovimientoCaja) error {
 	return r.db.WithContext(ctx).Create(m).Error
+}
+
+// CreateMovimientoTx creates a movimiento within an existing DB transaction.
+// Use this inside runTx closures to ensure the movimiento is part of the TX.
+func (r *cajaRepo) CreateMovimientoTx(tx *gorm.DB, m *model.MovimientoCaja) error {
+	return tx.Create(m).Error
 }
 
 func (r *cajaRepo) ListMovimientos(ctx context.Context, sesionCajaID uuid.UUID) ([]model.MovimientoCaja, error) {

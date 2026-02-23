@@ -10,7 +10,9 @@ type Config struct {
 	// Server
 	Port           int    `mapstructure:"PORT"`
 	Env            string `mapstructure:"APP_ENV"` // development | production
-	WorkerPoolSize int    `mapstructure:"WORKER_POOL_SIZE"`
+	WorkerPoolSize      int    `mapstructure:"WORKER_POOL_SIZE"`
+	FacturacionWorkers  int    `mapstructure:"FACTURACION_WORKERS"`
+	EmailWorkers        int    `mapstructure:"EMAIL_WORKERS"`
 
 	// Database
 	DatabaseURL string `mapstructure:"DATABASE_URL"`
@@ -49,6 +51,8 @@ func Load() (*Config, error) {
 	viper.SetDefault("PORT", 8000)
 	viper.SetDefault("APP_ENV", "development")
 	viper.SetDefault("WORKER_POOL_SIZE", 5)
+	viper.SetDefault("FACTURACION_WORKERS", 0) // 0 = fallback to WORKER_POOL_SIZE
+	viper.SetDefault("EMAIL_WORKERS", 0)       // 0 = fallback to WORKER_POOL_SIZE
 	viper.SetDefault("JWT_EXPIRATION_HOURS", 8)
 	viper.SetDefault("JWT_REFRESH_HOURS", 24)
 	viper.SetDefault("AFIP_SIDECAR_URL", "http://afip-sidecar:8001")

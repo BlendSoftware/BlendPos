@@ -262,7 +262,7 @@ func (s *ventaService) AnularVenta(ctx context.Context, id uuid.UUID, motivo str
 				Descripcion:  fmt.Sprintf("Anulación venta #%d — %s", venta.NumeroTicket, motivo),
 				ReferenciaID: &venta.ID,
 			}
-			if err := s.cajaRepo.CreateMovimiento(ctx, &mov); err != nil {
+			if err := s.cajaRepo.CreateMovimientoTx(tx, &mov); err != nil {
 				return err
 			}
 		}

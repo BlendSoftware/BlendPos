@@ -80,6 +80,19 @@ func (r *stubComprobanteRepo) Update(_ context.Context, c *model.Comprobante) er
 	return nil
 }
 
+func (r *stubComprobanteRepo) ListPendingRetries(_ context.Context, _ time.Time, limit int) ([]model.Comprobante, error) {
+	var results []model.Comprobante
+	for _, c := range r.comprobantes {
+		if c.Estado == "pendiente" && c.NextRetryAt != nil {
+			results = append(results, *c)
+		}
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results, nil
+}
+
 // compile-time interface check
 var _ repository.ComprobanteRepository = (*stubComprobanteRepo)(nil)
 
@@ -295,17 +308,18 @@ func TestFacturacionWorker_AFIPFalla_EstadoPendiente(t *testing.T) {
 
 	// Use client pointing to a port nothing listens on
 	afipClient := infra.NewAFIPClient("http://localhost:19999")
-	w := worker.NewFacturacionWorker(afipClient, comprobanteRepo, ventaRepo, nil, tmpDir, "")
+	cb := infra.NewCircuitBreaker(infra.DefaultCBConfig())
+	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, tmpDir, "")
 
 	payload := worker.FacturacionJobPayload{VentaID: venta.ID.String()}
 	w.Process(context.Background(), mustJSON(payload))
 
-	// Comprobante should be created with observations about AFIP failure
+	// Comprobante should be created with LastError about AFIP failure
 	comp, err := comprobanteRepo.FindByVentaID(context.Background(), venta.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "pendiente", comp.Estado)
-	assert.NotNil(t, comp.Observaciones)
-	assert.Contains(t, *comp.Observaciones, "AFIP error")
+	assert.NotNil(t, comp.LastError)
+	assert.Greater(t, comp.RetryCount, 0)
 }
 
 func TestFacturacionWorker_GeneraPDF_AunSinAFIP(t *testing.T) {
@@ -318,7 +332,8 @@ func TestFacturacionWorker_GeneraPDF_AunSinAFIP(t *testing.T) {
 	ventaRepo.ventas[venta.ID] = venta
 
 	afipClient := infra.NewAFIPClient("http://localhost:19999")
-	w := worker.NewFacturacionWorker(afipClient, comprobanteRepo, ventaRepo, nil, tmpDir, "")
+	cb := infra.NewCircuitBreaker(infra.DefaultCBConfig())
+	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, tmpDir, "")
 	w.Process(context.Background(), mustJSON(worker.FacturacionJobPayload{VentaID: venta.ID.String()}))
 
 	comp, err := comprobanteRepo.FindByVentaID(context.Background(), venta.ID)
@@ -336,7 +351,8 @@ func TestFacturacionWorker_VentaIDInvalido_NoPanic(t *testing.T) {
 	ventaRepo := newStubVentaRepoFacturacion()
 
 	afipClient := infra.NewAFIPClient("http://localhost:19999")
-	w := worker.NewFacturacionWorker(afipClient, comprobanteRepo, ventaRepo, nil, t.TempDir(), "")
+	cb := infra.NewCircuitBreaker(infra.DefaultCBConfig())
+	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, t.TempDir(), "")
 
 	payload := worker.FacturacionJobPayload{VentaID: "not-a-valid-uuid"}
 	assert.NotPanics(t, func() {

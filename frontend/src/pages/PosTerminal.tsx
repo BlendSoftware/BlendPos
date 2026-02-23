@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
-import { TextInput } from '@mantine/core';
+import { TextInput, Loader } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { ScanLine, AlertCircle } from 'lucide-react';
 
@@ -54,19 +54,24 @@ export function PosTerminal() {
     const setCajero = useSaleStore((s) => s.setCajero);
     const { user } = useAuthStore();
     const { sesionId, restaurar } = useCajaStore();
+    const [isInitializing, setIsInitializing] = useState(true);
 
     // Al montar, sincronizar sesión de caja con el backend (limpia localStorage obsoleto)
     useEffect(() => {
-        restaurar().catch(() => { });
+        restaurar()
+            .catch(() => { })
+            .finally(() => setIsInitializing(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Mostrar modal de apertura de caja si no hay sesión activa
+    // Mostrar modal de apertura de caja si no hay sesión activa.
+    // SOLO se evalúa cuando isInitializing es false (después de consultar el backend).
     const [cajaModalOpen, setCajaModalOpen] = useState(false);
     useEffect(() => {
+        if (isInitializing) return;
         if (!sesionId) setCajaModalOpen(true);
-        else setCajaModalOpen(false); // Auto-cerrar si restaurar() recuperó la sesión
-    }, [sesionId]);
+        else setCajaModalOpen(false);
+    }, [sesionId, isInitializing]);
 
     // Sincronizar catálogo desde el backend en cada apertura del POS.
     // Usa forceRefreshCatalog para garantizar que nuevos productos del admin
@@ -276,6 +281,24 @@ export function PosTerminal() {
         moveSelectionUp, moveSelectionDown,
         selectedRowIndex, updateQuantity,
     ]);
+
+    // ── EARLY RETURN: Mientras se verifica la sesión de caja, NO renderizar el POS.
+    // Esto evita el deadlock donde el modal de apertura se renderiza antes
+    // de que restaurar() termine de consultar el backend.
+    if (isInitializing) {
+        return (
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100vh',
+                width: '100vw',
+                background: 'var(--mantine-color-dark-8, #1a1b1e)',
+            }}>
+                <Loader size="xl" color="blue" type="dots" />
+            </div>
+        );
+    }
 
     return (
         <div className={styles.posLayout}>

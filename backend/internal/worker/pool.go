@@ -64,38 +64,50 @@ type WorkerHandlers struct {
 	Email       *EmailWorker
 }
 
-// StartWorkerPool launches numWorkers goroutines consuming both queues.
-// Each goroutine blocks on BRPOP — zero CPU when idle.
-// handlers may be nil in test environments (jobs will be logged but not processed).
-func StartWorkerPool(ctx context.Context, rdb *redis.Client, handlers *WorkerHandlers, numWorkers int) {
-	for i := 0; i < numWorkers; i++ {
-		go runWorker(ctx, rdb, handlers, i)
-	}
-	log.Info().Msgf("worker pool started with %d workers", numWorkers)
+// WorkerPoolConfig allows separate sizing of worker goroutines per queue.
+type WorkerPoolConfig struct {
+	FacturacionWorkers int
+	EmailWorkers       int
 }
 
-func runWorker(ctx context.Context, rdb *redis.Client, handlers *WorkerHandlers, id int) {
-	queues := []string{QueueFacturacion, QueueEmail}
+// StartWorkerPool launches dedicated goroutines per queue type.
+// This prevents email floods from starving facturacion workers and vice-versa.
+// handlers may be nil in test environments (jobs will be logged but not processed).
+func StartWorkerPool(ctx context.Context, rdb *redis.Client, handlers *WorkerHandlers, cfg WorkerPoolConfig) {
+	for i := 0; i < cfg.FacturacionWorkers; i++ {
+		go runQueueWorker(ctx, rdb, handlers, QueueFacturacion, i)
+	}
+	for i := 0; i < cfg.EmailWorkers; i++ {
+		go runQueueWorker(ctx, rdb, handlers, QueueEmail, i)
+	}
+	log.Info().
+		Int("facturacion_workers", cfg.FacturacionWorkers).
+		Int("email_workers", cfg.EmailWorkers).
+		Msg("worker pool started with separated queues")
+}
+
+// runQueueWorker is a dedicated goroutine that consumes jobs from a single queue.
+func runQueueWorker(ctx context.Context, rdb *redis.Client, handlers *WorkerHandlers, queue string, id int) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info().Msgf("worker %d shutting down", id)
+			log.Info().Str("queue", queue).Int("worker_id", id).Msg("worker shutting down")
 			return
 		default:
 			// Blocking pop — waits up to 5s then loops to check ctx
-			result, err := rdb.BRPop(ctx, 5*time.Second, queues...).Result()
+			result, err := rdb.BRPop(ctx, 5*time.Second, queue).Result()
 			if err != nil {
 				continue // timeout or context cancelled
 			}
 			if len(result) < 2 {
 				continue
 			}
-			processJob(ctx, handlers, result[0], result[1])
+			processJob(ctx, handlers, rdb, result[0], result[1])
 		}
 	}
 }
 
-func processJob(ctx context.Context, handlers *WorkerHandlers, queue, raw string) {
+func processJob(ctx context.Context, handlers *WorkerHandlers, rdb *redis.Client, queue, raw string) {
 	var job Job
 	if err := json.Unmarshal([]byte(raw), &job); err != nil {
 		log.Error().Str("queue", queue).Err(err).Msg("failed to unmarshal job")
