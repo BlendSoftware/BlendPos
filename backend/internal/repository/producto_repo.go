@@ -20,6 +20,7 @@ type ProductoRepository interface {
 	List(ctx context.Context, filter dto.ProductoFilter) ([]model.Producto, int64, error)
 	Update(ctx context.Context, p *model.Producto) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
+	Reactivar(ctx context.Context, id uuid.UUID) error
 	FindByProveedorID(ctx context.Context, proveedorID uuid.UUID) ([]model.Producto, error)
 
 	// Hierarchy
@@ -69,7 +70,17 @@ func (r *productoRepo) List(ctx context.Context, filter dto.ProductoFilter) ([]m
 	var productos []model.Producto
 	var total int64
 
-	q := r.db.WithContext(ctx).Model(&model.Producto{}).Where("activo = true")
+	q := r.db.WithContext(ctx).Model(&model.Producto{})
+
+	// Activo filter: "false" = inactivos, "all" = todos, anything else = activos (default)
+	switch filter.Activo {
+	case "false":
+		q = q.Where("activo = false")
+	case "all":
+		// no filter
+	default:
+		q = q.Where("activo = true")
+	}
 
 	if filter.Barcode != "" {
 		q = q.Where("codigo_barras = ?", filter.Barcode)
@@ -100,6 +111,10 @@ func (r *productoRepo) Update(ctx context.Context, p *model.Producto) error {
 
 func (r *productoRepo) SoftDelete(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Model(&model.Producto{}).Where("id = ?", id).Update("activo", false).Error
+}
+
+func (r *productoRepo) Reactivar(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Model(&model.Producto{}).Where("id = ?", id).Update("activo", true).Error
 }
 
 func (r *productoRepo) FindByProveedorID(ctx context.Context, proveedorID uuid.UUID) ([]model.Producto, error) {

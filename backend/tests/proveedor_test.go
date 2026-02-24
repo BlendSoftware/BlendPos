@@ -96,6 +96,15 @@ func (r *stubProveedorRepo) ListHistorialPorProducto(_ context.Context, producto
 	return result, nil
 }
 
+func (r *stubProveedorRepo) ReplaceContactos(_ context.Context, proveedorID uuid.UUID, contactos []model.ContactoProveedor) error {
+	p, ok := r.proveedores[proveedorID]
+	if !ok {
+		return errors.New("proveedor not found")
+	}
+	p.Contactos = contactos
+	return nil
+}
+
 func (r *stubProveedorRepo) DB() *gorm.DB { return r.db }
 
 var _ repository.ProveedorRepository = (*stubProveedorRepo)(nil)
@@ -443,7 +452,7 @@ func TestImportarCSV_EncabezadoIncorrecto(t *testing.T) {
 	_, err := svc.ImportarCSV(context.Background(), prov.ID, []byte(csvContent))
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "columna requerida")
+	assert.Contains(t, err.Error(), "precio")
 }
 
 func TestImportarCSV_ProveedorNoExiste(t *testing.T) {

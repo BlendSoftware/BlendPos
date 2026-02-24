@@ -48,6 +48,7 @@ interface SaleState {
     totalConDescuento: number;
     lastAdded: CartItem | null;
     isPaymentModalOpen: boolean;
+    isComprobanteModalOpen: boolean;
     isPriceCheckModalOpen: boolean;
     isDiscountModalOpen: boolean;
     discountTargetItemId: string | null;
@@ -55,6 +56,7 @@ interface SaleState {
     historial: SaleRecord[];
     cajero: string;
     ticketCounter: number;
+    tipoComprobante: 'ticket' | 'factura_b' | 'factura_a';
 
     // Cart actions
     addItem: (item: Pick<CartItem, 'id' | 'nombre' | 'precio' | 'codigoBarras'>) => void;
@@ -67,6 +69,9 @@ interface SaleState {
     // Modal actions
     openPaymentModal: () => void;
     closePaymentModal: () => void;
+    openComprobanteModal: () => void;
+    closeComprobanteModal: () => void;
+    setTipoComprobante: (tipo: 'ticket' | 'factura_b' | 'factura_a') => void;
     openPriceCheckModal: () => void;
     closePriceCheckModal: () => void;
     openDiscountModal: () => void;
@@ -108,6 +113,7 @@ export const useSaleStore = create<SaleState>()(
             totalConDescuento: 0,
             lastAdded: null,
             isPaymentModalOpen: false,
+            isComprobanteModalOpen: false,
             isPriceCheckModalOpen: false,
             isDiscountModalOpen: false,
             discountTargetItemId: null,
@@ -115,6 +121,7 @@ export const useSaleStore = create<SaleState>()(
             historial: [],
             cajero: 'Cajero',
             ticketCounter: 0,
+            tipoComprobante: 'ticket' as const,
 
             addItem: (item) => {
                 const { cart } = get();
@@ -233,6 +240,9 @@ export const useSaleStore = create<SaleState>()(
 
             openPaymentModal: () => set({ isPaymentModalOpen: true }),
             closePaymentModal: () => set({ isPaymentModalOpen: false }),
+            openComprobanteModal: () => set({ isComprobanteModalOpen: true }),
+            closeComprobanteModal: () => set({ isComprobanteModalOpen: false }),
+            setTipoComprobante: (tipo) => set({ tipoComprobante: tipo }),
             openPriceCheckModal: () => set({ isPriceCheckModalOpen: true }),
             closePriceCheckModal: () => set({ isPriceCheckModalOpen: false }),
             openDiscountModal: () => set({ isDiscountModalOpen: true, discountTargetItemId: null }),

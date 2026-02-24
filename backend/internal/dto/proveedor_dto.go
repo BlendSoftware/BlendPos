@@ -4,13 +4,21 @@ import "github.com/shopspring/decimal"
 
 // ─── Request DTOs ────────────────────────────────────────────────────────────
 
+type ContactoProveedorInput struct {
+	Nombre   string  `json:"nombre"   validate:"required,min=1"`
+	Cargo    *string `json:"cargo"`
+	Telefono *string `json:"telefono"`
+	Email    *string `json:"email"    validate:"omitempty,email"`
+}
+
 type CrearProveedorRequest struct {
-	RazonSocial   string  `json:"razon_social"   validate:"required,min=2"`
-	CUIT          string  `json:"cuit"           validate:"required"`
-	Telefono      *string `json:"telefono"`
-	Email         *string `json:"email"          validate:"omitempty,email"`
-	Direccion     *string `json:"direccion"`
-	CondicionPago *string `json:"condicion_pago"`
+	RazonSocial   string                   `json:"razon_social"   validate:"required,min=2"`
+	CUIT          string                   `json:"cuit"           validate:"required"`
+	Telefono      *string                  `json:"telefono"`
+	Email         *string                  `json:"email"          validate:"omitempty,email"`
+	Direccion     *string                  `json:"direccion"`
+	CondicionPago *string                  `json:"condicion_pago"`
+	Contactos     []ContactoProveedorInput `json:"contactos"`
 }
 
 type ActualizarPreciosMasivoRequest struct {
@@ -22,15 +30,24 @@ type ActualizarPreciosMasivoRequest struct {
 
 // ─── Response DTOs ───────────────────────────────────────────────────────────
 
+type ContactoProveedorResponse struct {
+	ID       string  `json:"id"`
+	Nombre   string  `json:"nombre"`
+	Cargo    *string `json:"cargo,omitempty"`
+	Telefono *string `json:"telefono,omitempty"`
+	Email    *string `json:"email,omitempty"`
+}
+
 type ProveedorResponse struct {
-	ID            string  `json:"id"`
-	RazonSocial   string  `json:"razon_social"`
-	CUIT          string  `json:"cuit"`
-	Telefono      *string `json:"telefono"`
-	Email         *string `json:"email"`
-	Direccion     *string `json:"direccion"`
-	CondicionPago *string `json:"condicion_pago"`
-	Activo        bool    `json:"activo"`
+	ID            string                      `json:"id"`
+	RazonSocial   string                      `json:"razon_social"`
+	CUIT          string                      `json:"cuit"`
+	Telefono      *string                     `json:"telefono"`
+	Email         *string                     `json:"email"`
+	Direccion     *string                     `json:"direccion"`
+	CondicionPago *string                     `json:"condicion_pago"`
+	Activo        bool                        `json:"activo"`
+	Contactos     []ContactoProveedorResponse `json:"contactos"`
 }
 
 type PrecioPreviewItem struct {
@@ -61,6 +78,9 @@ type CSVImportResponse struct {
 }
 
 type CSVErrorRow struct {
-	Fila   int    `json:"fila"`
-	Motivo string `json:"motivo"`
+	Fila         int    `json:"fila"`
+	CodigoBarras string `json:"codigo_barras,omitempty"`
+	Nombre       string `json:"nombre,omitempty"`
+	ErrorCode    string `json:"error_code"` // BARCODE_MISSING|BARCODE_DUPLICATE|PRICE_NOT_NUMBER|PRICE_NEGATIVE|NAME_MISSING|ROW_FORMAT|READ_ERROR
+	Motivo       string `json:"motivo"`
 }

@@ -12,6 +12,7 @@ export interface IUser {
     rol: Rol;
     activo: boolean;
     creadoEn: string; // ISO date
+    puntoDeVenta?: number; // C-01/C-02: assigned POS terminal
 }
 
 // ── Productos ────────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { Scissors, AlertTriangle, ArrowUp, PackagePlus, Plus, Link2 } from 'lucide-react';
 import { listarProductos, ajustarStock } from '../../services/api/products';
-import { getAlertasStock, ejecutarDesarme as apiEjecutarDesarme, listarVinculos, crearVinculo, type AlertaStockResponse, type VinculoResponse } from '../../services/api/inventario';
+import { getAlertasStock, ejecutarDesarme as apiEjecutarDesarme, listarVinculos, crearVinculo, listarMovimientos, type AlertaStockResponse, type VinculoResponse } from '../../services/api/inventario';
 import type { IProducto, IMovimientoStock } from '../../types';
 
 // -- Types --
@@ -34,7 +34,7 @@ const TIPO_LABEL: Record<TipoMovimiento, string> = {
 
 export function InventarioPage() {
     const [productos, setProductos] = useState<IProducto[]>([]);
-    const [movimientos] = useState<IMovimientoStock[]>([]);
+    const [movimientos, setMovimientos] = useState<IMovimientoStock[]>([]);
     const [alertas, setAlertas] = useState<AlertaStockResponse[]>([]);
     const [vinculos, setVinculos] = useState<VinculoResponse[]>([]);
     const [loading, setLoading] = useState(true);
@@ -42,10 +42,11 @@ export function InventarioPage() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [productosResp, alertasResp, vinculosResp] = await Promise.allSettled([
+            const [productosResp, alertasResp, vinculosResp, movimientosResp] = await Promise.allSettled([
                 listarProductos({ limit: 500 }),
                 getAlertasStock(),
                 listarVinculos(),
+                listarMovimientos({ limit: 200 }),
             ]);
             if (productosResp.status === 'fulfilled') {
                 setProductos(productosResp.value.data.map((p) => ({
@@ -59,6 +60,22 @@ export function InventarioPage() {
             }
             if (alertasResp.status === 'fulfilled') setAlertas(alertasResp.value);
             if (vinculosResp.status === 'fulfilled') setVinculos(vinculosResp.value);
+            if (movimientosResp.status === 'fulfilled') {
+                setMovimientos(movimientosResp.value.data.map((m) => ({
+                    id: m.id,
+                    productoId: m.producto_id,
+                    productoNombre: m.producto_nombre ?? m.producto_id,
+                    tipo: (m.tipo === 'venta' || m.tipo === 'desarme' ? 'salida'
+                        : m.tipo === 'restore_anulacion' ? 'entrada'
+                        : 'ajuste') as IMovimientoStock['tipo'],
+                    cantidad: Math.abs(m.cantidad),
+                    stockAnterior: m.stock_anterior,
+                    stockNuevo: m.stock_nuevo,
+                    motivo: m.motivo,
+                    usuarioId: '',
+                    fecha: m.created_at,
+                })));
+            }
         } catch { /* handled via allSettled */ } finally {
             setLoading(false);
         }

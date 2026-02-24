@@ -61,9 +61,29 @@ func (r *stubUsuarioRepo) FindByID(_ context.Context, id uuid.UUID) (*model.Usua
 func (r *stubUsuarioRepo) List(_ context.Context) ([]model.Usuario, error) {
 	users := make([]model.Usuario, 0, len(r.users))
 	for _, u := range r.users {
+		if u.Activo {
+			users = append(users, *u)
+		}
+	}
+	return users, nil
+}
+
+func (r *stubUsuarioRepo) ListAll(_ context.Context) ([]model.Usuario, error) {
+	users := make([]model.Usuario, 0, len(r.users))
+	for _, u := range r.users {
 		users = append(users, *u)
 	}
 	return users, nil
+}
+
+func (r *stubUsuarioRepo) Reactivar(_ context.Context, id uuid.UUID) error {
+	for _, u := range r.users {
+		if u.ID == id {
+			u.Activo = true
+			return nil
+		}
+	}
+	return errors.New("not found")
 }
 
 func (r *stubUsuarioRepo) Update(_ context.Context, u *model.Usuario) error {
@@ -302,7 +322,7 @@ func TestListarUsuarios(t *testing.T) {
 	seedUser(t, repo, "u2", "pass1234", "supervisor")
 	svc := service.NewAuthService(repo, newTestCfg())
 
-	users, err := svc.ListarUsuarios(context.Background())
+	users, err := svc.ListarUsuarios(context.Background(), false)
 	assert.NoError(t, err)
 	assert.Len(t, users, 2)
 }
@@ -376,25 +396,25 @@ func TestActualizarUsuario_NoExiste(t *testing.T) {
 
 // ── Tests: LoginRateLimiter ───────────────────────────────────────────────────
 
-func TestLoginRateLimiter_BlocksAfterFiveAttempts(t *testing.T) {
+func TestLoginRateLimiter_BlocksAfterTwentyAttempts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.POST("/login", middleware.LoginRateLimiter(), func(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, nil) // simulates failed login
 	})
 
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= 20; i++ {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodPost, "/login", bytes.NewReader([]byte(`{}`)))
-		req.RemoteAddr = "10.0.0.1:1234" // same IP
+		req.RemoteAddr = "10.0.0.2:1234" // same IP, unique so window is fresh
 		r.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusUnauthorized, w.Code, "attempt %d should pass the limiter", i)
 	}
 
-	// 6th attempt must be blocked
+	// 21st attempt must be blocked
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/login", bytes.NewReader([]byte(`{}`)))
-	req.RemoteAddr = "10.0.0.1:1234"
+	req.RemoteAddr = "10.0.0.2:1234"
 	r.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusTooManyRequests, w.Code, "6th attempt should be rate-limited")
+	assert.Equal(t, http.StatusTooManyRequests, w.Code, "21st attempt should be rate-limited")
 }

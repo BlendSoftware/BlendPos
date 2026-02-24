@@ -55,6 +55,14 @@ func (s *proveedorService) Crear(ctx context.Context, req dto.CrearProveedorRequ
 		}
 		return nil, fmt.Errorf("error al crear proveedor: %w", err)
 	}
+	// Save contacts
+	if len(req.Contactos) > 0 {
+		contactos := buildContactos(p.ID, req.Contactos)
+		if err := s.repo.ReplaceContactos(ctx, p.ID, contactos); err != nil {
+			return nil, fmt.Errorf("error al guardar contactos: %w", err)
+		}
+		p.Contactos = contactos
+	}
 	return proveedorToResponse(p), nil
 }
 
@@ -94,6 +102,14 @@ func (s *proveedorService) Actualizar(ctx context.Context, id uuid.UUID, req dto
 	p.CondicionPago = req.CondicionPago
 	if err := s.repo.Update(ctx, p); err != nil {
 		return nil, fmt.Errorf("error al actualizar proveedor: %w", err)
+	}
+	// Replace contacts if provided
+	if req.Contactos != nil {
+		contactos := buildContactos(id, req.Contactos)
+		if err := s.repo.ReplaceContactos(ctx, id, contactos); err != nil {
+			return nil, fmt.Errorf("error al actualizar contactos: %w", err)
+		}
+		p.Contactos = contactos
 	}
 	return proveedorToResponse(p), nil
 }
@@ -249,7 +265,8 @@ func (s *proveedorService) ImportarCSV(ctx context.Context, proveedorID uuid.UUI
 	result := &dto.CSVImportResponse{
 		DetalleErrores: []dto.CSVErrorRow{},
 	}
-	fila := 1 // encabezado = fila 1; datos empiezan en fila 2
+	fila := 0                            // encabezado no cuenta; datos empiezan en fila 1
+	seenBarcodes := make(map[string]int) // barcode → first fila seen (for duplicate detection)
 
 	for {
 		fila++
@@ -261,29 +278,58 @@ func (s *proveedorService) ImportarCSV(ctx context.Context, proveedorID uuid.UUI
 			result.TotalFilas++
 			result.Errores++
 			result.DetalleErrores = append(result.DetalleErrores, dto.CSVErrorRow{
-				Fila:   fila,
-				Motivo: fmt.Sprintf("error de lectura: %v", err),
+				Fila:      fila,
+				ErrorCode: "READ_ERROR",
+				Motivo:    fmt.Sprintf("error de lectura: %v", err),
 			})
 			continue
 		}
 		result.TotalFilas++
 
-		fRow, errMsg := parsearFilaCSV(record)
-		if errMsg != "" {
+		fRow, errCode, errMsg := parsearFilaCSV(record)
+		if errCode != "" {
 			result.Errores++
+			barcode := ""
+			nombre := ""
+			if len(record) > 0 {
+				barcode = strings.TrimSpace(record[0])
+			}
+			if len(record) > 1 {
+				nombre = strings.TrimSpace(record[1])
+			}
 			result.DetalleErrores = append(result.DetalleErrores, dto.CSVErrorRow{
-				Fila:   fila,
-				Motivo: errMsg,
+				Fila:         fila,
+				CodigoBarras: barcode,
+				Nombre:       nombre,
+				ErrorCode:    errCode,
+				Motivo:       errMsg,
 			})
 			continue
 		}
+
+		// Check for duplicates within this batch
+		if prevFila, seen := seenBarcodes[fRow.CodigoBarras]; seen {
+			result.Errores++
+			result.DetalleErrores = append(result.DetalleErrores, dto.CSVErrorRow{
+				Fila:         fila,
+				CodigoBarras: fRow.CodigoBarras,
+				Nombre:       fRow.Nombre,
+				ErrorCode:    "BARCODE_DUPLICATE",
+				Motivo:       fmt.Sprintf("codigo_barras '%s' duplicado (primera aparición en fila %d)", fRow.CodigoBarras, prevFila),
+			})
+			continue
+		}
+		seenBarcodes[fRow.CodigoBarras] = fila
 
 		created, upsertErr := s.upsertProductoDesdeCSV(ctx, fRow, proveedorID)
 		if upsertErr != nil {
 			result.Errores++
 			result.DetalleErrores = append(result.DetalleErrores, dto.CSVErrorRow{
-				Fila:   fila,
-				Motivo: upsertErr.Error(),
+				Fila:         fila,
+				CodigoBarras: fRow.CodigoBarras,
+				Nombre:       fRow.Nombre,
+				ErrorCode:    "UPSERT_ERROR",
+				Motivo:       upsertErr.Error(),
 			})
 			continue
 		}
@@ -323,36 +369,27 @@ func isValidCSVBytes(data []byte) bool {
 }
 
 // validarEncabezadoCSV verifica que el encabezado contiene las columnas obligatorias.
-// Formato completo:    codigo_barras, nombre, precio_costo, precio_venta [, unidades_por_bulto] [, categoria]
-// Formato simplificado: codigo_barras, nombre, precio_nuevo  (precio_nuevo se usa como precio_venta;
-//
-//	precio_costo se calcula como precio_nuevo * 0.8 — 20% margen por defecto)
+// Formato nuevo (C-16): codigo_barras, nombre, precio_desactualizado, precio_actualizado
+// Formato completo:     codigo_barras, nombre, precio_costo, precio_venta [, unidades_por_bulto] [, categoria]
+// Formato simplificado: codigo_barras, nombre, precio_nuevo
 func validarEncabezadoCSV(header []string) error {
 	normalizado := make(map[string]bool, len(header))
 	for _, h := range header {
 		normalizado[strings.TrimSpace(strings.ToLower(h))] = true
 	}
-	// Formato completo
+	// Nuevo formato (C-16): precio_desactualizado + precio_actualizado
+	if normalizado["precio_desactualizado"] && normalizado["precio_actualizado"] {
+		return nil
+	}
+	// Formato completo: precio_costo + precio_venta
 	if normalizado["precio_costo"] && normalizado["precio_venta"] {
-		requeridos := []string{"codigo_barras", "nombre", "precio_costo", "precio_venta"}
-		for _, col := range requeridos {
-			if !normalizado[col] {
-				return fmt.Errorf("columna requerida '%s' no encontrada en el CSV", col)
-			}
-		}
 		return nil
 	}
-	// Formato simplificado con precio_nuevo
+	// Formato simplificado: precio_nuevo
 	if normalizado["precio_nuevo"] {
-		requeridos := []string{"codigo_barras", "nombre", "precio_nuevo"}
-		for _, col := range requeridos {
-			if !normalizado[col] {
-				return fmt.Errorf("columna requerida '%s' no encontrada en el CSV", col)
-			}
-		}
 		return nil
 	}
-	return fmt.Errorf("el CSV debe tener columnas 'precio_costo' y 'precio_venta', o una columna 'precio_nuevo'")
+	return fmt.Errorf("el CSV debe tener columnas 'precio_desactualizado' y 'precio_actualizado', o 'precio_costo' y 'precio_venta', o una columna 'precio_nuevo'")
 }
 
 // csvFilaData contiene los datos parseados de una fila CSV.
@@ -366,45 +403,56 @@ type csvFilaData struct {
 }
 
 // parsearFilaCSV convierte un record CSV en csvFilaData.
+// Formato nuevo:        codigo_barras, nombre, precio_desactualizado, precio_actualizado
 // Formato completo:     codigo_barras, nombre, precio_costo, precio_venta[, unidades_por_bulto][, categoria]
 // Formato simplificado: codigo_barras, nombre, precio_nuevo  (precio_costo = precio_nuevo * 0.8)
-func parsearFilaCSV(record []string) (*csvFilaData, string) {
+// Returns (data, errorCode, errorMsg). errorCode is empty when no error.
+func parsearFilaCSV(record []string) (*csvFilaData, string, string) {
 	if len(record) < 3 {
-		return nil, "fila con menos de 3 columnas (mínimo requerido)"
+		return nil, "ROW_FORMAT", "fila con menos de 3 columnas (mínimo requerido)"
 	}
 	barcode := strings.TrimSpace(record[0])
 	nombre := strings.TrimSpace(record[1])
 	if barcode == "" {
-		return nil, "codigo_barras vacío"
+		return nil, "BARCODE_MISSING", "codigo_barras vacío o faltante"
 	}
 	if nombre == "" {
-		return nil, "nombre vacío"
+		return nil, "NAME_MISSING", "nombre vacío o faltante"
 	}
 
 	var costo, venta decimal.Decimal
 	if len(record) >= 4 && strings.TrimSpace(record[3]) != "" {
-		// Formato completo: precio_costo en col 2, precio_venta en col 3
+		// Formato completo: precio_costo/precio_desactualizado en col 2, precio_venta/precio_actualizado en col 3
 		costoStr := strings.TrimSpace(record[2])
 		ventaStr := strings.TrimSpace(record[3])
 		var err error
 		costo, err = decimal.NewFromString(costoStr)
-		if err != nil || costo.LessThanOrEqual(decimal.Zero) {
-			return nil, "precio_costo debe ser un número mayor a 0"
+		if err != nil {
+			return nil, "PRICE_NOT_NUMBER", fmt.Sprintf("precio_desactualizado '%s' no es un número válido", costoStr)
+		}
+		if costo.LessThanOrEqual(decimal.Zero) {
+			return nil, "PRICE_NEGATIVE", fmt.Sprintf("precio_desactualizado (%.2f) debe ser mayor a 0", costo.InexactFloat64())
 		}
 		venta, err = decimal.NewFromString(ventaStr)
-		if err != nil || venta.LessThanOrEqual(decimal.Zero) {
-			return nil, "precio_venta debe ser un número mayor a 0"
+		if err != nil {
+			return nil, "PRICE_NOT_NUMBER", fmt.Sprintf("precio_actualizado '%s' no es un número válido", ventaStr)
+		}
+		if venta.LessThanOrEqual(decimal.Zero) {
+			return nil, "PRICE_NEGATIVE", fmt.Sprintf("precio_actualizado (%.2f) debe ser mayor a 0", venta.InexactFloat64())
 		}
 		if venta.LessThan(costo) {
-			return nil, fmt.Sprintf("precio_venta (%.2f) no puede ser menor al precio_costo (%.2f)",
+			return nil, "PRICE_NEGATIVE", fmt.Sprintf("precio_actualizado (%.2f) no puede ser menor al precio_desactualizado (%.2f)",
 				venta.InexactFloat64(), costo.InexactFloat64())
 		}
 	} else {
 		// Formato simplificado: precio_nuevo en col 2
 		nuevoStr := strings.TrimSpace(record[2])
 		nuevo, err := decimal.NewFromString(nuevoStr)
-		if err != nil || nuevo.LessThanOrEqual(decimal.Zero) {
-			return nil, "precio_nuevo debe ser un número mayor a 0"
+		if err != nil {
+			return nil, "PRICE_NOT_NUMBER", fmt.Sprintf("precio '%s' no es un número válido", nuevoStr)
+		}
+		if nuevo.LessThanOrEqual(decimal.Zero) {
+			return nil, "PRICE_NEGATIVE", fmt.Sprintf("precio (%.2f) debe ser mayor a 0", nuevo.InexactFloat64())
 		}
 		venta = nuevo
 		// precio_costo = 80% del precio_nuevo (20% margen por defecto) — ajustable
@@ -434,7 +482,7 @@ func parsearFilaCSV(record []string) (*csvFilaData, string) {
 		PrecioVenta:      venta,
 		UnidadesPorBulto: unidades,
 		Categoria:        categoria,
-	}, ""
+	}, "", ""
 }
 
 // upsertProductoDesdeCSV crea o actualiza un producto por código de barras.
@@ -521,8 +569,33 @@ func calcularMargen(costo, venta decimal.Decimal) decimal.Decimal {
 	return venta.Sub(costo).Div(costo).Mul(decimal.NewFromInt(100)).Round(2)
 }
 
+// buildContactos converts DTO contact inputs to model slices.
+func buildContactos(proveedorID uuid.UUID, inputs []dto.ContactoProveedorInput) []model.ContactoProveedor {
+	result := make([]model.ContactoProveedor, 0, len(inputs))
+	for _, inp := range inputs {
+		result = append(result, model.ContactoProveedor{
+			ProveedorID: proveedorID,
+			Nombre:      inp.Nombre,
+			Cargo:       inp.Cargo,
+			Telefono:    inp.Telefono,
+			Email:       inp.Email,
+		})
+	}
+	return result
+}
+
 // proveedorToResponse convierte model.Proveedor a dto.ProveedorResponse.
 func proveedorToResponse(p *model.Proveedor) *dto.ProveedorResponse {
+	contactos := make([]dto.ContactoProveedorResponse, 0, len(p.Contactos))
+	for _, c := range p.Contactos {
+		contactos = append(contactos, dto.ContactoProveedorResponse{
+			ID:       c.ID.String(),
+			Nombre:   c.Nombre,
+			Cargo:    c.Cargo,
+			Telefono: c.Telefono,
+			Email:    c.Email,
+		})
+	}
 	return &dto.ProveedorResponse{
 		ID:            p.ID.String(),
 		RazonSocial:   p.RazonSocial,
@@ -532,5 +605,6 @@ func proveedorToResponse(p *model.Proveedor) *dto.ProveedorResponse {
 		Direccion:     p.Direccion,
 		CondicionPago: p.CondicionPago,
 		Activo:        p.Activo,
+		Contactos:     contactos,
 	}
 }

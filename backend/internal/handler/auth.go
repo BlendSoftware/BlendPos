@@ -93,7 +93,8 @@ func (h *UsuariosHandler) Crear(c *gin.Context) {
 }
 
 func (h *UsuariosHandler) Listar(c *gin.Context) {
-	resp, err := h.svc.ListarUsuarios(c.Request.Context())
+	incluirInactivos := c.Query("incluir_inactivos") == "true"
+	resp, err := h.svc.ListarUsuarios(c.Request.Context(), incluirInactivos)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, apierror.New("Error al listar usuarios"))
 		return
@@ -126,6 +127,19 @@ func (h *UsuariosHandler) Desactivar(c *gin.Context) {
 		return
 	}
 	if err := h.svc.DesactivarUsuario(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *UsuariosHandler) Reactivar(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID invalido"))
+		return
+	}
+	if err := h.svc.ReactivarUsuario(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
 		return
 	}

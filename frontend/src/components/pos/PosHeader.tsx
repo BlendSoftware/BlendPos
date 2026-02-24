@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Group, Text, Badge, Flex, Tooltip, ActionIcon } from '@mantine/core';
+import { Group, Text, Badge, Flex, Tooltip, ActionIcon, Modal, Button } from '@mantine/core';
 import { Wifi, WifiOff, User, Printer, PanelLeftOpen, Settings, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
@@ -22,6 +22,7 @@ export function PosHeader() {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [printerConnected, setPrinterConnected] = useState(thermalPrinter.isConnected);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
     const { pending: syncPending, error: syncError } = useSyncStatus();
 
     const { user, hasRole, logout } = useAuthStore();
@@ -101,6 +102,35 @@ export function PosHeader() {
     return (
         <header className={styles.header}>
             <PrinterSettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+            {/* Logout confirmation modal */}
+            <Modal
+                opened={logoutConfirmOpen}
+                onClose={() => setLogoutConfirmOpen(false)}
+                title="¿Cerrar sesión?"
+                centered
+                size="sm"
+            >
+                <Text size="sm" c="dimmed" mb="lg">
+                    ¿Estás seguro que querés cerrar sesión?
+                </Text>
+                <Group justify="flex-end" gap="sm">
+                    <Button variant="default" autoFocus onClick={() => setLogoutConfirmOpen(false)}>
+                        Cancelar
+                    </Button>
+                    <Button
+                        color="red"
+                        onClick={() => {
+                            setLogoutConfirmOpen(false);
+                            limpiarCaja();
+                            logout();
+                            navigate('/login');
+                        }}
+                    >
+                        Sí, cerrar sesión
+                    </Button>
+                </Group>
+            </Modal>
             <Flex align="center" justify="space-between" h="100%" px="lg">
                 <Group gap="sm">
                     <Text fw={800} size="xl" c="white" ff="monospace">
@@ -126,7 +156,11 @@ export function PosHeader() {
                             {user.rol}
                         </Badge>
                     )}
-                    <Text size="sm" c="dimmed" ml="md">Terminal #01</Text>
+                    <Text size="sm" c="dimmed" ml="md">
+                        Terminal #{user?.puntoDeVenta != null
+                            ? String(user.puntoDeVenta).padStart(2, '0')
+                            : 'POS'}
+                    </Text>
                 </Group>
 
                 <Group gap="md">
@@ -171,17 +205,14 @@ export function PosHeader() {
                         </Tooltip>
                     )}
 
-                    {/* Logout button — visible to all roles */}
+                    {/* Logout button — visually separated, requires confirmation */}
+                    <div style={{ width: 1, height: 24, background: 'var(--mantine-color-dark-4)', margin: '0 8px' }} />
                     <Tooltip label="Cerrar sesión" withArrow>
                         <ActionIcon
-                            variant="subtle"
+                            variant="light"
                             color="red"
                             size="md"
-                            onClick={() => {
-                                limpiarCaja();  // clear active session so next login shows the modal
-                                logout();
-                                navigate('/login');
-                            }}
+                            onClick={() => setLogoutConfirmOpen(true)}
                         >
                             <LogOut size={16} />
                         </ActionIcon>

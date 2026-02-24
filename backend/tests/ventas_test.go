@@ -168,7 +168,7 @@ func buildVentaSvc(sesionAbierta bool) (service.VentaService, *stubVentaRepo, *s
 	ventaRepo := newStubVentaRepo()
 	cajaRepo := &stubCajaRepo{}
 	cajaSvc := &stubCajaService{sesionAbierta: sesionAbierta}
-	inventarioSvc := service.NewInventarioService(productoRepo)
+	inventarioSvc := service.NewInventarioService(productoRepo, nil)
 
 	svc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, nil)
 	return svc, ventaRepo, productoRepo, cajaRepo
@@ -331,7 +331,7 @@ func TestRegistrarVenta_ConDesarme(t *testing.T) {
 	}
 	productoRepo.vinculos[vinculo.ID] = vinculo
 
-	inventarioSvc := service.NewInventarioService(productoRepo)
+	inventarioSvc := service.NewInventarioService(productoRepo, nil)
 	cajaSvc := &stubCajaService{sesionAbierta: true}
 	svc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, nil)
 

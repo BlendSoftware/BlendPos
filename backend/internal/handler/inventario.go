@@ -64,6 +64,26 @@ func (h *InventarioHandler) ObtenerAlertas(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (h *InventarioHandler) ListarMovimientos(c *gin.Context) {
+	var filter dto.MovimientoStockFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
+		return
+	}
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.Limit < 1 {
+		filter.Limit = 100
+	}
+	resp, err := h.svc.ListarMovimientos(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, apierror.New("Error al listar movimientos"))
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 type FacturacionHandler struct{ svc service.FacturacionService }
 
 func NewFacturacionHandler(svc service.FacturacionService) *FacturacionHandler {

@@ -21,14 +21,19 @@ type InventarioService interface {
 	ObtenerAlertas(ctx context.Context) ([]dto.AlertaStockResponse, error)
 	// DescontarStockTx is called within a sale transaction — requires a live *gorm.DB tx
 	DescontarStockTx(ctx context.Context, productoID uuid.UUID, cantidad int, tx interface{}) error
+	// ListarMovimientos returns stock movement history with optional filters
+	ListarMovimientos(ctx context.Context, filter dto.MovimientoStockFilter) (*dto.MovimientoStockListResponse, error)
+	// RegistrarMovimientoTx records a stock movement inside an existing transaction
+	RegistrarMovimientoTx(tx *gorm.DB, m *model.MovimientoStock) error
 }
 
 type inventarioService struct {
-	repo repository.ProductoRepository
+	repo    repository.ProductoRepository
+	movRepo repository.MovimientoStockRepository
 }
 
-func NewInventarioService(repo repository.ProductoRepository) InventarioService {
-	return &inventarioService{repo: repo}
+func NewInventarioService(repo repository.ProductoRepository, movRepo repository.MovimientoStockRepository) InventarioService {
+	return &inventarioService{repo: repo, movRepo: movRepo}
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -217,4 +222,58 @@ func (s *inventarioService) DescontarStockTx(ctx context.Context, productoID uui
 	}
 	// Now decrement requested quantity
 	return s.repo.UpdateStockTx(gormTx, productoID, -cantidad)
+}
+
+// RegistrarMovimientoTx records a stock movement inside an existing transaction.
+func (s *inventarioService) RegistrarMovimientoTx(tx *gorm.DB, m *model.MovimientoStock) error {
+	if s.movRepo == nil {
+		return nil
+	}
+	return s.movRepo.CreateTx(tx, m)
+}
+
+// ListarMovimientos returns a paginated list of stock movements.
+func (s *inventarioService) ListarMovimientos(ctx context.Context, filter dto.MovimientoStockFilter) (*dto.MovimientoStockListResponse, error) {
+	repoFilter := repository.MovimientoStockFilter{
+		Tipo:  filter.Tipo,
+		Page:  filter.Page,
+		Limit: filter.Limit,
+	}
+	if filter.ProductoID != "" {
+		pid, err := uuid.Parse(filter.ProductoID)
+		if err == nil {
+			repoFilter.ProductoID = &pid
+		}
+	}
+
+	movs, total, err := s.movRepo.List(ctx, repoFilter)
+	if err != nil {
+		return nil, err
+	}
+
+	data := make([]dto.MovimientoStockResponse, 0, len(movs))
+	for _, m := range movs {
+		nombre := ""
+		if m.Producto != nil {
+			nombre = m.Producto.Nombre
+		}
+		data = append(data, dto.MovimientoStockResponse{
+			ID:             m.ID.String(),
+			ProductoID:     m.ProductoID.String(),
+			ProductoNombre: nombre,
+			Tipo:           m.Tipo,
+			Cantidad:       m.Cantidad,
+			StockAnterior:  m.StockAnterior,
+			StockNuevo:     m.StockNuevo,
+			Motivo:         m.Motivo,
+			CreatedAt:      m.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		})
+	}
+
+	return &dto.MovimientoStockListResponse{
+		Data:  data,
+		Total: total,
+		Page:  filter.Page,
+		Limit: filter.Limit,
+	}, nil
 }

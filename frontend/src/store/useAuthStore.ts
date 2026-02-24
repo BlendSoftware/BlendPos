@@ -58,6 +58,7 @@ export const useAuthStore = create<AuthState>()(
                             rol: mapRol(u.rol),
                             activo: true,
                             creadoEn: new Date().toISOString(),
+                            puntoDeVenta: u.punto_de_venta ?? undefined,
                         };
                         set({ user, token: resp.access_token, refreshToken: resp.refresh_token, isAuthenticated: true });
                         return true;

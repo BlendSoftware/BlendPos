@@ -77,8 +77,50 @@ export async function ejecutarDesarme(data: DesarmeManualRequest): Promise<Desar
 
 /**
  * GET /v1/inventario/alertas  (administrador, supervisor)
+/**
+ * GET /v1/inventario/alertas  (administrador, supervisor)
  * Retorna productos cuyo stock_actual <= stock_minimo.
  */
 export async function getAlertasStock(): Promise<AlertaStockResponse[]> {
     return apiClient.get<AlertaStockResponse[]>('/v1/inventario/alertas');
+}
+
+// ── Movimientos de stock ──────────────────────────────────────────────────────
+
+export interface MovimientoStockResponse {
+    id: string;
+    producto_id: string;
+    producto_nombre?: string;
+    tipo: string;
+    cantidad: number;
+    stock_anterior: number;
+    stock_nuevo: number;
+    motivo: string;
+    referencia_id?: string;
+    created_at: string;
+}
+
+export interface MovimientoStockListResponse {
+    data: MovimientoStockResponse[];
+    total: number;
+    page: number;
+    limit: number;
+}
+
+/**
+ * GET /v1/inventario/movimientos  (administrador, supervisor)
+ * Lista paginada de movimientos de stock.
+ */
+export async function listarMovimientos(opts: {
+    productoId?: string;
+    tipo?: string;
+    page?: number;
+    limit?: number;
+} = {}): Promise<MovimientoStockListResponse> {
+    return apiClient.get<MovimientoStockListResponse>('/v1/inventario/movimientos', {
+        producto_id: opts.productoId,
+        tipo: opts.tipo,
+        page: opts.page ?? 1,
+        limit: opts.limit ?? 100,
+    });
 }

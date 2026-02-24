@@ -6,10 +6,14 @@ import "github.com/shopspring/decimal"
 
 // VentaFilter is bound from query string of GET /v1/ventas.
 type VentaFilter struct {
-	Fecha  string `form:"fecha"`                     // YYYY-MM-DD; empty = today
-	Estado string `form:"estado,default=completada"` // completada | anulada | all
-	Page   int    `form:"page,default=1"   validate:"min=1"`
-	Limit  int    `form:"limit,default=50" validate:"min=1,max=200"`
+	Fecha      string `form:"fecha"`                     // YYYY-MM-DD; empty = today
+	Desde      string `form:"desde"`                     // YYYY-MM-DD; range start (overrides fecha)
+	Hasta      string `form:"hasta"`                     // YYYY-MM-DD; range end (overrides fecha)
+	Estado     string `form:"estado,default=completada"` // completada | anulada | all
+	OrdenarPor string `form:"ordenar_por"`               // "fecha" | "total" | "numero_ticket"
+	Orden      string `form:"orden"`                     // "asc" | "desc" (default desc)
+	Page       int    `form:"page,default=1"   validate:"min=1"`
+	Limit      int    `form:"limit,default=50" validate:"min=1,max=200"`
 }
 
 // VentaListItem is returned inside VentaListResponse for GET /v1/ventas.

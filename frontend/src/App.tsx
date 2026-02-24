@@ -24,6 +24,7 @@ import { ProveedoresPage }       from './pages/admin/ProveedoresPage';
 import { FacturacionPage }       from './pages/admin/FacturacionPage';
 import { CierreCajaPage }        from './pages/admin/CierreCajaPage';
 import { UsuariosPage }          from './pages/admin/UsuariosPage';
+import { CategoriasPage }        from './pages/admin/CategoriasPage';
 
 function App() {
     return (
@@ -58,6 +59,7 @@ function App() {
                         <Route path="productos"   element={<GestionProductosPage />} />
                         <Route path="inventario"  element={<InventarioPage />} />
                         <Route path="proveedores" element={<ProveedoresPage />} />
+                        <Route path="categorias"  element={<CategoriasPage />} />
                         <Route path="facturacion" element={<FacturacionPage />} />
                         <Route path="cierre-caja" element={<CierreCajaPage />} />
 

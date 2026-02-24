@@ -8,6 +8,7 @@ import { SalesTable } from '../components/pos/SalesTable';
 import { TotalPanel } from '../components/pos/TotalPanel';
 import { HotkeysFooter } from '../components/pos/HotkeysFooter';
 import { PaymentModal } from '../components/pos/PaymentModal';
+import { ComprobanteModal } from '../components/pos/ComprobanteModal';
 import { ProductSearch } from '../components/pos/ProductSearch';
 import { PriceCheckModal } from '../components/pos/PriceCheckModal';
 import { DiscountModal } from '../components/pos/DiscountModal';
@@ -35,10 +36,13 @@ export function PosTerminal() {
         isPaymentModalOpen,
         isPriceCheckModalOpen,
         isDiscountModalOpen,
+        isComprobanteModalOpen,
         addItem,
         clearCart,
         openPaymentModal,
         closePaymentModal,
+        openComprobanteModal,
+        closeComprobanteModal,
         openPriceCheckModal,
         closePriceCheckModal,
         openDiscountModal,
@@ -85,7 +89,7 @@ export function PosTerminal() {
         if (user?.nombre) setCajero(user.nombre);
     }, [user?.nombre, setCajero]);
 
-    const anyModalOpen = isPaymentModalOpen || isPriceCheckModalOpen || isDiscountModalOpen || historyOpen;
+    const anyModalOpen = isPaymentModalOpen || isComprobanteModalOpen || isPriceCheckModalOpen || isDiscountModalOpen || historyOpen;
 
     // Sticky focus: auto-return to scanner after 2s inactivity
     usePosFocus(scannerRef, anyModalOpen);
@@ -213,12 +217,13 @@ export function PosTerminal() {
 
                 case 'F10':
                     e.preventDefault();
-                    if (!anyModalOpen && cart.length > 0) openPaymentModal();
+                    if (!anyModalOpen && cart.length > 0) openComprobanteModal();
                     break;
 
                 case 'Escape':
                     e.preventDefault();
-                    if (isPaymentModalOpen) closePaymentModal();
+                    if (isComprobanteModalOpen) closeComprobanteModal();
+                    else if (isPaymentModalOpen) closePaymentModal();
                     else if (isPriceCheckModalOpen) closePriceCheckModal();
                     else if (isDiscountModalOpen) closeDiscountModal();
                     else if (historyOpen) setHistoryOpen(false);
@@ -271,9 +276,9 @@ export function PosTerminal() {
     }, [
         anyModalOpen, searchVisible,
         cart,
-        isPaymentModalOpen, isPriceCheckModalOpen, isDiscountModalOpen, historyOpen,
+        isPaymentModalOpen, isComprobanteModalOpen, isPriceCheckModalOpen, isDiscountModalOpen, historyOpen,
         openSearch, closeSearch,
-        openPaymentModal, closePaymentModal,
+        openPaymentModal, closePaymentModal, openComprobanteModal, closeComprobanteModal,
         openPriceCheckModal, closePriceCheckModal,
         openDiscountModal, closeDiscountModal,
         openItemDiscountModal,
@@ -340,6 +345,7 @@ export function PosTerminal() {
             <HotkeysFooter />
 
             {/* ── Modales ────────────────────────────────────────── */}
+            <ComprobanteModal />
             <PaymentModal />
             <PriceCheckModal />
             <DiscountModal />

@@ -21,16 +21,18 @@ type ProductoService interface {
 	Listar(ctx context.Context, filter dto.ProductoFilter) (*dto.ProductoListResponse, error)
 	Actualizar(ctx context.Context, id uuid.UUID, req dto.ActualizarProductoRequest) (*dto.ProductoResponse, error)
 	Desactivar(ctx context.Context, id uuid.UUID) error
+	Reactivar(ctx context.Context, id uuid.UUID) error
 	AjustarStock(ctx context.Context, id uuid.UUID, req dto.AjustarStockRequest) (*dto.ProductoResponse, error)
 }
 
 type productoService struct {
-	repo repository.ProductoRepository
-	rdb  *redis.Client
+	repo    repository.ProductoRepository
+	movRepo repository.MovimientoStockRepository
+	rdb     *redis.Client
 }
 
-func NewProductoService(repo repository.ProductoRepository, rdb *redis.Client) ProductoService {
-	return &productoService{repo: repo, rdb: rdb}
+func NewProductoService(repo repository.ProductoRepository, movRepo repository.MovimientoStockRepository, rdb *redis.Client) ProductoService {
+	return &productoService{repo: repo, movRepo: movRepo, rdb: rdb}
 }
 
 // precioCacheKey returns the Redis key for a product's price cache entry.
@@ -218,6 +220,10 @@ func (s *productoService) Desactivar(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (s *productoService) Reactivar(ctx context.Context, id uuid.UUID) error {
+	return s.repo.Reactivar(ctx, id)
+}
+
 // AjustarStock incrementa (delta > 0) o decrementa (delta < 0) el stock de un producto.
 // Corresponde a PATCH /v1/productos/:id/stock.
 func (s *productoService) AjustarStock(ctx context.Context, id uuid.UUID, req dto.AjustarStockRequest) (*dto.ProductoResponse, error) {
@@ -226,15 +232,35 @@ func (s *productoService) AjustarStock(ctx context.Context, id uuid.UUID, req dt
 		return nil, fmt.Errorf("producto no encontrado")
 	}
 	if !p.Activo {
-		return nil, fmt.Errorf("el producto est\u00e1 desactivado")
+		return nil, fmt.Errorf("el producto está desactivado")
 	}
 	nuevoStock := p.StockActual + req.Delta
 	if nuevoStock < 0 {
-		return nil, fmt.Errorf("stock insuficiente: el ajuste resultar\u00eda en stock negativo (%d)", nuevoStock)
+		return nil, fmt.Errorf("stock insuficiente: el ajuste resultaría en stock negativo (%d)", nuevoStock)
 	}
+
+	stockAntes := p.StockActual
 	if err := s.repo.AjustarStock(ctx, id, req.Delta); err != nil {
 		return nil, err
 	}
+
+	// Record movimiento de stock
+	motivo := req.Motivo
+	if motivo == "" {
+		motivo = "Ajuste manual"
+	}
+	mov := &model.MovimientoStock{
+		ProductoID:    id,
+		Tipo:          "ajuste_manual",
+		Cantidad:      req.Delta,
+		StockAnterior: stockAntes,
+		StockNuevo:    nuevoStock,
+		Motivo:        motivo,
+	}
+	if s.movRepo != nil {
+		_ = s.movRepo.Create(ctx, mov) // best-effort — don't fail the adjustment if this errors
+	}
+
 	// Refresh the product from DB to return updated stock
 	p, err = s.repo.FindByID(ctx, id)
 	if err != nil {

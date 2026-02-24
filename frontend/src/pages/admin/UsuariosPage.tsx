@@ -1,13 +1,13 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
     Stack, Title, Text, Group, Button, TextInput, Select, Table,
-    Paper, Badge, ActionIcon, Tooltip, Modal, Skeleton, PasswordInput, Alert,
+    Paper, Badge, ActionIcon, Tooltip, Modal, Skeleton, PasswordInput, Alert, Switch, NumberInput,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { Plus, Edit, Search, Power, PowerOff, AlertCircle } from 'lucide-react';
 import {
-    listarUsuarios, crearUsuario, actualizarUsuario, desactivarUsuario,
+    listarUsuarios, crearUsuario, actualizarUsuario, desactivarUsuario, reactivarUsuario,
     type UsuarioResponse,
 } from '../../services/api/usuarios';
 import type { IUser, Rol } from '../../types';
@@ -27,22 +27,23 @@ function mapRolBE(frontendRol: Rol): 'cajero' | 'supervisor' | 'administrador' {
     return 'cajero';
 }
 function mapUsuario(u: UsuarioResponse): IUser {
-    return { id: u.id, nombre: u.nombre, email: '', rol: mapRolFE(u.rol), activo: true, creadoEn: '' };
+    return { id: u.id, nombre: u.nombre, email: u.email ?? '', rol: mapRolFE(u.rol), activo: u.activo, creadoEn: '', puntoDeVenta: u.punto_de_venta ?? undefined };
 }
 
 export function UsuariosPage() {
     const [usuarios, setUsuarios] = useState<IUser[]>([]);
     const [busqueda, setBusqueda] = useState('');
+    const [mostrarInactivos, setMostrarInactivos] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
     const [editTarget, setEditTarget] = useState<IUser | null>(null);
     const [loading, setLoading] = useState(true);
     const [apiError, setApiError] = useState<string | null>(null);
 
-    const fetchUsuarios = useCallback(async () => {
+    const fetchUsuarios = useCallback(async (inclInactivos = false) => {
         setLoading(true);
         setApiError(null);
         try {
-            const data = await listarUsuarios();
+            const data = await listarUsuarios(inclInactivos);
             setUsuarios(data.map(mapUsuario));
         } catch (err) {
             setApiError(err instanceof Error ? err.message : 'Error al cargar usuarios');
@@ -51,7 +52,7 @@ export function UsuariosPage() {
         }
     }, []);
 
-    useEffect(() => { fetchUsuarios(); }, [fetchUsuarios]);
+    useEffect(() => { fetchUsuarios(mostrarInactivos); }, [fetchUsuarios, mostrarInactivos]);
 
     const filtered = useMemo(() => {
         if (!busqueda.trim()) return usuarios;
@@ -62,7 +63,7 @@ export function UsuariosPage() {
     }, [usuarios, busqueda]);
 
     const form = useForm({
-        initialValues: { nombre: '', username: '', email: '', password: '', rol: 'cajero' as Rol, activo: true },
+        initialValues: { nombre: '', username: '', email: '', password: '', rol: 'cajero' as Rol, activo: true, puntoDeVenta: '' as string },
         validate: {
             nombre:   (v) => (v.trim().length >= 3 ? null : 'Mínimo 3 caracteres'),
             username: (v, _vals) => (!editTarget && !v.trim() ? 'Requerido' : null),
@@ -78,18 +79,20 @@ export function UsuariosPage() {
 
     const openEdit = (u: IUser) => {
         setEditTarget(u);
-        form.setValues({ nombre: u.nombre, username: '', email: u.email, password: '', rol: u.rol, activo: u.activo });
+        form.setValues({ nombre: u.nombre, username: '', email: u.email, password: '', rol: u.rol, activo: u.activo, puntoDeVenta: u.puntoDeVenta != null ? String(u.puntoDeVenta) : '' });
         setModalOpen(true);
     };
 
     const handleSubmit = form.onSubmit(async (values) => {
         try {
+            const pdv = values.puntoDeVenta ? parseInt(values.puntoDeVenta) : undefined;
             if (editTarget) {
                 await actualizarUsuario(editTarget.id, {
                     nombre: values.nombre,
                     email: values.email || undefined,
                     rol: mapRolBE(values.rol),
                     password: values.password || undefined,
+                    punto_de_venta: pdv,
                 });
                 notifications.show({ title: 'Usuario actualizado', message: values.nombre, color: 'blue' });
             } else {
@@ -99,6 +102,7 @@ export function UsuariosPage() {
                     email: values.email || undefined,
                     password: values.password,
                     rol: mapRolBE(values.rol),
+                    punto_de_venta: pdv,
                 });
                 notifications.show({ title: 'Usuario creado', message: values.nombre, color: 'teal' });
             }
@@ -113,10 +117,14 @@ export function UsuariosPage() {
         const u = usuarios.find((x) => x.id === id);
         if (!u) return;
         try {
-            await desactivarUsuario(id);
+            if (u.activo) {
+                await desactivarUsuario(id);
+            } else {
+                await reactivarUsuario(id);
+            }
             setUsuarios((prev) => prev.map((x) => x.id === id ? { ...x, activo: !x.activo } : x));
             notifications.show({
-                title: u.activo ? 'Usuario desactivado' : 'Usuario activado',
+                title: u.activo ? 'Usuario desactivado' : 'Usuario reactivado',
                 message: u.nombre, color: u.activo ? 'gray' : 'teal',
             });
         } catch (err) {
@@ -129,9 +137,16 @@ export function UsuariosPage() {
             <Group justify="space-between">
                 <div>
                     <Title order={2} fw={800}>Usuarios</Title>
-                    <Text c="dimmed" size="sm">{usuarios.filter((u) => u.activo).length} activos</Text>
+                    <Text c="dimmed" size="sm">{usuarios.filter((u) => u.activo).length} activos · {usuarios.length} total</Text>
                 </div>
-                <Button leftSection={<Plus size={16} />} onClick={openCreate}>Nuevo usuario</Button>
+                <Group gap="sm">
+                    <Switch
+                        label="Mostrar inactivos"
+                        checked={mostrarInactivos}
+                        onChange={(e) => setMostrarInactivos(e.currentTarget.checked)}
+                    />
+                    <Button leftSection={<Plus size={16} />} onClick={openCreate}>Nuevo usuario</Button>
+                </Group>
             </Group>
 
             {apiError && <Alert color="red" icon={<AlertCircle size={16} />} variant="light">{apiError}</Alert>}
@@ -149,6 +164,7 @@ export function UsuariosPage() {
                     <Table.Thead>
                         <Table.Tr>
                             <Table.Th>Nombre</Table.Th>
+                            <Table.Th>Email</Table.Th>
                             <Table.Th>Rol</Table.Th>
                             <Table.Th>Estado</Table.Th>
                             <Table.Th>Acciones</Table.Th>
@@ -158,7 +174,7 @@ export function UsuariosPage() {
                         {loading
                             ? Array.from({ length: 4 }).map((_, i) => (
                                 <Table.Tr key={i}>
-                                    {[1, 2, 3, 4].map((j) => (
+                                    {[1, 2, 3, 4, 5].map((j) => (
                                         <Table.Td key={j}><Skeleton h={20} radius="sm" /></Table.Td>
                                     ))}
                                 </Table.Tr>
@@ -166,6 +182,7 @@ export function UsuariosPage() {
                             : filtered.map((u) => (
                             <Table.Tr key={u.id} style={{ opacity: u.activo ? 1 : 0.5 }}>
                                 <Table.Td><Text size="sm" fw={500}>{u.nombre}</Text></Table.Td>
+                                <Table.Td><Text size="sm" c="dimmed">{u.email || '—'}</Text></Table.Td>
                                 <Table.Td>
                                     <Badge color={ROL_COLOR[u.rol]} size="sm" variant="light">{u.rol}</Badge>
                                 </Table.Td>
@@ -224,6 +241,15 @@ export function UsuariosPage() {
                                 { value: 'cajero',     label: 'Cajero' },
                             ]}
                             {...form.getInputProps('rol')}
+                        />
+                        <NumberInput
+                            label="Punto de Venta (opcional)"
+                            description="Número de terminal asignada a este usuario (solo cajeros)"
+                            placeholder="Ej: 1, 2, 3..."
+                            min={1}
+                            max={99}
+                            value={form.values.puntoDeVenta === '' ? '' : Number(form.values.puntoDeVenta)}
+                            onChange={(val) => form.setFieldValue('puntoDeVenta', val === '' ? '' : String(val))}
                         />
                         <Group justify="flex-end" mt="sm">
                             <Button variant="subtle" onClick={() => setModalOpen(false)}>Cancelar</Button>

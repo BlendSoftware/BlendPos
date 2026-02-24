@@ -63,19 +63,38 @@ func (r *ventaRepo) List(ctx context.Context, filter dto.VentaFilter) ([]model.V
 	if filter.Estado != "" && filter.Estado != "all" {
 		q = q.Where("estado = ?", filter.Estado)
 	}
-	if filter.Fecha != "" {
+
+	// Date range: Desde/Hasta overrides Fecha
+	if filter.Desde != "" && filter.Hasta != "" {
+		q = q.Where("DATE(created_at) BETWEEN ? AND ?", filter.Desde, filter.Hasta)
+	} else if filter.Desde != "" {
+		q = q.Where("DATE(created_at) >= ?", filter.Desde)
+	} else if filter.Hasta != "" {
+		q = q.Where("DATE(created_at) <= ?", filter.Hasta)
+	} else if filter.Fecha != "" {
 		q = q.Where("DATE(created_at) = ?", filter.Fecha)
-	} else {
-		// Default: today
-		q = q.Where("DATE(created_at) = CURRENT_DATE")
 	}
+	// If no date filter at all: return all (no implicit TODAY — caller sets limit)
 
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
+	// Ordering
+	orderCol := "created_at"
+	switch filter.OrdenarPor {
+	case "total":
+		orderCol = "total"
+	case "numero_ticket":
+		orderCol = "numero_ticket"
+	}
+	orderDir := "DESC"
+	if filter.Orden == "asc" {
+		orderDir = "ASC"
+	}
+
 	err := q.Preload("Items.Producto").Preload("Pagos").
-		Order("created_at DESC").
+		Order(orderCol + " " + orderDir).
 		Offset(offset).Limit(filter.Limit).
 		Find(&ventas).Error
 

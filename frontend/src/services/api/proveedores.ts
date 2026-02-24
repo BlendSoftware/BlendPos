@@ -6,6 +6,14 @@ import { apiClient } from '../../api/client';
 
 // ── Response Types ────────────────────────────────────────────────────────────
 
+export interface ContactoProveedorResponse {
+    id: string;
+    nombre: string;
+    cargo?: string;
+    telefono?: string;
+    email?: string;
+}
+
 export interface ProveedorResponse {
     id: string;
     razon_social: string;
@@ -15,6 +23,7 @@ export interface ProveedorResponse {
     direccion: string | null;
     condicion_pago: string | null;
     activo: boolean;
+    contactos: ContactoProveedorResponse[];
 }
 
 export interface PrecioPreviewItem {
@@ -37,6 +46,9 @@ export interface ActualizacionMasivaResponse {
 
 export interface CSVErrorRow {
     fila: number;
+    codigo_barras?: string;
+    nombre?: string;
+    error_code: string; // BARCODE_MISSING|BARCODE_DUPLICATE|PRICE_NOT_NUMBER|PRICE_NEGATIVE|NAME_MISSING|ROW_FORMAT|READ_ERROR
     motivo: string;
 }
 
@@ -127,7 +139,7 @@ export async function importarCSV(
         ? ((JSON.parse(raw) as { state?: { token?: string } }).state?.token ?? null)
         : null;
 
-    const baseUrl = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
+    const baseUrl = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
     const resp = await fetch(`${baseUrl}/v1/csv/import`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},

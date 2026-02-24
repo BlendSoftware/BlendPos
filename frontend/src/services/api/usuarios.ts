@@ -1,9 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Usuarios API — gestión de usuarios y roles.
-// GET    /v1/usuarios     → UsuarioResponse[]
-// POST   /v1/usuarios     → UsuarioResponse
-// PUT    /v1/usuarios/:id → UsuarioResponse
-// DELETE /v1/usuarios/:id → 204
+// GET    /v1/usuarios                  → UsuarioResponse[]
+// POST   /v1/usuarios                  → UsuarioResponse
+// PUT    /v1/usuarios/:id              → UsuarioResponse
+// DELETE /v1/usuarios/:id              → 204
+// PATCH  /v1/usuarios/:id/reactivar   → 204
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { apiClient } from '../../api/client';
@@ -14,8 +15,10 @@ export interface UsuarioResponse {
     id: string;
     username: string;
     nombre: string;
+    email?: string;
     rol: 'cajero' | 'supervisor' | 'administrador';
     punto_de_venta: number | null;
+    activo: boolean;
 }
 
 // ── Request Types ─────────────────────────────────────────────────────────────
@@ -40,8 +43,10 @@ export interface ActualizarUsuarioRequest {
 // ── API Calls ─────────────────────────────────────────────────────────────────
 
 /** GET /v1/usuarios  (administrador) */
-export async function listarUsuarios(): Promise<UsuarioResponse[]> {
-    return apiClient.get<UsuarioResponse[]>('/v1/usuarios');
+export async function listarUsuarios(incluirInactivos = false): Promise<UsuarioResponse[]> {
+    return apiClient.get<UsuarioResponse[]>('/v1/usuarios', {
+        ...(incluirInactivos ? { incluir_inactivos: 'true' } : {}),
+    });
 }
 
 /** POST /v1/usuarios  (administrador) */
@@ -57,4 +62,9 @@ export async function actualizarUsuario(id: string, data: ActualizarUsuarioReque
 /** DELETE /v1/usuarios/:id  (administrador) — soft delete */
 export async function desactivarUsuario(id: string): Promise<void> {
     return apiClient.delete<void>(`/v1/usuarios/${id}`);
+}
+
+/** PATCH /v1/usuarios/:id/reactivar  (administrador) */
+export async function reactivarUsuario(id: string): Promise<void> {
+    return apiClient.patch<void>(`/v1/usuarios/${id}/reactivar`, {});
 }

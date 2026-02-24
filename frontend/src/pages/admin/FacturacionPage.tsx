@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
     Stack, Title, Text, Group, Table, Paper, Badge, ActionIcon,
     Tooltip, TextInput, Modal, Button, Select, Alert,
 } from '@mantine/core';
-import { Printer, Download, ChevronDown, ChevronUp, Search, Ban, AlertTriangle } from 'lucide-react';
+import { DateInput } from '@mantine/dates';
+import { Printer, Download, ChevronDown, ChevronUp, Search, Ban, AlertTriangle, RefreshCw } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useSaleStore, type SaleRecord, type MetodoPago } from '../../store/useSaleStore';
@@ -36,13 +37,32 @@ export function FacturacionPage() {
     const { hasRole } = useAuthStore();
     const historialLocal = useSaleStore((s) => s.historial);
     const [apiVentas, setApiVentas] = useState<VentaListItem[]>([]);
+    const [loadingVentas, setLoadingVentas] = useState(false);
+    const [desde, setDesde] = useState<Date | null>(null);
+    const [hasta, setHasta] = useState<Date | null>(null);
+    const [ordenarPor, setOrdenarPor] = useState<string>('fecha');
+    const [orden, setOrden] = useState<string>('desc');
 
-    // Load backend ventas on mount (last 200 completed sales)
-    useEffect(() => {
-        listarVentas({ estado: 'completada', limit: 200 })
-            .then((resp) => setApiVentas(resp.data))
-            .catch(() => {});
-    }, []);
+    const toDateStr = (d: Date | null) => d ? d.toISOString().slice(0, 10) : undefined;
+
+    const cargarVentas = useCallback(async () => {
+        setLoadingVentas(true);
+        try {
+            const resp = await listarVentas({
+                estado: 'completada',
+                limit: 200,
+                desde: toDateStr(desde),
+                hasta: toDateStr(hasta),
+                ordenar_por: ordenarPor,
+                orden,
+            });
+            setApiVentas(resp.data);
+        } catch { /* silent */ } finally {
+            setLoadingVentas(false);
+        }
+    }, [desde, hasta, ordenarPor, orden]);
+
+    useEffect(() => { cargarVentas(); }, [cargarVentas]);
 
     // Map SaleRecord to IVenta for display, merging API data with local session
     const ventas: IVenta[] = useMemo(() => {
@@ -198,13 +218,29 @@ export function FacturacionPage() {
                 </div>
             </Group>
 
-            <Group>
+            <Group wrap="wrap" gap="sm">
                 <TextInput
                     placeholder="Buscar por número de ticket o cajero..."
                     leftSection={<Search size={14} />}
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.currentTarget.value)}
-                    style={{ flex: 1, maxWidth: 360 }}
+                    style={{ flex: 1, minWidth: 240 }}
+                />
+                <DateInput
+                    placeholder="Desde"
+                    value={desde}
+                    onChange={setDesde}
+                    clearable
+                    valueFormat="DD/MM/YYYY"
+                    style={{ width: 150 }}
+                />
+                <DateInput
+                    placeholder="Hasta"
+                    value={hasta}
+                    onChange={setHasta}
+                    clearable
+                    valueFormat="DD/MM/YYYY"
+                    style={{ width: 150 }}
                 />
                 <Select
                     placeholder="Período"
@@ -216,9 +252,34 @@ export function FacturacionPage() {
                         { value: 'semana', label: 'Última semana' },
                         { value: 'todas',  label: 'Todas' },
                     ]}
-                    style={{ width: 160 }}
+                    style={{ width: 150 }}
                     clearable
                 />
+                <Select
+                    placeholder="Ordenar por"
+                    value={ordenarPor}
+                    onChange={(v) => setOrdenarPor(v ?? 'fecha')}
+                    data={[
+                        { value: 'fecha', label: 'Fecha' },
+                        { value: 'total', label: 'Total' },
+                        { value: 'numero_ticket', label: 'N° Ticket' },
+                    ]}
+                    style={{ width: 150 }}
+                />
+                <Select
+                    value={orden}
+                    onChange={(v) => setOrden(v ?? 'desc')}
+                    data={[
+                        { value: 'desc', label: '↓ Descendente' },
+                        { value: 'asc',  label: '↑ Ascendente' },
+                    ]}
+                    style={{ width: 150 }}
+                />
+                <Tooltip label="Actualizar" withArrow>
+                    <ActionIcon variant="light" loading={loadingVentas} onClick={cargarVentas}>
+                        <RefreshCw size={15} />
+                    </ActionIcon>
+                </Tooltip>
             </Group>
 
             <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>

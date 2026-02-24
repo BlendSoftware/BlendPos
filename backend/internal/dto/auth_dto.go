@@ -15,7 +15,7 @@ type CrearUsuarioRequest struct {
 	Username     string  `json:"username"  validate:"required,min=1,max=150"`
 	Nombre       string  `json:"nombre"    validate:"required,min=2,max=100"`
 	Email        *string `json:"email"     validate:"omitempty,email"`
-	Password     string  `json:"password"  validate:"required,min=4"`
+	Password     string  `json:"password"  validate:"required,min=8"`
 	Rol          string  `json:"rol"       validate:"required,oneof=cajero supervisor administrador"`
 	PuntoDeVenta *int    `json:"punto_de_venta"`
 }
@@ -31,11 +31,13 @@ type ActualizarUsuarioRequest struct {
 // ─── Response DTOs ───────────────────────────────────────────────────────────
 
 type UsuarioResponse struct {
-	ID           string `json:"id"`
-	Username     string `json:"username"`
-	Nombre       string `json:"nombre"`
-	Rol          string `json:"rol"`
-	PuntoDeVenta *int   `json:"punto_de_venta"`
+	ID           string  `json:"id"`
+	Username     string  `json:"username"`
+	Nombre       string  `json:"nombre"`
+	Email        *string `json:"email"`
+	Rol          string  `json:"rol"`
+	PuntoDeVenta *int    `json:"punto_de_venta"`
+	Activo       bool    `json:"activo"`
 }
 
 type LoginResponse struct {

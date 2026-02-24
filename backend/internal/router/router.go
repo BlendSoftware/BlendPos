@@ -48,11 +48,13 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 	comprobanteRepo := repository.NewComprobanteRepository(db)
 	proveedorRepo := repository.NewProveedorRepository(db)
 	historialPrecioRepo := repository.NewHistorialPrecioRepository(db)
+	movimientoStockRepo := repository.NewMovimientoStockRepository(db)
+	categoriaRepo := repository.NewCategoriaRepository(db)
 
 	// ── Services ─────────────────────────────────────────────────────────────
 	authSvc := service.NewAuthService(usuarioRepo, cfg)
-	productoSvc := service.NewProductoService(productoRepo, rdb)
-	inventarioSvc := service.NewInventarioService(productoRepo)
+	productoSvc := service.NewProductoService(productoRepo, movimientoStockRepo, rdb)
+	inventarioSvc := service.NewInventarioService(productoRepo, movimientoStockRepo)
 	cajaSvc := service.NewCajaService(cajaRepo)
 
 	// Worker dispatcher — injected into services that enqueue async jobs
@@ -61,6 +63,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 	ventaSvc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, dispatcher)
 	facturacionSvc := service.NewFacturacionService(comprobanteRepo, dispatcher)
 	proveedorSvc := service.NewProveedorService(proveedorRepo, productoRepo)
+	categoriaSvc := service.NewCategoriaService(categoriaRepo)
 
 	// ── Handlers ─────────────────────────────────────────────────────────────
 	authH := handler.NewAuthHandler(authSvc)
@@ -73,6 +76,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 	usuariosH := handler.NewUsuariosHandler(authSvc)
 	consultaH := handler.NewConsultaPreciosHandler(productoRepo, rdb)
 	historialPreciosH := handler.NewHistorialPreciosHandler(historialPrecioRepo)
+	categoriasH := handler.NewCategoriasHandler(categoriaSvc)
 
 	// ── Routes ───────────────────────────────────────────────────────────────
 
@@ -110,6 +114,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 			prods.POST("", productosH.Crear)
 			prods.PUT("/:id", productosH.Actualizar)
 			prods.DELETE("/:id", productosH.Desactivar)
+			prods.PATCH("/:id/reactivar", productosH.Reactivar)
 		}
 
 		inv := v1.Group("/inventario", middleware.RequireRole("administrador", "supervisor"))
@@ -118,6 +123,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 			inv.GET("/vinculos", inventarioH.ListarVinculos)
 			inv.POST("/desarme", inventarioH.DesarmeManual)
 			inv.GET("/alertas", inventarioH.ObtenerAlertas)
+			inv.GET("/movimientos", inventarioH.ListarMovimientos)
 		}
 
 		caja := v1.Group("/caja")
@@ -154,10 +160,20 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 			usuarios.GET("", usuariosH.Listar)
 			usuarios.PUT("/:id", usuariosH.Actualizar)
 			usuarios.DELETE("/:id", usuariosH.Desactivar)
+			usuarios.PATCH("/:id/reactivar", usuariosH.Reactivar)
 		}
 
 		// Offline sync endpoint (PWA SyncEngine)
 		v1.POST("/ventas/sync-batch", middleware.RequireRole("cajero", "supervisor", "administrador"), ventasH.SyncBatch)
+
+		// Categorías — administrador can write, all authenticated can read
+		v1.GET("/categorias", middleware.RequireRole("cajero", "supervisor", "administrador"), categoriasH.Listar)
+		categorias := v1.Group("/categorias", middleware.RequireRole("administrador"))
+		{
+			categorias.POST("", categoriasH.Crear)
+			categorias.PUT("/:id", categoriasH.Actualizar)
+			categorias.DELETE("/:id", categoriasH.Desactivar)
+		}
 	}
 
 	// Swagger UI — only enabled outside production

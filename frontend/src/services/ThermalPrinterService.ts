@@ -504,6 +504,34 @@ export class ThermalPrinterService {
             await this.printEscPos(sale, { copy: i }, cfg);
         }
     }
+
+    /**
+     * Abre el cajón portamonedas de forma independiente (sin imprimir ticket).
+     * Útil para probar el hardware o para ventas donde no se imprime ticket.
+     * Comando ESC/POS: ESC p m t1 t2 → [0x1B, 0x70, 0x00, 0x19, 0xFA]
+     * @returns true si el comando fue enviado a la impresora, false si no hay conexión activa.
+     */
+    async openCashDrawer(): Promise<boolean> {
+        if (!this.isConnected || !this.writer) {
+            console.warn('[ThermalPrinter] openCashDrawer: sin conexión activa — intento de reconexión...');
+            const ok = await this.autoConnectIfPossible();
+            if (!ok || !this.writer) {
+                console.warn('[ThermalPrinter] openCashDrawer: no se pudo conectar. Simula apertura en consola.');
+                console.info('%c[CAJÓN PORTAMONEDAS] ▶ APERTURA SIMULADA', 'color: #e67700; font-weight: bold;');
+                return false;
+            }
+        }
+        try {
+            // ESC p  pin0  t1=50ms  t2=500ms
+            const cmd = new Uint8Array([0x1B, 0x70, 0x00, 0x19, 0xFA]);
+            await this.writer.write(cmd);
+            console.info('[ThermalPrinter] openCashDrawer: comando enviado (5 bytes).');
+            return true;
+        } catch (err) {
+            console.error('[ThermalPrinter] openCashDrawer: error al escribir en el puerto:', err);
+            return false;
+        }
+    }
 }
 
 /** Singleton exportado para uso directo */

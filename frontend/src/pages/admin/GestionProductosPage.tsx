@@ -2,14 +2,14 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
     Stack, Title, Text, Group, Button, TextInput, Select, Badge,
     Table, ActionIcon, Tooltip, Modal, NumberInput, Textarea,
-    Switch, Skeleton, Paper, Divider, Alert,
+    Switch, Skeleton, Paper, Divider, Alert, UnstyledButton,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { Plus, Search, Edit, PowerOff, Power, X, AlertCircle, PackagePlus } from 'lucide-react';
+import { Plus, Search, Edit, PowerOff, Power, X, AlertCircle, PackagePlus, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { formatARS } from '../../api/mockAdmin';
 import {
-    listarProductos, crearProducto, actualizarProducto, desactivarProducto, ajustarStock,
+    listarProductos, crearProducto, actualizarProducto, desactivarProducto, reactivarProducto, ajustarStock,
     type ProductoResponse,
 } from '../../services/api/products';
 import type { IProducto, CategoriaProducto } from '../../types';
@@ -76,6 +76,8 @@ export function GestionProductosPage() {
     const [busqueda, setBusqueda] = useState('');
     const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null);
     const [filtroEstado, setFiltroEstado] = useState<string | null>(null);
+    const [sortBy, setSortBy] = useState<string | null>(null);
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
     const [loading, setLoading] = useState(true);
     const [apiError, setApiError] = useState<string | null>(null);
 
@@ -94,7 +96,8 @@ export function GestionProductosPage() {
         setLoading(true);
         setApiError(null);
         try {
-            const resp = await listarProductos({ limit: 500, page: 1 });
+            // Fetch all products including inactive so that client-side filter works
+            const resp = await listarProductos({ limit: 500, page: 1, activo: 'all' });
             setProductos(resp.data.map(mapProducto));
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Error al cargar productos';
@@ -126,7 +129,7 @@ export function GestionProductosPage() {
     // ── Filtros ──────────────────────────────────────────────────────────────
 
     const filtered = useMemo(() => {
-        return productos.filter((p) => {
+        const arr = productos.filter((p) => {
             const matchBusqueda =
                 !busqueda ||
                 p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -137,7 +140,44 @@ export function GestionProductosPage() {
                 (filtroEstado === 'activo' ? p.activo : !p.activo);
             return matchBusqueda && matchCat && matchEstado;
         });
-    }, [productos, busqueda, filtroCategoria, filtroEstado]);
+
+        if (!sortBy) return arr;
+
+        return [...arr].sort((a, b) => {
+            let valA: number | string;
+            let valB: number | string;
+            switch (sortBy) {
+                case 'categoria': valA = a.categoria; valB = b.categoria; break;
+                case 'precioCosto': valA = a.precioCosto; valB = b.precioCosto; break;
+                case 'precioVenta': valA = a.precioVenta; valB = b.precioVenta; break;
+                case 'margen': {
+                    valA = a.precioCosto > 0 ? ((a.precioVenta - a.precioCosto) / a.precioCosto) : 0;
+                    valB = b.precioCosto > 0 ? ((b.precioVenta - b.precioCosto) / b.precioCosto) : 0;
+                    break;
+                }
+                case 'stock': valA = a.stock; valB = b.stock; break;
+                default: valA = a.nombre.toLowerCase(); valB = b.nombre.toLowerCase();
+            }
+            if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+            if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }, [productos, busqueda, filtroCategoria, filtroEstado, sortBy, sortDir]);
+
+    const toggleSort = (col: string) => {
+        if (sortBy === col) {
+            if (sortDir === 'asc') setSortDir('desc');
+            else { setSortBy(null); setSortDir('asc'); }
+        } else {
+            setSortBy(col);
+            setSortDir('asc');
+        }
+    };
+
+    const SortIcon = ({ col }: { col: string }) => {
+        if (sortBy !== col) return <ChevronsUpDown size={12} style={{ opacity: 0.4 }} />;
+        return sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
+    };
 
     // ── Acciones ──────────────────────────────────────────────────────────────
 
@@ -166,12 +206,16 @@ export function GestionProductosPage() {
     const toggleActivo = async (id: string) => {
         const tgt = productos.find((p) => p.id === id);
         try {
-            await desactivarProducto(id);
+            if (tgt?.activo) {
+                await desactivarProducto(id);
+            } else {
+                await reactivarProducto(id);
+            }
             setProductos((prev) =>
                 prev.map((p) => p.id === id ? { ...p, activo: !p.activo, actualizadoEn: new Date().toISOString() } : p)
             );
             notifications.show({
-                title: tgt?.activo ? 'Producto desactivado' : 'Producto activado',
+                title: tgt?.activo ? 'Producto desactivado' : 'Producto reactivado',
                 message: tgt?.nombre,
                 color: tgt?.activo ? 'gray' : 'teal',
             });
@@ -308,12 +352,36 @@ export function GestionProductosPage() {
                         <Table.Thead>
                             <Table.Tr>
                                 <Table.Th>Código</Table.Th>
-                                <Table.Th>Nombre</Table.Th>
-                                <Table.Th>Categoría</Table.Th>
-                                <Table.Th>Costo</Table.Th>
-                                <Table.Th>Venta</Table.Th>
-                                <Table.Th>Margen</Table.Th>
-                                <Table.Th>Stock</Table.Th>
+                                <Table.Th>
+                                    <UnstyledButton onClick={() => toggleSort('nombre')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
+                                        Nombre <SortIcon col="nombre" />
+                                    </UnstyledButton>
+                                </Table.Th>
+                                <Table.Th>
+                                    <UnstyledButton onClick={() => toggleSort('categoria')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
+                                        Categoría <SortIcon col="categoria" />
+                                    </UnstyledButton>
+                                </Table.Th>
+                                <Table.Th>
+                                    <UnstyledButton onClick={() => toggleSort('precioCosto')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
+                                        Costo <SortIcon col="precioCosto" />
+                                    </UnstyledButton>
+                                </Table.Th>
+                                <Table.Th>
+                                    <UnstyledButton onClick={() => toggleSort('precioVenta')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
+                                        Venta <SortIcon col="precioVenta" />
+                                    </UnstyledButton>
+                                </Table.Th>
+                                <Table.Th>
+                                    <UnstyledButton onClick={() => toggleSort('margen')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
+                                        Margen <SortIcon col="margen" />
+                                    </UnstyledButton>
+                                </Table.Th>
+                                <Table.Th>
+                                    <UnstyledButton onClick={() => toggleSort('stock')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
+                                        Stock <SortIcon col="stock" />
+                                    </UnstyledButton>
+                                </Table.Th>
                                 <Table.Th>Estado</Table.Th>
                                 <Table.Th style={{ width: 90 }}>Acciones</Table.Th>
                             </Table.Tr>

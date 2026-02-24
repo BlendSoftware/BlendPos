@@ -35,8 +35,10 @@ type ProductoFilter struct {
 	Nombre      string `form:"nombre"`
 	Categoria   string `form:"categoria"`
 	ProveedorID string `form:"proveedor_id"`
-	Page        int    `form:"page,default=1"  validate:"min=1"`
-	Limit       int    `form:"limit,default=20" validate:"min=1,max=100"`
+	// Activo: "true" = solo activos (default), "false" = solo inactivos, "all" = todos
+	Activo string `form:"activo,default=true"`
+	Page   int    `form:"page,default=1"  validate:"min=1"`
+	Limit  int    `form:"limit,default=20" validate:"min=1,max=100"`
 }
 
 // ─── Response DTOs ───────────────────────────────────────────────────────────

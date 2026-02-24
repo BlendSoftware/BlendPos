@@ -41,3 +41,31 @@ type DesarmeManualResponse struct {
 	PadresDesarmados  int    `json:"padres_desarmados"`
 	UnidadesGeneradas int    `json:"unidades_generadas"`
 }
+
+// ─── Movimiento Stock ─────────────────────────────────────────────────────────
+
+type MovimientoStockResponse struct {
+	ID             string `json:"id"`
+	ProductoID     string `json:"producto_id"`
+	ProductoNombre string `json:"producto_nombre"`
+	Tipo           string `json:"tipo"`
+	Cantidad       int    `json:"cantidad"`
+	StockAnterior  int    `json:"stock_anterior"`
+	StockNuevo     int    `json:"stock_nuevo"`
+	Motivo         string `json:"motivo"`
+	CreatedAt      string `json:"created_at"`
+}
+
+type MovimientoStockListResponse struct {
+	Data  []MovimientoStockResponse `json:"data"`
+	Total int64                     `json:"total"`
+	Page  int                       `json:"page"`
+	Limit int                       `json:"limit"`
+}
+
+type MovimientoStockFilter struct {
+	ProductoID string `form:"producto_id"`
+	Tipo       string `form:"tipo"`
+	Page       int    `form:"page,default=1"   validate:"min=1"`
+	Limit      int    `form:"limit,default=100" validate:"min=1,max=500"`
+}

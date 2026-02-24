@@ -19,9 +19,10 @@ type AuthService interface {
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
 	Refresh(ctx context.Context, refreshToken string) (*dto.LoginResponse, error)
 	CrearUsuario(ctx context.Context, req dto.CrearUsuarioRequest) (*dto.UsuarioResponse, error)
-	ListarUsuarios(ctx context.Context) ([]dto.UsuarioResponse, error)
+	ListarUsuarios(ctx context.Context, incluirInactivos bool) ([]dto.UsuarioResponse, error)
 	ActualizarUsuario(ctx context.Context, id uuid.UUID, req dto.ActualizarUsuarioRequest) (*dto.UsuarioResponse, error)
 	DesactivarUsuario(ctx context.Context, id uuid.UUID) error
+	ReactivarUsuario(ctx context.Context, id uuid.UUID) error
 }
 
 type authService struct {
@@ -136,12 +137,18 @@ func (s *authService) CrearUsuario(ctx context.Context, req dto.CrearUsuarioRequ
 	}
 	return &dto.UsuarioResponse{
 		ID: user.ID.String(), Username: user.Username, Nombre: user.Nombre,
-		Rol: user.Rol, PuntoDeVenta: user.PuntoDeVenta,
+		Email: user.Email, Rol: user.Rol, PuntoDeVenta: user.PuntoDeVenta, Activo: user.Activo,
 	}, nil
 }
 
-func (s *authService) ListarUsuarios(ctx context.Context) ([]dto.UsuarioResponse, error) {
-	users, err := s.repo.List(ctx)
+func (s *authService) ListarUsuarios(ctx context.Context, incluirInactivos bool) ([]dto.UsuarioResponse, error) {
+	var users []model.Usuario
+	var err error
+	if incluirInactivos {
+		users, err = s.repo.ListAll(ctx)
+	} else {
+		users, err = s.repo.List(ctx)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +156,7 @@ func (s *authService) ListarUsuarios(ctx context.Context) ([]dto.UsuarioResponse
 	for i, u := range users {
 		resp[i] = dto.UsuarioResponse{
 			ID: u.ID.String(), Username: u.Username, Nombre: u.Nombre,
-			Rol: u.Rol, PuntoDeVenta: u.PuntoDeVenta,
+			Email: u.Email, Rol: u.Rol, PuntoDeVenta: u.PuntoDeVenta, Activo: u.Activo,
 		}
 	}
 	return resp, nil
@@ -184,12 +191,16 @@ func (s *authService) ActualizarUsuario(ctx context.Context, id uuid.UUID, req d
 	}
 	return &dto.UsuarioResponse{
 		ID: user.ID.String(), Username: user.Username, Nombre: user.Nombre,
-		Rol: user.Rol, PuntoDeVenta: user.PuntoDeVenta,
+		Email: user.Email, Rol: user.Rol, PuntoDeVenta: user.PuntoDeVenta, Activo: user.Activo,
 	}, nil
 }
 
 func (s *authService) DesactivarUsuario(ctx context.Context, id uuid.UUID) error {
 	return s.repo.SoftDelete(ctx, id)
+}
+
+func (s *authService) ReactivarUsuario(ctx context.Context, id uuid.UUID) error {
+	return s.repo.Reactivar(ctx, id)
 }
 
 func (s *authService) generateToken(user *model.Usuario, duration time.Duration) (string, error) {

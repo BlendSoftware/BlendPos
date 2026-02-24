@@ -183,8 +183,30 @@ func (s *ventaService) RegistrarVenta(ctx context.Context, usuarioID uuid.UUID, 
 
 		// Descontar stock — uses DescontarStockTx (handles auto-desarme from Fase 3)
 		for _, r := range resolved {
+			// Fetch current stock before updating for movement record
+			prodBefore, _ := s.productoRepo.FindByID(ctx, r.productoID)
+			stockAntes := 0
+			if prodBefore != nil {
+				stockAntes = prodBefore.StockActual
+			}
+
 			if err := s.inventario.DescontarStockTx(ctx, r.productoID, r.cantidad, tx); err != nil {
 				return fmt.Errorf("error descontando stock de %s: %w", r.nombre, err)
+			}
+
+			// Record movimiento de stock
+			ventaRef := venta.ID
+			mov := &model.MovimientoStock{
+				ProductoID:    r.productoID,
+				Tipo:          "venta",
+				Cantidad:      -r.cantidad,
+				StockAnterior: stockAntes,
+				StockNuevo:    stockAntes - r.cantidad,
+				Motivo:        fmt.Sprintf("Venta #%d", ticketNum),
+				ReferenciaID:  &ventaRef,
+			}
+			if err := s.inventario.RegistrarMovimientoTx(tx, mov); err != nil {
+				return err
 			}
 		}
 
@@ -243,9 +265,29 @@ func (s *ventaService) AnularVenta(ctx context.Context, id uuid.UUID, motivo str
 	}
 
 	txErr := runTx(ctx, s.repo.DB(), func(tx *gorm.DB) error {
-		// Restore stock for each item
+		// Restore stock for each item and record movimiento
 		for _, item := range venta.Items {
+			prodBefore, _ := s.productoRepo.FindByID(ctx, item.ProductoID)
+			stockAntes := 0
+			if prodBefore != nil {
+				stockAntes = prodBefore.StockActual
+			}
+
 			if err := s.productoRepo.UpdateStockTx(tx, item.ProductoID, item.Cantidad); err != nil {
+				return err
+			}
+
+			ventaRef := venta.ID
+			movStock := &model.MovimientoStock{
+				ProductoID:    item.ProductoID,
+				Tipo:          "restore_anulacion",
+				Cantidad:      item.Cantidad,
+				StockAnterior: stockAntes,
+				StockNuevo:    stockAntes + item.Cantidad,
+				Motivo:        fmt.Sprintf("Anulación venta #%d — %s", venta.NumeroTicket, motivo),
+				ReferenciaID:  &ventaRef,
+			}
+			if err := s.inventario.RegistrarMovimientoTx(tx, movStock); err != nil {
 				return err
 			}
 		}

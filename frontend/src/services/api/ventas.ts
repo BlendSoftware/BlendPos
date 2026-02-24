@@ -57,7 +57,15 @@ export interface VentaListResponse {
 
 export interface VentaFilter {
     fecha?: string;
+    /** ISO date string YYYY-MM-DD */
+    desde?: string;
+    /** ISO date string YYYY-MM-DD */
+    hasta?: string;
     estado?: string;
+    /** "fecha" | "total" | "numero_ticket" */
+    ordenar_por?: string;
+    /** "asc" | "desc" */
+    orden?: string;
     page?: number;
     limit?: number;
 }
@@ -138,7 +146,11 @@ export async function syncSalesBatch(sales: LocalSale[]): Promise<VentaResponse[
 export async function listarVentas(filter: VentaFilter = {}): Promise<VentaListResponse> {
     return apiClient.get<VentaListResponse>('/v1/ventas', {
         fecha: filter.fecha,
+        desde: filter.desde,
+        hasta: filter.hasta,
         estado: filter.estado,
+        ordenar_por: filter.ordenar_por,
+        orden: filter.orden,
         page: filter.page ?? 1,
         limit: filter.limit ?? 50,
     });

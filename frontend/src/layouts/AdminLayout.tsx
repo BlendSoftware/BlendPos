@@ -5,9 +5,9 @@ import {
     Tooltip, Divider,
 } from '@mantine/core';
 import {
-    ShoppingCart, Package, Boxes, Truck, FileText,
+    Package, Boxes, Truck, FileText,
     Users, Calculator, LogOut, ChevronRight, Home,
-    BarChart2, Search,
+    BarChart2, Tag,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import styles from './AdminLayout.module.css';
@@ -23,8 +23,8 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
     { label: 'Dashboard',       path: '/admin/dashboard',    icon: <BarChart2 size={18} /> },
-    { label: 'Terminal POS',    path: '/',                   icon: <ShoppingCart size={18} /> },
     { label: 'Productos',       path: '/admin/productos',    icon: <Package size={18} /> },
+    { label: 'Categorías',      path: '/admin/categorias',   icon: <Tag size={18} /> },
     { label: 'Inventario',      path: '/admin/inventario',   icon: <Boxes size={18} /> },
     { label: 'Proveedores',     path: '/admin/proveedores',  icon: <Truck size={18} /> },
     { label: 'Facturación',     path: '/admin/facturacion',  icon: <FileText size={18} /> },
@@ -65,16 +65,6 @@ export function AdminLayout() {
                     <Text className={styles.brandSub}>Sistema de Gestión</Text>
                 </div>
 
-                <Tooltip label="Consulta de precios (pública)" position="right" withArrow>
-                    <button
-                        className={`${styles.navLink} ${location.pathname === '/consulta' ? styles.navLinkActive : ''}`}
-                        onClick={() => { navigate('/consulta'); setOpened(false); }}
-                    >
-                        <Search size={18} />
-                        Consulta de Precios
-                    </button>
-                </Tooltip>
-
                 <Divider my="xs" color="dark.6" />
                 <div className={styles.navSectionLabel}>Navegación</div>
 
@@ -104,7 +94,7 @@ export function AdminLayout() {
                             onClick={() => navigate('/')}
                         >
                             <Home size={18} />
-                            Volver al POS
+                            Terminal POS
                         </button>
                     </Tooltip>
                     <button className={styles.navLinkDanger} onClick={handleLogout}>

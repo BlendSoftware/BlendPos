@@ -5,7 +5,7 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { Lock, CheckCircle, AlertTriangle, History, ClipboardList } from 'lucide-react';
+import { Lock, CheckCircle, AlertTriangle, History, ClipboardList, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useCajaStore } from '../../store/useCajaStore';
 import { formatARS } from '../../api/mockAdmin';
@@ -27,18 +27,23 @@ export function CierreCajaPage() {
     const [submitted, setSubmitted] = useState(false);
     const [apiResult, setApiResult] = useState<ApiArqueoResponse | null>(null);
     const [reporte, setReporte] = useState<ReporteCajaResponse | null>(null);
-    const [, setLoadingReporte] = useState(false);
+    const [loadingReporte, setLoadingReporte] = useState(false);
     const [historial, setHistorial] = useState<ReporteCajaResponse[]>([]);
     const [loadingHistorial, setLoadingHistorial] = useState(false);
     const [activeTab, setActiveTab] = useState<string | null>('arqueo');
     const [desvioCritico, setDesvioCritico] = useState(false);
 
-    // Cargar reporte de la sesión activa
-    useEffect(() => {
+    const cargarReporte = async () => {
         if (!sesionId) return;
         setLoadingReporte(true);
         recargarReporte().then((r) => { setReporte(r); setLoadingReporte(false); }).catch(() => setLoadingReporte(false));
-    }, [sesionId, recargarReporte]);
+    };
+
+    // Cargar reporte de la sesión activa
+    useEffect(() => {
+        cargarReporte();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sesionId]);
 
     // Cargar historial cuando el tab se activa
     useEffect(() => {
@@ -146,6 +151,19 @@ export function CierreCajaPage() {
                     {!submitted ? (
                         <form onSubmit={handleSubmit}>
                             <Stack gap="lg">
+                                <Group justify="flex-end">
+                                    <Button
+                                        size="xs"
+                                        variant="subtle"
+                                        leftSection={<RefreshCw size={13} />}
+                                        loading={loadingReporte}
+                                        onClick={cargarReporte}
+                                        disabled={!sesionId}
+                                    >
+                                        Actualizar totales
+                                    </Button>
+                                </Group>
+
                                 <Alert color="blue" variant="light" icon={<Lock size={16} />}>
                                     <strong>Arqueo ciego:</strong> No verás el monto esperado hasta enviar el formulario.
                                     Contá el efectivo y completá las denominaciones.

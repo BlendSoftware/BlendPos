@@ -20,6 +20,9 @@ type ProveedorRepository interface {
 	CreateHistorialPrecio(ctx context.Context, h *model.HistorialPrecio) error
 	ListHistorialPorProducto(ctx context.Context, productoID uuid.UUID) ([]model.HistorialPrecio, error)
 
+	// Contacts
+	ReplaceContactos(ctx context.Context, proveedorID uuid.UUID, contactos []model.ContactoProveedor) error
+
 	// DB exposes the underlying *gorm.DB so services can open transactions.
 	DB() *gorm.DB
 }
@@ -34,13 +37,13 @@ func (r *proveedorRepo) Create(ctx context.Context, p *model.Proveedor) error {
 
 func (r *proveedorRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.Proveedor, error) {
 	var p model.Proveedor
-	err := r.db.WithContext(ctx).First(&p, id).Error
+	err := r.db.WithContext(ctx).Preload("Contactos").First(&p, id).Error
 	return &p, err
 }
 
 func (r *proveedorRepo) List(ctx context.Context) ([]model.Proveedor, error) {
 	var proveedores []model.Proveedor
-	err := r.db.WithContext(ctx).Where("activo = true").Order("razon_social ASC").Find(&proveedores).Error
+	err := r.db.WithContext(ctx).Preload("Contactos").Where("activo = true").Order("razon_social ASC").Find(&proveedores).Error
 	return proveedores, err
 }
 
@@ -67,3 +70,18 @@ func (r *proveedorRepo) ListHistorialPorProducto(ctx context.Context, productoID
 }
 
 func (r *proveedorRepo) DB() *gorm.DB { return r.db }
+
+// ReplaceContactos deletes all existing contacts for the supplier and inserts the new ones.
+func (r *proveedorRepo) ReplaceContactos(ctx context.Context, proveedorID uuid.UUID, contactos []model.ContactoProveedor) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("proveedor_id = ?", proveedorID).Delete(&model.ContactoProveedor{}).Error; err != nil {
+			return err
+		}
+		if len(contactos) > 0 {
+			if err := tx.Create(&contactos).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}

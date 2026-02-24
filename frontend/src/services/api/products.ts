@@ -47,6 +47,8 @@ export interface ProductoFilter {
     nombre?: string;
     categoria?: string;
     proveedor_id?: string;
+    /** "true" = activos (default), "false" = inactivos, "all" = todos */
+    activo?: 'true' | 'false' | 'all';
     page?: number;
     limit?: number;
 }
@@ -95,6 +97,7 @@ export async function listarProductos(filter: ProductoFilter = {}): Promise<Prod
         nombre: filter.nombre,
         categoria: filter.categoria,
         proveedor_id: filter.proveedor_id,
+        activo: filter.activo,
         page: filter.page ?? 1,
         limit: filter.limit ?? 50,
     });
@@ -126,6 +129,13 @@ export async function actualizarProducto(id: string, data: ActualizarProductoReq
  */
 export async function desactivarProducto(id: string): Promise<void> {
     return apiClient.delete<void>(`/v1/productos/${id}`);
+}
+
+/**
+ * PATCH /v1/productos/:id/reactivar  (requiere rol: administrador)
+ */
+export async function reactivarProducto(id: string): Promise<void> {
+    return apiClient.patch<void>(`/v1/productos/${id}/reactivar`, {});
 }
 
 /**

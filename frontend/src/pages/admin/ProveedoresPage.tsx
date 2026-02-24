@@ -2,46 +2,55 @@ import { Fragment, useState, useCallback, useMemo, useEffect } from 'react';
 import {
     Stack, Title, Text, Group, Button, TextInput, Modal, Tabs,
     Table, Paper, Badge, ActionIcon, Tooltip, Divider, Alert,
-    List, Skeleton,
+    List, Skeleton, Select,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { Dropzone, type FileWithPath } from '@mantine/dropzone';
 import { notifications } from '@mantine/notifications';
-import { Plus, Edit, Upload, CheckCircle, X, ChevronDown, ChevronUp, Search, Trash2 } from 'lucide-react';
+import { Plus, Edit, Upload, CheckCircle, X, ChevronDown, ChevronUp, Search, Trash2,
+    Barcode, Copy, Hash, TrendingDown, FileText, AlertCircle, CheckSquare } from 'lucide-react';
 import {
     listarProveedores, crearProveedor, actualizarProveedor, importarCSV,
-    type ProveedorResponse,
+    type ProveedorResponse, type CSVImportResponse,
 } from '../../services/api/proveedores';
-import type { IProveedor, IContactoProveedor, IFilaPrecioCSV } from '../../types';
+import type { IProveedor, IContactoProveedor } from '../../types';
 
 // Mapper ProveedorResponse → IProveedor
 function mapProveedor(p: ProveedorResponse): IProveedor {
-    const contactos: IContactoProveedor[] = [];
-    if (p.telefono || p.email) {
+    const contactos: IContactoProveedor[] = (p.contactos ?? []).map((c) => ({
+        nombre: c.nombre,
+        cargo: c.cargo,
+        telefono: c.telefono ?? '',
+        email: c.email ?? '',
+    }));
+    // Fallback: if API returns no contacts list but has legacy telefono/email fields
+    if (contactos.length === 0 && (p.telefono || p.email)) {
         contactos.push({ nombre: 'Contacto', telefono: p.telefono ?? '', email: p.email ?? '' });
     }
     return { id: p.id, razonSocial: p.razon_social, cuit: p.cuit, direccion: p.direccion ?? '', contactos, activo: p.activo, creadoEn: '' };
 }
 
-// ── CSV Parser ────────────────────────────────────────────────────────────────
+// ── CSV error-code → icon mapping ────────────────────────────────────────────
 
-function parseCSV(text: string): IFilaPrecioCSV[] {
-    const lines = text.trim().split('\n').slice(1); // skip header
-    return lines.map((line): IFilaPrecioCSV => {
-        const [codigo, nombre, precioNuevoStr] = line.split(',').map((s) => s.trim());
-        const precioNuevo = parseFloat(precioNuevoStr);
-        const valido = Boolean(codigo && nombre && !isNaN(precioNuevo) && precioNuevo > 0);
-        return {
-            codigoBarras: codigo ?? '',
-            nombre: nombre ?? '',
-            precioActual: 1000, // mock: vendría del backend
-            precioNuevo: valido ? precioNuevo : 0,
-            diferencia: valido ? precioNuevo - 1000 : 0,
-            valido,
-            error: !valido ? 'Fila inválida' : undefined,
-        };
-    });
-}
+const ERROR_ICONS: Record<string, React.ReactNode> = {
+    BARCODE_MISSING:   <Barcode size={15} color="var(--mantine-color-red-5)" />,
+    BARCODE_DUPLICATE: <Copy size={15} color="var(--mantine-color-orange-5)" />,
+    PRICE_NOT_NUMBER:  <Hash size={15} color="var(--mantine-color-yellow-5)" />,
+    PRICE_NEGATIVE:    <TrendingDown size={15} color="var(--mantine-color-red-5)" />,
+    NAME_MISSING:      <FileText size={15} color="var(--mantine-color-orange-5)" />,
+    ROW_FORMAT:        <AlertCircle size={15} color="var(--mantine-color-red-5)" />,
+    READ_ERROR:        <AlertCircle size={15} color="var(--mantine-color-red-5)" />,
+};
+
+const ERROR_LABELS: Record<string, string> = {
+    BARCODE_MISSING:   'Código de barras vacío',
+    BARCODE_DUPLICATE: 'Código duplicado en el CSV',
+    PRICE_NOT_NUMBER:  'El precio no es un número válido',
+    PRICE_NEGATIVE:    'El precio no puede ser negativo',
+    NAME_MISSING:      'Nombre del producto vacío',
+    ROW_FORMAT:        'Formato de fila incorrecto',
+    READ_ERROR:        'Error de lectura',
+};
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -54,9 +63,10 @@ export function ProveedoresPage() {
     const [loading, setLoading] = useState(true);
 
     // CSV
-    const [csvPreview, setCsvPreview] = useState<IFilaPrecioCSV[] | null>(null);
-    const [csvLoading, setCsvLoading] = useState(false);
     const [csvFile, setCsvFile] = useState<FileWithPath | null>(null);
+    const [csvLoading, setCsvLoading] = useState(false);
+    const [importResult, setImportResult] = useState<CSVImportResponse | null>(null);
+    const [csvProveedorId, setCsvProveedorId] = useState<string | null>(null);
 
     const fetchProveedores = useCallback(async () => {
         setLoading(true);
@@ -83,7 +93,7 @@ export function ProveedoresPage() {
     const form = useForm({
         initialValues: {
             razonSocial: '', cuit: '', direccion: '',
-            contactoNombre: '', telefonos: [''], contactoEmail: '',
+            contactos: [{ nombre: '', cargo: '', telefono: '', email: '' }],
         },
         validate: {
             razonSocial: (v) => (v.trim().length >= 3 ? null : 'Requerido'),
@@ -94,30 +104,42 @@ export function ProveedoresPage() {
     const openCreate = () => {
         setEditTarget(null);
         form.reset();
-        form.setFieldValue('telefonos', ['']);
+        form.setFieldValue('contactos', [{ nombre: '', cargo: '', telefono: '', email: '' }]);
         setModalOpen(true);
     };
 
     const openEdit = (p: IProveedor) => {
         setEditTarget(p);
-        const c = p.contactos[0];
-        // Split existing telefono on " / " to restore dynamic list
-        const telefonos = c?.telefono ? c.telefono.split(' / ').filter(Boolean) : [''];
-        form.setValues({
-            razonSocial: p.razonSocial, cuit: p.cuit, direccion: p.direccion,
-            contactoNombre: c?.nombre ?? '', telefonos: telefonos.length > 0 ? telefonos : [''], contactoEmail: c?.email ?? '',
-        });
+        const contactos = p.contactos.length > 0
+            ? p.contactos.map((c) => ({
+                nombre: c.nombre,
+                cargo: c.cargo ?? '',
+                telefono: c.telefono,
+                email: c.email,
+            }))
+            : [{ nombre: '', cargo: '', telefono: '', email: '' }];
+        form.setValues({ razonSocial: p.razonSocial, cuit: p.cuit, direccion: p.direccion, contactos });
         setModalOpen(true);
     };
 
     const handleSubmit = form.onSubmit(async (values) => {
-        const telefonoJoined = values.telefonos.filter((t) => t.trim()).join(' / ');
+        const contactosPayload = values.contactos
+            .filter((c) => c.nombre.trim())
+            .map((c) => ({
+                nombre: c.nombre.trim(),
+                cargo: c.cargo?.trim() || undefined,
+                telefono: c.telefono?.trim() || undefined,
+                email: c.email?.trim() || undefined,
+            }));
+        // Legacy single telefono/email from first contact for backwards compatibility
+        const firstContact = contactosPayload[0];
         const req = {
             razon_social: values.razonSocial,
             cuit: values.cuit,
             direccion: values.direccion || undefined,
-            telefono: telefonoJoined || undefined,
-            email: values.contactoEmail || undefined,
+            telefono: firstContact?.telefono || undefined,
+            email: firstContact?.email || undefined,
+            contactos: contactosPayload,
         };
         try {
             if (editTarget) {
@@ -134,34 +156,35 @@ export function ProveedoresPage() {
         }
     });
 
-    // CSV drop
+    // CSV drop — just store the file, no client-side preview
     const onDrop = useCallback((files: FileWithPath[]) => {
         const file = files[0];
         if (!file) return;
         setCsvFile(file);
-        setCsvLoading(true);
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const text = e.target?.result as string;
-            const filas = parseCSV(text);
-            setCsvPreview(filas);
-            setCsvLoading(false);
-        };
-        reader.readAsText(file);
+        setImportResult(null);
     }, []);
 
     const aplicarCSV = async () => {
-        // Use the first proveedor as target for CSV import, or require selection
         if (!csvFile) return;
-        const provId = editTarget?.id ?? proveedores[0]?.id;
-        if (!provId) { notifications.show({ title: 'Sin proveedor', message: 'Seleccione un proveedor primero', color: 'yellow' }); return; }
+        const provId = csvProveedorId;
+        if (!provId) {
+            notifications.show({ title: 'Sin proveedor', message: 'Seleccioná un proveedor antes de importar', color: 'yellow' });
+            return;
+        }
+        setCsvLoading(true);
         try {
             const resp = await importarCSV(provId, csvFile);
-            notifications.show({ title: 'CSV importado', message: `${resp.procesadas} productos actualizados, ${resp.errores} errores.`, color: 'teal' });
-            setCsvPreview(null);
+            setImportResult(resp);
+            if (resp.errores === 0) {
+                notifications.show({ title: 'CSV importado', message: `${resp.procesadas} productos actualizados sin errores.`, color: 'teal' });
+            } else {
+                notifications.show({ title: 'CSV importado con errores', message: `${resp.procesadas} actualizados · ${resp.errores} errores.`, color: 'orange' });
+            }
             setCsvFile(null);
         } catch (err) {
             notifications.show({ title: 'Error CSV', message: err instanceof Error ? err.message : 'Error', color: 'red' });
+        } finally {
+            setCsvLoading(false);
         }
     };
 
@@ -265,76 +288,126 @@ export function ProveedoresPage() {
                 <Tabs.Panel value="csv" pt="lg">
                     <Stack gap="md">
                         <Alert color="blue" variant="light">
-                            El CSV acepta dos formatos (con encabezado en la primera fila):<br />
-                            • <strong>codigo_barras,nombre,precio_nuevo</strong> — precio de venta simplificado<br />
-                            • <strong>codigo_barras,nombre,precio_costo,precio_venta</strong> — precios completos
+                            El CSV debe tener el siguiente encabezado en la primera fila:<br />
+                            <strong>codigo_barras,nombre,precio_desactualizado,precio_actualizado</strong><br />
+                            <Text size="xs" c="dimmed" mt={4}>También se acepta: <em>codigo_barras,nombre,precio_costo,precio_venta</em></Text>
                         </Alert>
 
-                        {!csvPreview ? (
-                            <Dropzone
-                                onDrop={onDrop}
-                                accept={['text/csv', '.csv']}
-                                loading={csvLoading}
-                                maxSize={2 * 1024 * 1024}
-                                style={{ background: 'var(--mantine-color-dark-8)', border: '2px dashed var(--mantine-color-dark-4)' }}
-                            >
-                                <Stack align="center" gap="xs" py="xl">
-                                    <Upload size={36} color="var(--mantine-color-dimmed)" />
-                                    <Text size="sm" fw={500}>Arrastrá el CSV aquí o hacé click</Text>
-                                    <Text size="xs" c="dimmed">Solo archivos .csv — máx 2MB</Text>
-                                </Stack>
-                            </Dropzone>
-                        ) : (
-                            <Stack gap="md">
-                                <Group justify="space-between">
-                                    <Text fw={600}>
-                                        Vista previa: {csvPreview.filter((f) => f.valido).length} válidas / {csvPreview.length} filas
-                                    </Text>
-                                    <Group gap="sm">
-                                        <Button variant="subtle" leftSection={<X size={14} />} onClick={() => setCsvPreview(null)}>
-                                            Cancelar
+                        <Select
+                            label="Proveedor"
+                            placeholder="Seleccioná el proveedor para esta importación"
+                            required
+                            data={proveedores
+                                .filter((p) => p.activo)
+                                .map((p) => ({ value: p.id, label: p.razonSocial }))
+                            }
+                            value={csvProveedorId}
+                            onChange={setCsvProveedorId}
+                        />
+
+                        {/* ── Upload zone or file selected ── */}
+                        {!importResult && (
+                            <>
+                                <Dropzone
+                                    onDrop={onDrop}
+                                    accept={['text/csv', '.csv']}
+                                    loading={csvLoading}
+                                    maxSize={2 * 1024 * 1024}
+                                    style={{ background: 'var(--mantine-color-dark-8)', border: '2px dashed var(--mantine-color-dark-4)' }}
+                                >
+                                    <Stack align="center" gap="xs" py="xl">
+                                        <Upload size={36} color="var(--mantine-color-dimmed)" />
+                                        {csvFile
+                                            ? <Text size="sm" fw={600} c="teal">{csvFile.name}</Text>
+                                            : <Text size="sm" fw={500}>Arrastrá el CSV aquí o hacé click</Text>
+                                        }
+                                        <Text size="xs" c="dimmed">Solo archivos .csv — máx 2MB</Text>
+                                    </Stack>
+                                </Dropzone>
+
+                                {csvFile && (
+                                    <Group justify="flex-end" gap="sm">
+                                        <Button variant="subtle" leftSection={<X size={14} />} onClick={() => setCsvFile(null)}>
+                                            Quitar archivo
                                         </Button>
-                                        <Button leftSection={<CheckCircle size={14} />} onClick={aplicarCSV}>
-                                            Aplicar {csvPreview.filter((f) => f.valido).length} cambios
+                                        <Button leftSection={<CheckCircle size={14} />} loading={csvLoading} onClick={aplicarCSV}>
+                                            Importar precios
                                         </Button>
                                     </Group>
+                                )}
+                            </>
+                        )}
+
+                        {/* ── Import result table ── */}
+                        {importResult && (
+                            <Stack gap="md">
+                                <Group justify="space-between">
+                                    <Group gap="sm">
+                                        <Badge color="teal" size="md" variant="light">
+                                            {importResult.procesadas} actualizados
+                                        </Badge>
+                                        {importResult.errores > 0 && (
+                                            <Badge color="red" size="md" variant="light">
+                                                {importResult.errores} errores
+                                            </Badge>
+                                        )}
+                                    </Group>
+                                    <Button
+                                        variant="subtle" size="sm" leftSection={<Upload size={14} />}
+                                        onClick={() => { setImportResult(null); setCsvFile(null); setCsvProveedorId(null); }}
+                                    >
+                                        Importar otro archivo
+                                    </Button>
                                 </Group>
 
-                                <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
-                                    <Table verticalSpacing="xs">
-                                        <Table.Thead>
-                                            <Table.Tr>
-                                                <Table.Th>Código</Table.Th>
-                                                <Table.Th>Nombre</Table.Th>
-                                                <Table.Th>Precio actual</Table.Th>
-                                                <Table.Th>Precio nuevo</Table.Th>
-                                                <Table.Th>Diferencia</Table.Th>
-                                                <Table.Th>Estado</Table.Th>
-                                            </Table.Tr>
-                                        </Table.Thead>
-                                        <Table.Tbody>
-                                            {csvPreview.map((fila, i) => (
-                                                <Table.Tr key={i} style={{ opacity: fila.valido ? 1 : 0.5 }}>
-                                                    <Table.Td><Text size="xs" ff="monospace">{fila.codigoBarras}</Text></Table.Td>
-                                                    <Table.Td><Text size="sm">{fila.nombre}</Text></Table.Td>
-                                                    <Table.Td><Text size="sm">${fila.precioActual.toFixed(2)}</Text></Table.Td>
-                                                    <Table.Td><Text size="sm" fw={600}>${fila.precioNuevo.toFixed(2)}</Text></Table.Td>
-                                                    <Table.Td>
-                                                        <Text size="sm" c={fila.diferencia > 0 ? 'red' : 'teal'}>
-                                                            {fila.diferencia > 0 ? '+' : ''}{fila.diferencia.toFixed(2)}
-                                                        </Text>
-                                                    </Table.Td>
-                                                    <Table.Td>
-                                                        {fila.valido
-                                                            ? <Badge color="teal" size="xs">OK</Badge>
-                                                            : <Badge color="red"  size="xs">Error: {fila.error}</Badge>
-                                                        }
-                                                    </Table.Td>
+                                {importResult.detalle_errores.length > 0 ? (
+                                    <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
+                                        <Table verticalSpacing="xs">
+                                            <Table.Thead>
+                                                <Table.Tr>
+                                                    <Table.Th style={{ width: 60 }}>N° Fila</Table.Th>
+                                                    <Table.Th>Código</Table.Th>
+                                                    <Table.Th>Nombre</Table.Th>
+                                                    <Table.Th style={{ width: 48 }}>Estado</Table.Th>
+                                                    <Table.Th>Detalle</Table.Th>
                                                 </Table.Tr>
-                                            ))}
-                                        </Table.Tbody>
-                                    </Table>
-                                </Paper>
+                                            </Table.Thead>
+                                            <Table.Tbody>
+                                                {importResult.detalle_errores.map((err, i) => (
+                                                    <Table.Tr key={i}>
+                                                        <Table.Td>
+                                                            <Text size="xs" ff="monospace" c="dimmed">{err.fila}</Text>
+                                                        </Table.Td>
+                                                        <Table.Td>
+                                                            <Text size="xs" ff="monospace">{err.codigo_barras || '—'}</Text>
+                                                        </Table.Td>
+                                                        <Table.Td>
+                                                            <Text size="sm">{err.nombre || '—'}</Text>
+                                                        </Table.Td>
+                                                        <Table.Td>
+                                                            <Tooltip
+                                                                label={ERROR_LABELS[err.error_code] ?? err.error_code}
+                                                                withArrow
+                                                                position="top"
+                                                            >
+                                                                <span style={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
+                                                                    {ERROR_ICONS[err.error_code] ?? <AlertCircle size={15} color="var(--mantine-color-red-5)" />}
+                                                                </span>
+                                                            </Tooltip>
+                                                        </Table.Td>
+                                                        <Table.Td>
+                                                            <Text size="xs" c="dimmed">{err.motivo}</Text>
+                                                        </Table.Td>
+                                                    </Table.Tr>
+                                                ))}
+                                            </Table.Tbody>
+                                        </Table>
+                                    </Paper>
+                                ) : (
+                                    <Alert color="teal" variant="light" icon={<CheckSquare size={16} />}>
+                                        Todos los productos fueron actualizados correctamente.
+                                    </Alert>
+                                )}
                             </Stack>
                         )}
                     </Stack>
@@ -346,7 +419,7 @@ export function ProveedoresPage() {
                 opened={modalOpen}
                 onClose={() => setModalOpen(false)}
                 title={<Text fw={700}>{editTarget ? 'Editar proveedor' : 'Nuevo proveedor'}</Text>}
-                size="md"
+                size="lg"
                 centered
             >
                 <form onSubmit={handleSubmit}>
@@ -354,45 +427,81 @@ export function ProveedoresPage() {
                         <TextInput label="Razón Social" {...form.getInputProps('razonSocial')} />
                         <TextInput label="CUIT" placeholder="30-12345678-9" {...form.getInputProps('cuit')} />
                         <TextInput label="Dirección" {...form.getInputProps('direccion')} />
-                        <Divider label="Contacto principal" labelPosition="left" />
-                        <TextInput label="Nombre" {...form.getInputProps('contactoNombre')} />
-                        <div>
-                            <Text size="sm" fw={500} mb={4}>Teléfonos</Text>
-                            <Stack gap="xs">
-                                {form.values.telefonos.map((tel, idx) => (
-                                    <Group key={idx} gap="xs">
-                                        <TextInput
-                                            placeholder={`Teléfono ${idx + 1}`}
-                                            style={{ flex: 1 }}
-                                            value={tel}
-                                            onChange={(e) => {
-                                                const updated = [...form.values.telefonos];
-                                                updated[idx] = e.currentTarget.value;
-                                                form.setFieldValue('telefonos', updated);
-                                            }}
-                                        />
-                                        {form.values.telefonos.length > 1 && (
+
+                        <Divider label="Contactos" labelPosition="left" />
+
+                        {form.values.contactos.map((_, idx) => (
+                            <Paper key={idx} p="sm" radius="sm" withBorder style={{ background: 'var(--mantine-color-dark-7)' }}>
+                                <Stack gap="xs">
+                                    <Group justify="space-between" align="center">
+                                        <Text size="xs" fw={600} c="dimmed">CONTACTO {idx + 1}</Text>
+                                        {form.values.contactos.length > 1 && (
                                             <ActionIcon
                                                 color="red" variant="subtle" size="sm"
                                                 onClick={() => {
-                                                    const updated = form.values.telefonos.filter((_, i) => i !== idx);
-                                                    form.setFieldValue('telefonos', updated);
+                                                    const updated = form.values.contactos.filter((_, i) => i !== idx);
+                                                    form.setFieldValue('contactos', updated);
                                                 }}
                                             >
-                                                <Trash2 size={14} />
+                                                <Trash2 size={12} />
                                             </ActionIcon>
                                         )}
                                     </Group>
-                                ))}
-                                <Button
-                                    variant="subtle" size="xs" leftSection={<Plus size={12} />}
-                                    onClick={() => form.setFieldValue('telefonos', [...form.values.telefonos, ''])}
-                                >
-                                    Agregar teléfono
-                                </Button>
-                            </Stack>
-                        </div>
-                        <TextInput label="Email" placeholder="contacto@empresa.com" {...form.getInputProps('contactoEmail')} />
+                                    <Group grow gap="xs">
+                                        <TextInput
+                                            label="Nombre"
+                                            placeholder="Juan Pérez"
+                                            value={form.values.contactos[idx].nombre}
+                                            onChange={(e) => {
+                                                const updated = [...form.values.contactos];
+                                                updated[idx] = { ...updated[idx], nombre: e.currentTarget.value };
+                                                form.setFieldValue('contactos', updated);
+                                            }}
+                                        />
+                                        <TextInput
+                                            label="Cargo (opcional)"
+                                            placeholder="Ej: Ventas"
+                                            value={form.values.contactos[idx].cargo}
+                                            onChange={(e) => {
+                                                const updated = [...form.values.contactos];
+                                                updated[idx] = { ...updated[idx], cargo: e.currentTarget.value };
+                                                form.setFieldValue('contactos', updated);
+                                            }}
+                                        />
+                                    </Group>
+                                    <Group grow gap="xs">
+                                        <TextInput
+                                            label="Teléfono"
+                                            placeholder="11-1234-5678"
+                                            value={form.values.contactos[idx].telefono}
+                                            onChange={(e) => {
+                                                const updated = [...form.values.contactos];
+                                                updated[idx] = { ...updated[idx], telefono: e.currentTarget.value };
+                                                form.setFieldValue('contactos', updated);
+                                            }}
+                                        />
+                                        <TextInput
+                                            label="Email"
+                                            placeholder="contacto@empresa.com"
+                                            value={form.values.contactos[idx].email}
+                                            onChange={(e) => {
+                                                const updated = [...form.values.contactos];
+                                                updated[idx] = { ...updated[idx], email: e.currentTarget.value };
+                                                form.setFieldValue('contactos', updated);
+                                            }}
+                                        />
+                                    </Group>
+                                </Stack>
+                            </Paper>
+                        ))}
+
+                        <Button
+                            variant="subtle" size="xs" leftSection={<Plus size={12} />}
+                            onClick={() => form.setFieldValue('contactos', [...form.values.contactos, { nombre: '', cargo: '', telefono: '', email: '' }])}
+                        >
+                            Agregar contacto
+                        </Button>
+
                         <Group justify="flex-end" mt="sm">
                             <Button variant="subtle" onClick={() => setModalOpen(false)}>Cancelar</Button>
                             <Button type="submit">{editTarget ? 'Guardar' : 'Crear'}</Button>

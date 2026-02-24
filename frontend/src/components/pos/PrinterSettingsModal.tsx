@@ -4,6 +4,9 @@ import {
 } from '@mantine/core';
 import { usePrinterStore } from '../../store/usePrinterStore';
 import type { PrinterConfig } from '../../services/ThermalPrinterService';
+import { thermalPrinter } from '../../services/ThermalPrinterService';
+import { notifications } from '@mantine/notifications';
+import { useState } from 'react';
 
 interface Props {
     opened: boolean;
@@ -35,6 +38,7 @@ const COPIES_OPTIONS = [
 
 export function PrinterSettingsModal({ opened, onClose }: Props) {
     const { config, setConfig, reset } = usePrinterStore();
+    const [testingDrawer, setTestingDrawer] = useState(false);
 
     function update<K extends keyof PrinterConfig>(key: K, value: PrinterConfig[K]) {
         setConfig({ [key]: value } as Partial<PrinterConfig>);
@@ -131,6 +135,33 @@ export function PrinterSettingsModal({ opened, onClose }: Props) {
                     onChange={(e) => update('openDrawer', e.currentTarget.checked)}
                     mt="xs"
                 />
+
+                <Button
+                    variant="outline"
+                    color="orange"
+                    size="xs"
+                    mt={4}
+                    loading={testingDrawer}
+                    disabled={!config.openDrawer}
+                    onClick={async () => {
+                        setTestingDrawer(true);
+                        try {
+                            const ok = await thermalPrinter.openCashDrawer();
+                            notifications.show({
+                                title: ok ? 'Cajón abierto' : 'Simulación (sin impresora)',
+                                message: ok
+                                    ? 'El comando ESC p fue enviado correctamente.'
+                                    : 'No hay conexión activa. Verifica que la impresora esté conectada.',
+                                color: ok ? 'teal' : 'orange',
+                                autoClose: 4000,
+                            });
+                        } finally {
+                            setTestingDrawer(false);
+                        }
+                    }}
+                >
+                    Probar apertura de cajón
+                </Button>
 
                 <Divider my="xs" />
 
