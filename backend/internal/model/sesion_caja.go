@@ -13,11 +13,11 @@ type SesionCaja struct {
 	ID           uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	PuntoDeVenta int             `gorm:"not null;index"`
 	UsuarioID    uuid.UUID       `gorm:"type:uuid;not null"`
-	MontoInicial decimal.Decimal `gorm:"type:decimal(12,2);not null"`
+	MontoInicial decimal.Decimal `gorm:"type:decimal(15,2);not null"`
 	// MontoEsperado is computed on close: SUM(movimientos) + MontoInicial
-	MontoEsperado  *decimal.Decimal `gorm:"type:decimal(12,2)"`
-	MontoDeclarado *decimal.Decimal `gorm:"type:decimal(12,2)"`
-	Desvio         *decimal.Decimal `gorm:"type:decimal(12,2)"`
+	MontoEsperado  *decimal.Decimal `gorm:"type:decimal(15,2)"`
+	MontoDeclarado *decimal.Decimal `gorm:"type:decimal(15,2)"`
+	Desvio         *decimal.Decimal `gorm:"type:decimal(15,2)"`
 	DesvioPct      *decimal.Decimal `gorm:"type:decimal(5,2)"`
 	Estado         string           `gorm:"type:varchar(20);not null;default:'abierta'"`
 	// ClasificacionDesvio: "normal" | "advertencia" | "critico"
@@ -37,7 +37,7 @@ type MovimientoCaja struct {
 	SesionCajaID uuid.UUID       `gorm:"type:uuid;index;not null"`
 	Tipo         string          `gorm:"type:varchar(20);not null"`
 	MetodoPago   *string         `gorm:"type:varchar(20)"`
-	Monto        decimal.Decimal `gorm:"type:decimal(12,2);not null"`
+	Monto        decimal.Decimal `gorm:"type:decimal(15,2);not null"`
 	Descripcion  string          `gorm:"not null"`
 	// ReferenciaID links to the originating Venta or manual operation
 	ReferenciaID *uuid.UUID `gorm:"type:uuid"`

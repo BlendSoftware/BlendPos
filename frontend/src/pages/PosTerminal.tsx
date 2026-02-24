@@ -228,7 +228,7 @@ export function PosTerminal() {
                     else if (isDiscountModalOpen) closeDiscountModal();
                     else if (historyOpen) setHistoryOpen(false);
                     else if (searchVisible) closeSearch();
-                    else if (cart.length > 0) clearCart();
+                    // NOTE: No clearCart() on bare Escape to prevent accidental cart deletion
                     break;
 
                 case 'ArrowUp':

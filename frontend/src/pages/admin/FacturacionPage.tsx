@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
     Stack, Title, Text, Group, Table, Paper, Badge, ActionIcon,
-    Tooltip, TextInput, Modal, Button, Select, Alert,
+    Tooltip, TextInput, Modal, Button, Select, Alert, UnstyledButton,
 } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
-import { Printer, Download, ChevronDown, ChevronUp, Search, Ban, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Printer, Download, ChevronDown, ChevronUp, Search, Ban, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useSaleStore, type SaleRecord, type MetodoPago } from '../../store/useSaleStore';
@@ -16,10 +16,10 @@ import { formatARS } from '../../api/mockAdmin';
 import type { IVenta } from '../../types';
 
 const METODO_COLOR: Record<string, string> = {
-    efectivo: 'teal', debito: 'blue', credito: 'violet', qr: 'orange',
+    efectivo: 'teal', debito: 'blue', credito: 'violet', transferencia: 'orange',
 };
 
-type Periodo = 'hoy' | 'ayer' | 'semana' | 'todas';
+type Periodo = 'hoy' | 'ayer' | 'semana' | 'mes' | 'personalizado' | 'todas';
 
 function matchesPeriodo(fecha: string, periodo: Periodo): boolean {
     const d = new Date(fecha);
@@ -27,9 +27,11 @@ function matchesPeriodo(fecha: string, periodo: Periodo): boolean {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const yesterday = new Date(today.getTime() - 86400000);
     const weekAgo = new Date(today.getTime() - 7 * 86400000);
+    const monthAgo = new Date(today.getTime() - 30 * 86400000);
     if (periodo === 'hoy') return d >= today;
     if (periodo === 'ayer') return d >= yesterday && d < today;
     if (periodo === 'semana') return d >= weekAgo;
+    if (periodo === 'mes') return d >= monthAgo;
     return true;
 }
 
@@ -124,23 +126,52 @@ export function FacturacionPage() {
 
     const [busqueda, setBusqueda] = useState('');
     const [periodo, setPeriodo] = useState<string>('todas');
+    const [filtroMetodo, setFiltroMetodo] = useState<string | null>(null);
+    const [filtroEstado, setFiltroEstado] = useState<string | null>(null);
+    const [sortBy, setSortBy] = useState<string>('fecha');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [anularTarget, setAnularTarget] = useState<IVenta | null>(null);
     const [anuladas, setAnuladas] = useState<Set<string>>(new Set());
 
     const filtered = useMemo(() => {
         const q = busqueda.toLowerCase();
-        return ventas
+        let result = ventas
             .map((v) => ({ ...v, anulada: anuladas.has(v.id) }))
             .filter(
-                (v) =>
-                    matchesPeriodo(v.fecha, periodo as Periodo) &&
-                    (!q ||
+                (v) => {
+                    const matchPeriodo = periodo === 'personalizado'
+                        ? (!desde || new Date(v.fecha) >= desde) && (!hasta || new Date(v.fecha) <= hasta)
+                        : matchesPeriodo(v.fecha, periodo as Periodo);
+                    const matchBusqueda = !q ||
                         v.numeroTicket.includes(q) ||
                         v.cajeroNombre.toLowerCase().includes(q) ||
-                        v.id.toLowerCase().includes(q))
+                        v.id.toLowerCase().includes(q);
+                    const matchMetodo = !filtroMetodo || v.metodoPago === filtroMetodo || v.pagos?.some((p) => p.metodo === filtroMetodo);
+                    const matchEstado = !filtroEstado || (filtroEstado === 'anulada' ? v.anulada : !v.anulada);
+                    return matchPeriodo && matchBusqueda && matchMetodo && matchEstado;
+                }
             );
-    }, [ventas, anuladas, busqueda, periodo]);
+        
+        // Ordenamiento
+        result.sort((a, b) => {
+            let valA: any;
+            let valB: any;
+            switch (sortBy) {
+                case 'ticket': valA = a.numeroTicket; valB = b.numeroTicket; break;
+                case 'fecha': valA = new Date(a.fecha).getTime(); valB = new Date(b.fecha).getTime(); break;
+                case 'cajero': valA = a.cajeroNombre.toLowerCase(); valB = b.cajeroNombre.toLowerCase(); break;
+                case 'metodo': valA = a.metodoPago; valB = b.metodoPago; break;
+                case 'total': valA = a.total; valB = b.total; break;
+                default: valA = a.id; valB = b.id;
+            }
+            if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+            if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        return result;
+    }, [ventas, anuladas, busqueda, periodo, filtroMetodo, filtroEstado, desde, hasta, sortBy, sortDir]);
 
     const handleReprint = async (v: IVenta) => {
         // Reconstruye un SaleRecord desde IVenta y lo manda a la impresora
@@ -209,6 +240,20 @@ export function FacturacionPage() {
 
     const canAnular = hasRole(['admin', 'supervisor']);
 
+    const toggleSort = (col: string) => {
+        if (sortBy === col) {
+            setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(col);
+            setSortDir('asc');
+        }
+    };
+
+    const SortIcon = ({ col }: { col: string }) => {
+        if (sortBy !== col) return <ChevronsUpDown size={12} style={{ opacity: 0.4 }} />;
+        return sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
+    };
+
     return (
         <Stack gap="xl">
             <Group justify="space-between">
@@ -226,22 +271,6 @@ export function FacturacionPage() {
                     onChange={(e) => setBusqueda(e.currentTarget.value)}
                     style={{ flex: 1, minWidth: 240 }}
                 />
-                <DateInput
-                    placeholder="Desde"
-                    value={desde}
-                    onChange={setDesde}
-                    clearable
-                    valueFormat="DD/MM/YYYY"
-                    style={{ width: 150 }}
-                />
-                <DateInput
-                    placeholder="Hasta"
-                    value={hasta}
-                    onChange={setHasta}
-                    clearable
-                    valueFormat="DD/MM/YYYY"
-                    style={{ width: 150 }}
-                />
                 <Select
                     placeholder="Período"
                     value={periodo}
@@ -250,30 +279,56 @@ export function FacturacionPage() {
                         { value: 'hoy',    label: 'Hoy' },
                         { value: 'ayer',   label: 'Ayer' },
                         { value: 'semana', label: 'Última semana' },
+                        { value: 'mes',    label: 'Último mes' },
+                        { value: 'personalizado', label: 'Rango personalizado' },
                         { value: 'todas',  label: 'Todas' },
                     ]}
-                    style={{ width: 150 }}
+                    style={{ width: 170 }}
+                    clearable
+                />
+                {periodo === 'personalizado' && (
+                    <>
+                        <DateInput
+                            placeholder="Desde"
+                            value={desde}
+                            onChange={setDesde}
+                            clearable
+                            valueFormat="DD/MM/YYYY"
+                            style={{ width: 140 }}
+                        />
+                        <DateInput
+                            placeholder="Hasta"
+                            value={hasta}
+                            onChange={setHasta}
+                            clearable
+                            valueFormat="DD/MM/YYYY"
+                            style={{ width: 140 }}
+                        />
+                    </>
+                )}
+                <Select
+                    placeholder="Método"
+                    value={filtroMetodo}
+                    onChange={setFiltroMetodo}
+                    data={[
+                        { value: 'efectivo', label: 'Efectivo' },
+                        { value: 'debito', label: 'Débito' },
+                        { value: 'credito', label: 'Crédito' },
+                        { value: 'transferencia', label: 'Transferencia' },
+                    ]}
+                    style={{ width: 140 }}
                     clearable
                 />
                 <Select
-                    placeholder="Ordenar por"
-                    value={ordenarPor}
-                    onChange={(v) => setOrdenarPor(v ?? 'fecha')}
+                    placeholder="Estado"
+                    value={filtroEstado}
+                    onChange={setFiltroEstado}
                     data={[
-                        { value: 'fecha', label: 'Fecha' },
-                        { value: 'total', label: 'Total' },
-                        { value: 'numero_ticket', label: 'N° Ticket' },
+                        { value: 'completada', label: 'Completadas' },
+                        { value: 'anulada', label: 'Anuladas' },
                     ]}
-                    style={{ width: 150 }}
-                />
-                <Select
-                    value={orden}
-                    onChange={(v) => setOrden(v ?? 'desc')}
-                    data={[
-                        { value: 'desc', label: '↓ Descendente' },
-                        { value: 'asc',  label: '↑ Ascendente' },
-                    ]}
-                    style={{ width: 150 }}
+                    style={{ width: 140 }}
+                    clearable
                 />
                 <Tooltip label="Actualizar" withArrow>
                     <ActionIcon variant="light" loading={loadingVentas} onClick={cargarVentas}>
@@ -287,11 +342,31 @@ export function FacturacionPage() {
                     <Table.Thead>
                         <Table.Tr>
                             <Table.Th style={{ width: 30 }} />
-                            <Table.Th>Ticket</Table.Th>
-                            <Table.Th>Fecha</Table.Th>
-                            <Table.Th>Cajero</Table.Th>
-                            <Table.Th>Método</Table.Th>
-                            <Table.Th>Total</Table.Th>
+                            <Table.Th>
+                                <UnstyledButton onClick={() => toggleSort('ticket')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
+                                    Ticket <SortIcon col="ticket" />
+                                </UnstyledButton>
+                            </Table.Th>
+                            <Table.Th>
+                                <UnstyledButton onClick={() => toggleSort('fecha')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
+                                    Fecha <SortIcon col="fecha" />
+                                </UnstyledButton>
+                            </Table.Th>
+                            <Table.Th>
+                                <UnstyledButton onClick={() => toggleSort('cajero')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
+                                    Cajero <SortIcon col="cajero" />
+                                </UnstyledButton>
+                            </Table.Th>
+                            <Table.Th>
+                                <UnstyledButton onClick={() => toggleSort('metodo')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
+                                    Método <SortIcon col="metodo" />
+                                </UnstyledButton>
+                            </Table.Th>
+                            <Table.Th>
+                                <UnstyledButton onClick={() => toggleSort('total')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
+                                    Total <SortIcon col="total" />
+                                </UnstyledButton>
+                            </Table.Th>
                             <Table.Th>Estado</Table.Th>
                             <Table.Th>Acciones</Table.Th>
                         </Table.Tr>

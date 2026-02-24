@@ -94,10 +94,9 @@ export function AdminLayout() {
                             onClick={() => navigate('/')}
                         >
                             <Home size={18} />
-                            Terminal POS
+                            Volver al POS
                         </button>
-                    </Tooltip>
-                    <button className={styles.navLinkDanger} onClick={handleLogout}>
+                    </Tooltip>                    <Divider my="md" color="dark.6" />                    <button className={styles.navLinkDanger} onClick={handleLogout}>
                         <LogOut size={18} />
                         Cerrar sesión
                     </button>

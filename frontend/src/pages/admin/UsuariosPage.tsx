@@ -67,7 +67,21 @@ export function UsuariosPage() {
         validate: {
             nombre:   (v) => (v.trim().length >= 3 ? null : 'Mínimo 3 caracteres'),
             username: (v, _vals) => (!editTarget && !v.trim() ? 'Requerido' : null),
-            password: (v, _vals) => (!editTarget && v.length < 8 ? 'Mínimo 8 caracteres' : null),
+            password: (v, _vals) => {
+                if (editTarget && !v) return null; // Al editar, password es opcional
+                if (!editTarget && v.length < 8) return 'Mínimo 8 caracteres';
+                if (v.length > 0 && v.length < 8) return 'Mínimo 8 caracteres';
+                if (v.length >= 8) {
+                    const hasUpper = /[A-Z]/.test(v);
+                    const hasLower = /[a-z]/.test(v);
+                    const hasNumber = /[0-9]/.test(v);
+                    const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(v);
+                    if (!hasUpper || !hasLower || !hasNumber || !hasSymbol) {
+                        return 'Debe contener mayúsculas, minúsculas, números y símbolos';
+                    }
+                }
+                return null;
+            },
         },
     });
 
@@ -87,13 +101,15 @@ export function UsuariosPage() {
         try {
             const pdv = values.puntoDeVenta ? parseInt(values.puntoDeVenta) : undefined;
             if (editTarget) {
-                await actualizarUsuario(editTarget.id, {
+                const payload: any = {
                     nombre: values.nombre,
-                    email: values.email || undefined,
                     rol: mapRolBE(values.rol),
-                    password: values.password || undefined,
                     punto_de_venta: pdv,
-                });
+                };
+                // Solo enviar email y password si fueron modificados
+                if (values.email && values.email !== editTarget.email) payload.email = values.email;
+                if (values.password) payload.password = values.password;
+                await actualizarUsuario(editTarget.id, payload);
                 notifications.show({ title: 'Usuario actualizado', message: values.nombre, color: 'blue' });
             } else {
                 await crearUsuario({
@@ -107,7 +123,7 @@ export function UsuariosPage() {
                 notifications.show({ title: 'Usuario creado', message: values.nombre, color: 'teal' });
             }
             setModalOpen(false);
-            await fetchUsuarios();
+            await fetchUsuarios(mostrarInactivos);
         } catch (err) {
             notifications.show({ title: 'Error', message: err instanceof Error ? err.message : 'Error', color: 'red' });
         }

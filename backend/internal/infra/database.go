@@ -1,7 +1,6 @@
 package infra
 
 import (
-	"blendpos/internal/model"
 	"fmt"
 
 	"gorm.io/driver/postgres"
@@ -32,24 +31,27 @@ func NewDatabase(dsn string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("pre-migration patches: %w", err)
 	}
 
-	if err := db.AutoMigrate(
-		&model.Producto{},
-		&model.ProductoHijo{},
-		&model.Usuario{},
-		&model.SesionCaja{},
-		&model.MovimientoCaja{},
-		&model.Venta{},
-		&model.VentaItem{},
-		&model.VentaPago{},
-		&model.Comprobante{},
-		&model.Proveedor{},
-		&model.HistorialPrecio{},
-		&model.MovimientoStock{},
-		&model.Categoria{},
-		&model.ContactoProveedor{},
-	); err != nil {
-		return nil, fmt.Errorf("AutoMigrate: %w", err)
-	}
+	// ⚠️ GORM AutoMigrate DISABLED: Schema is managed exclusively via SQL migrations
+	// to prevent conflicts and maintain precise control over decimal precision,
+	// constraints, and other DDL operations. See migrations/ directory.
+	// if err := db.AutoMigrate(
+	// 	&model.Producto{},
+	// 	&model.ProductoHijo{},
+	// 	&model.Usuario{},
+	// 	&model.SesionCaja{},
+	// 	&model.MovimientoCaja{},
+	// 	&model.Venta{},
+	// 	&model.VentaItem{},
+	// 	&model.VentaPago{},
+	// 	&model.Comprobante{},
+	// 	&model.Proveedor{},
+	// 	&model.HistorialPrecio{},
+	// 	&model.MovimientoStock{},
+	// 	&model.Categoria{},
+	// 	&model.ContactoProveedor{},
+	// ); err != nil {
+	// 	return nil, fmt.Errorf("AutoMigrate: %w", err)
+	// }
 
 	if err := applySchemaPatches(db); err != nil {
 		return nil, fmt.Errorf("schema patches: %w", err)
@@ -243,26 +245,27 @@ func applySchemaPatches(db *gorm.DB) error {
 	return nil
 }
 
-// RunMigrations applies GORM AutoMigrate for all models and schema patches.
-// Used in integration tests where a fresh containerised DB needs the full schema.
+// RunMigrations applies schema patches for integration tests.
+// ⚠️ GORM AutoMigrate DISABLED: Use SQL migrations exclusively (see migrations/ directory).
+// Tests should use migrate CLI to apply migrations instead of GORM AutoMigrate.
 func RunMigrations(db *gorm.DB) error {
-	if err := db.AutoMigrate(
-		&model.Producto{},
-		&model.ProductoHijo{},
-		&model.Usuario{},
-		&model.SesionCaja{},
-		&model.MovimientoCaja{},
-		&model.Venta{},
-		&model.VentaItem{},
-		&model.VentaPago{},
-		&model.Comprobante{},
-		&model.Proveedor{},
-		&model.HistorialPrecio{},
-		&model.MovimientoStock{},
-		&model.Categoria{},
-		&model.ContactoProveedor{},
-	); err != nil {
-		return err
-	}
+	// if err := db.AutoMigrate(
+	// 	&model.Producto{},
+	// 	&model.ProductoHijo{},
+	// 	&model.Usuario{},
+	// 	&model.SesionCaja{},
+	// 	&model.MovimientoCaja{},
+	// 	&model.Venta{},
+	// 	&model.VentaItem{},
+	// 	&model.VentaPago{},
+	// 	&model.Comprobante{},
+	// 	&model.Proveedor{},
+	// 	&model.HistorialPrecio{},
+	// 	&model.MovimientoStock{},
+	// 	&model.Categoria{},
+	// 	&model.ContactoProveedor{},
+	// ); err != nil {
+	// 	return err
+	// }
 	return applySchemaPatches(db)
 }

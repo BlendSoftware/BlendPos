@@ -3,10 +3,11 @@
 // Mostrado automáticamente si no hay sesión activa en useCajaStore.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal, Stack, NumberInput, Button, Text, Alert, Group } from '@mantine/core';
 import { TriangleAlert, Store } from 'lucide-react';
 import { useCajaStore } from '../../store/useCajaStore';
+import { useAuthStore } from '../../store/useAuthStore';
 
 interface Props {
     opened: boolean;
@@ -16,9 +17,17 @@ interface Props {
 
 export function AbrirCajaModal({ opened, onSuccess }: Props) {
     const { abrir, restaurar, loading, error } = useCajaStore();
+    const { user } = useAuthStore();
 
     const [puntoDeVenta, setPuntoDeVenta] = useState<number | string>(1);
     const [montoInicial, setMontoInicial] = useState<number | string>(0);
+
+    // Auto-asignar punto de venta del usuario al abrir el modal
+    useEffect(() => {
+        if (user?.puntoDeVenta != null) {
+            setPuntoDeVenta(user.puntoDeVenta);
+        }
+    }, [user?.puntoDeVenta, opened]);
 
     const handleSubmit = async () => {
         const pdv = typeof puntoDeVenta === 'number' ? puntoDeVenta : parseInt(puntoDeVenta, 10);
@@ -72,7 +81,7 @@ export function AbrirCajaModal({ opened, onSuccess }: Props) {
 
                 <NumberInput
                     label="Punto de Venta"
-                    description="Número de terminal (1, 2, 3…)"
+                    description={user?.puntoDeVenta != null ? "Asignado automáticamente" : "Número de terminal (1, 2, 3…)"}
                     placeholder="1"
                     min={1}
                     max={99}
@@ -80,6 +89,7 @@ export function AbrirCajaModal({ opened, onSuccess }: Props) {
                     onChange={setPuntoDeVenta}
                     allowDecimal={false}
                     allowNegative={false}
+                    disabled={user?.puntoDeVenta != null}
                 />
 
                 <NumberInput

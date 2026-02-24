@@ -12,6 +12,7 @@ import {
     listarProductos, crearProducto, actualizarProducto, desactivarProducto, reactivarProducto, ajustarStock,
     type ProductoResponse,
 } from '../../services/api/products';
+import { listarCategorias, type CategoriaResponse } from '../../services/api/categorias';
 import type { IProducto, CategoriaProducto } from '../../types';
 
 // ── Mapper ────────────────────────────────────────────────────────────────────
@@ -34,15 +35,6 @@ function mapProducto(p: ProductoResponse): IProducto {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const CATEGORIAS: { value: CategoriaProducto; label: string }[] = [
-    { value: 'bebidas',   label: 'Bebidas' },
-    { value: 'panaderia', label: 'Panadería' },
-    { value: 'lacteos',   label: 'Lácteos' },
-    { value: 'limpieza',  label: 'Limpieza' },
-    { value: 'golosinas', label: 'Golosinas' },
-    { value: 'otros',     label: 'Otros' },
-];
 
 const ESTADO_BADGE = (activo: boolean) =>
     activo
@@ -73,9 +65,11 @@ const EMPTY_FORM: FormValues = {
 
 export function GestionProductosPage() {
     const [productos, setProductos] = useState<IProducto[]>([]);
+    const [categorias, setCategorias] = useState<CategoriaResponse[]>([]);
     const [busqueda, setBusqueda] = useState('');
     const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null);
     const [filtroEstado, setFiltroEstado] = useState<string | null>(null);
+    const [mostrarInactivos, setMostrarInactivos] = useState(false);
     const [sortBy, setSortBy] = useState<string | null>(null);
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
     const [loading, setLoading] = useState(true);
@@ -97,8 +91,12 @@ export function GestionProductosPage() {
         setApiError(null);
         try {
             // Fetch all products including inactive so that client-side filter works
-            const resp = await listarProductos({ limit: 500, page: 1, activo: 'all' });
-            setProductos(resp.data.map(mapProducto));
+            const [productosResp, categoriasResp] = await Promise.all([
+                listarProductos({ limit: 500, page: 1, activo: 'all' }),
+                listarCategorias(),
+            ]);
+            setProductos(productosResp.data.map(mapProducto));
+            setCategorias(categoriasResp.filter((c) => c.activo));
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Error al cargar productos';
             setApiError(msg);
@@ -138,7 +136,9 @@ export function GestionProductosPage() {
             const matchEstado =
                 !filtroEstado ||
                 (filtroEstado === 'activo' ? p.activo : !p.activo);
-            return matchBusqueda && matchCat && matchEstado;
+            // Si no se muestra inactivos, filtrar solo activos
+            const matchActivo = mostrarInactivos || p.activo;
+            return matchBusqueda && matchCat && matchEstado && matchActivo;
         });
 
         if (!sortBy) return arr;
@@ -162,7 +162,7 @@ export function GestionProductosPage() {
             if (valA > valB) return sortDir === 'asc' ? 1 : -1;
             return 0;
         });
-    }, [productos, busqueda, filtroCategoria, filtroEstado, sortBy, sortDir]);
+    }, [productos, busqueda, filtroCategoria, filtroEstado, mostrarInactivos, sortBy, sortDir]);
 
     const toggleSort = (col: string) => {
         if (sortBy === col) {
@@ -302,9 +302,16 @@ export function GestionProductosPage() {
                     <Title order={2} fw={800}>Gestión de Productos</Title>
                     <Text c="dimmed" size="sm">{productos.filter((p) => p.activo).length} activos · {productos.length} total</Text>
                 </div>
-                <Button leftSection={<Plus size={16} />} onClick={openCreate}>
-                    Nuevo producto
-                </Button>
+                <Group gap="sm">
+                    <Switch
+                        label="Mostrar inactivos"
+                        checked={mostrarInactivos}
+                        onChange={(e) => setMostrarInactivos(e.currentTarget.checked)}
+                    />
+                    <Button leftSection={<Plus size={16} />} onClick={openCreate}>
+                        Nuevo producto
+                    </Button>
+                </Group>
             </Group>
 
             {apiError && (
@@ -325,7 +332,7 @@ export function GestionProductosPage() {
                 />
                 <Select
                     placeholder="Categoría"
-                    data={CATEGORIAS}
+                    data={categorias.map((c) => ({ value: c.nombre, label: c.nombre }))}
                     value={filtroCategoria}
                     onChange={setFiltroCategoria}
                     clearable
@@ -407,7 +414,7 @@ export function GestionProductosPage() {
                                         </Table.Td>
                                         <Table.Td>
                                             <Badge size="xs" variant="outline">
-                                                {CATEGORIAS.find((c) => c.value === p.categoria)?.label}
+                                                {categorias.find((c) => c.nombre === p.categoria)?.nombre || p.categoria}
                                             </Badge>
                                         </Table.Td>
                                         <Table.Td>
@@ -486,7 +493,7 @@ export function GestionProductosPage() {
                             <TextInput label="Código de barras" placeholder="7790000000000" {...form.getInputProps('codigoBarras')} />
                             <Select
                                 label="Categoría"
-                                data={CATEGORIAS}
+                                data={categorias.map((c) => ({ value: c.nombre, label: c.nombre }))}
                                 {...form.getInputProps('categoria')}
                             />
                         </Group>
