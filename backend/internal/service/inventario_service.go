@@ -180,8 +180,8 @@ func (s *inventarioService) DescontarStockTx(ctx context.Context, productoID uui
 		return errors.New("tx debe ser *gorm.DB")
 	}
 
-	// Check current stock
-	producto, err := s.repo.FindByID(ctx, productoID)
+	// Read current stock INSIDE the transaction
+	producto, err := s.repo.FindByIDTx(gormTx, productoID)
 	if err != nil {
 		return fmt.Errorf("producto no encontrado: %w", err)
 	}
@@ -202,7 +202,8 @@ func (s *inventarioService) DescontarStockTx(ctx context.Context, productoID uui
 	deficit := cantidad - producto.StockActual
 	padresNecesarios := (deficit + vinculo.UnidadesPorPadre - 1) / vinculo.UnidadesPorPadre // ceiling div
 
-	padre, err := s.repo.FindByID(ctx, vinculo.ProductoPadreID)
+	// Read parent stock INSIDE the transaction
+	padre, err := s.repo.FindByIDTx(gormTx, vinculo.ProductoPadreID)
 	if err != nil {
 		return fmt.Errorf("producto padre no encontrado: %w", err)
 	}

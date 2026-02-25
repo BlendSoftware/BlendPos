@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"blendpos/internal/dto"
 	"blendpos/internal/model"
@@ -16,6 +17,7 @@ import (
 type ProductoRepository interface {
 	Create(ctx context.Context, p *model.Producto) error
 	FindByID(ctx context.Context, id uuid.UUID) (*model.Producto, error)
+	FindByIDTx(tx *gorm.DB, id uuid.UUID) (*model.Producto, error)
 	FindByBarcode(ctx context.Context, barcode string) (*model.Producto, error)
 	List(ctx context.Context, filter dto.ProductoFilter) ([]model.Producto, int64, error)
 	Update(ctx context.Context, p *model.Producto) error
@@ -59,6 +61,13 @@ func (r *productoRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.Produ
 	err := r.db.WithContext(ctx).First(&p, id).Error
 	return &p, err
 }
+
+func (r *productoRepo) FindByIDTx(tx *gorm.DB, id uuid.UUID) (*model.Producto, error) {
+	var p model.Producto
+	err := tx.First(&p, id).Error
+	return &p, err
+}
+
 
 func (r *productoRepo) FindByBarcode(ctx context.Context, barcode string) (*model.Producto, error) {
 	var p model.Producto
@@ -146,8 +155,15 @@ func (r *productoRepo) ListVinculos(ctx context.Context) ([]model.ProductoHijo, 
 }
 
 func (r *productoRepo) UpdateStockTx(tx *gorm.DB, id uuid.UUID, delta int) error {
-	return tx.Model(&model.Producto{}).Where("id = ?", id).
-		Update("stock_actual", gorm.Expr("stock_actual + ?", delta)).Error
+	result := tx.Model(&model.Producto{}).Where("id = ?", id).
+		Update("stock_actual", gorm.Expr("stock_actual + ?", delta))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("producto no encontrado o inactivo durante update de stock")
+	}
+	return nil
 }
 
 func (r *productoRepo) UpdatePreciosTx(tx *gorm.DB, id uuid.UUID, nuevoCosto, nuevaVenta, margen interface{}) error {
@@ -161,7 +177,14 @@ func (r *productoRepo) UpdatePreciosTx(tx *gorm.DB, id uuid.UUID, nuevoCosto, nu
 func (r *productoRepo) DB() *gorm.DB { return r.db }
 
 func (r *productoRepo) AjustarStock(ctx context.Context, id uuid.UUID, delta int) error {
-	return r.db.WithContext(ctx).Model(&model.Producto{}).
+	result := r.db.WithContext(ctx).Model(&model.Producto{}).
 		Where("id = ? AND activo = true", id).
-		Update("stock_actual", gorm.Expr("stock_actual + ?", delta)).Error
+		Update("stock_actual", gorm.Expr("stock_actual + ?", delta))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("producto no encontrado o inactivo durante ajuste de stock")
+	}
+	return nil
 }

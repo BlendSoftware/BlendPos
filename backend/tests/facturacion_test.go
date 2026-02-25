@@ -129,6 +129,12 @@ func (r *stubVentaRepoFacturacion) UpdateEstado(_ context.Context, id uuid.UUID,
 	}
 	return nil
 }
+func (r *stubVentaRepoFacturacion) UpdateEstadoTx(_ *gorm.DB, id uuid.UUID, estado string) error {
+	if v, ok := r.ventas[id]; ok {
+		v.Estado = estado
+	}
+	return nil
+}
 func (r *stubVentaRepoFacturacion) NextTicketNumber(_ context.Context, _ *gorm.DB) (int, error) {
 	return 1, nil
 }

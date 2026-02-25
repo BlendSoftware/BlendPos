@@ -15,6 +15,7 @@ type VentaRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*model.Venta, error)
 	FindByOfflineID(ctx context.Context, offlineID string) (*model.Venta, error)
 	UpdateEstado(ctx context.Context, id uuid.UUID, estado string) error
+	UpdateEstadoTx(tx *gorm.DB, id uuid.UUID, estado string) error
 	NextTicketNumber(ctx context.Context, tx *gorm.DB) (int, error)
 	List(ctx context.Context, filter dto.VentaFilter) ([]model.Venta, int64, error)
 	DB() *gorm.DB // exposes the DB for transaction creation in service layer
@@ -45,6 +46,11 @@ func (r *ventaRepo) FindByOfflineID(ctx context.Context, offlineID string) (*mod
 func (r *ventaRepo) UpdateEstado(ctx context.Context, id uuid.UUID, estado string) error {
 	return r.db.WithContext(ctx).Model(&model.Venta{}).Where("id = ?", id).Update("estado", estado).Error
 }
+
+func (r *ventaRepo) UpdateEstadoTx(tx *gorm.DB, id uuid.UUID, estado string) error {
+	return tx.Model(&model.Venta{}).Where("id = ?", id).Update("estado", estado).Error
+}
+
 
 func (r *ventaRepo) NextTicketNumber(ctx context.Context, tx *gorm.DB) (int, error) {
 	// Uses a PostgreSQL sequence for atomic ticket number generation

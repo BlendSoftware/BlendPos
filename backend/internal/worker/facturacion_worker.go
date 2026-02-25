@@ -167,7 +167,9 @@ func (w *FacturacionWorker) handleAFIPResult(ctx context.Context, comp *model.Co
 		if comp.RetryCount >= MaxComprobanteRetries {
 			comp.Estado = "error"
 		}
-		_ = w.comprobanteRepo.Update(ctx, comp)
+		if err := w.comprobanteRepo.Update(ctx, comp); err != nil {
+			log.Error().Err(err).Str("comprobante_id", comp.ID.String()).Msg("facturacion_worker: failed to persist comprobante after AFIP error")
+		}
 	} else if afipResp != nil && afipResp.Resultado == "A" {
 		comp.Estado = "emitido"
 		cae := afipResp.CAE
@@ -178,13 +180,17 @@ func (w *FacturacionWorker) handleAFIPResult(ctx context.Context, comp *model.Co
 		comp.RetryCount = 0
 		comp.NextRetryAt = nil
 		comp.LastError = nil
-		_ = w.comprobanteRepo.Update(ctx, comp)
+		if err := w.comprobanteRepo.Update(ctx, comp); err != nil {
+			log.Error().Err(err).Str("comprobante_id", comp.ID.String()).Msg("facturacion_worker: failed to persist comprobante after CAE success")
+		}
 		log.Info().Str("cae", cae).Str("venta_id", ventaID).Msg("facturacion_worker: CAE obtained successfully")
 	} else if afipResp != nil {
 		comp.Estado = "rechazado"
 		obs := fmt.Sprintf("AFIP rechazó el comprobante: resultado=%s", afipResp.Resultado)
 		comp.Observaciones = &obs
-		_ = w.comprobanteRepo.Update(ctx, comp)
+		if err := w.comprobanteRepo.Update(ctx, comp); err != nil {
+			log.Error().Err(err).Str("comprobante_id", comp.ID.String()).Msg("facturacion_worker: failed to persist comprobante after AFIP rejection")
+		}
 		log.Warn().Str("resultado", afipResp.Resultado).Str("venta_id", ventaID).Msg("facturacion_worker: AFIP rejected")
 	}
 }
@@ -196,7 +202,9 @@ func (w *FacturacionWorker) generatePDF(ctx context.Context, venta *model.Venta,
 		return ""
 	}
 	comp.PDFPath = &pdfPath
-	_ = w.comprobanteRepo.Update(ctx, comp)
+	if err := w.comprobanteRepo.Update(ctx, comp); err != nil {
+		log.Error().Err(err).Str("comprobante_id", comp.ID.String()).Msg("facturacion_worker: failed to persist PDF path")
+	}
 	log.Info().Str("pdf", pdfPath).Str("venta_id", ventaID).Msg("facturacion_worker: PDF generated")
 	return pdfPath
 }

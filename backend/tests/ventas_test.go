@@ -69,6 +69,15 @@ func (r *stubVentaRepo) UpdateEstado(_ context.Context, id uuid.UUID, estado str
 	return nil
 }
 
+func (r *stubVentaRepo) UpdateEstadoTx(_ *gorm.DB, id uuid.UUID, estado string) error {
+	v, ok := r.ventas[id]
+	if !ok {
+		return errors.New("not found")
+	}
+	v.Estado = estado
+	return nil
+}
+
 func (r *stubVentaRepo) NextTicketNumber(_ context.Context, _ *gorm.DB) (int, error) {
 	r.ticketSeq++
 	return r.ticketSeq, nil
@@ -97,7 +106,7 @@ func (s *stubCajaService) Abrir(_ context.Context, _ uuid.UUID, _ dto.AbrirCajaR
 func (s *stubCajaService) RegistrarMovimiento(_ context.Context, _ dto.MovimientoManualRequest) error {
 	return nil
 }
-func (s *stubCajaService) Arqueo(_ context.Context, _ dto.ArqueoRequest) (*dto.ArqueoResponse, error) {
+func (s *stubCajaService) Arqueo(_ context.Context, _ dto.ArqueoRequest, _ *uuid.UUID) (*dto.ArqueoResponse, error) {
 	return nil, nil
 }
 func (s *stubCajaService) ObtenerReporte(_ context.Context, _ uuid.UUID) (*dto.ReporteCajaResponse, error) {

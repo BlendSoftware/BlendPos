@@ -47,7 +47,7 @@ type ItemVentaRequest struct {
 }
 
 type PagoRequest struct {
-	Metodo string          `json:"metodo" validate:"required,oneof=efectivo debito credito transferencia"`
+	Metodo string          `json:"metodo" validate:"required,oneof=efectivo debito credito qr transferencia"`
 	Monto  decimal.Decimal `json:"monto"  validate:"required"`
 }
 

@@ -136,7 +136,9 @@ func processRetries(ctx context.Context, cfg RetryCronConfig) {
 					Msg("retry_cron: AFIP retry failed, scheduled next attempt")
 			}
 
-			_ = cfg.ComprobanteRepo.Update(ctx, comp)
+			if err := cfg.ComprobanteRepo.Update(ctx, comp); err != nil {
+				log.Error().Err(err).Str("comprobante_id", comp.ID.String()).Msg("retry_cron: failed to persist comprobante update")
+			}
 			continue
 		}
 
@@ -150,7 +152,9 @@ func processRetries(ctx context.Context, cfg RetryCronConfig) {
 			}
 			comp.NextRetryAt = nil
 			comp.LastError = nil
-			_ = cfg.ComprobanteRepo.Update(ctx, comp)
+			if err := cfg.ComprobanteRepo.Update(ctx, comp); err != nil {
+				log.Error().Err(err).Str("comprobante_id", comp.ID.String()).Msg("retry_cron: failed to persist comprobante after CAE success")
+			}
 
 			log.Info().
 				Str("cae", cae).
@@ -162,7 +166,9 @@ func processRetries(ctx context.Context, cfg RetryCronConfig) {
 			obs := fmt.Sprintf("AFIP rechazó (retry): resultado=%s", afipResp.Resultado)
 			comp.Observaciones = &obs
 			comp.NextRetryAt = nil
-			_ = cfg.ComprobanteRepo.Update(ctx, comp)
+			if err := cfg.ComprobanteRepo.Update(ctx, comp); err != nil {
+				log.Error().Err(err).Str("comprobante_id", comp.ID.String()).Msg("retry_cron: failed to persist comprobante after rejection")
+			}
 			log.Warn().
 				Str("resultado", afipResp.Resultado).
 				Str("comprobante_id", comp.ID.String()).

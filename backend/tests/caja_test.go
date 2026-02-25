@@ -226,7 +226,7 @@ func TestDesvioNormal(t *testing.T) {
 	arqueoResp, err := svc.Arqueo(context.Background(), dto.ArqueoRequest{
 		SesionCajaID: sesionID.String(),
 		Declaracion:  dto.DeclaracionArqueo{Efectivo: decimal.NewFromFloat(15000)},
-	})
+	}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "normal", arqueoResp.Desvio.Clasificacion)
 	assert.Equal(t, "0", arqueoResp.Desvio.Monto.String())
@@ -247,7 +247,7 @@ func TestDesvioAdvertencia(t *testing.T) {
 	arqueoResp, err := svc.Arqueo(context.Background(), dto.ArqueoRequest{
 		SesionCajaID: sesionID.String(),
 		Declaracion:  dto.DeclaracionArqueo{Efectivo: decimal.NewFromFloat(4800)},
-	})
+	}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "advertencia", arqueoResp.Desvio.Clasificacion)
 	assert.True(t, arqueoResp.Desvio.Monto.IsNegative())
@@ -269,7 +269,7 @@ func TestDesvioCritico(t *testing.T) {
 	_, err = svc.Arqueo(context.Background(), dto.ArqueoRequest{
 		SesionCajaID: sesionID.String(),
 		Declaracion:  dto.DeclaracionArqueo{Efectivo: decimal.NewFromFloat(9000)},
-	})
+	}, nil)
 	assert.ErrorContains(t, err, "crítico")
 
 	// With observaciones → should succeed
@@ -278,7 +278,7 @@ func TestDesvioCritico(t *testing.T) {
 		SesionCajaID:  sesionID.String(),
 		Declaracion:   dto.DeclaracionArqueo{Efectivo: decimal.NewFromFloat(9000)},
 		Observaciones: &obs,
-	})
+	}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "critico", arqueoResp.Desvio.Clasificacion)
 	assert.Equal(t, "cerrada", arqueoResp.Estado)
@@ -314,7 +314,7 @@ func TestArqueoCiego(t *testing.T) {
 			Efectivo: decimal.NewFromFloat(4900),
 			Debito:   decimal.NewFromFloat(1500),
 		},
-	})
+	}, nil)
 	require.NoError(t, err)
 	// MontoEsperado total = (2000+3000) + 1500 = 6500; declared = 4900+1500 = 6400
 	// desvio = -100, pct = -100/6500 ≈ -1.54% → advertencia

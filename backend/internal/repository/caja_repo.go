@@ -85,7 +85,12 @@ func (r *cajaRepo) SumMovimientosByMetodo(ctx context.Context, sesionCajaID uuid
 		"transferencia": decimal.Zero,
 	}
 	for _, r := range rows {
-		result[r.MetodoPago] = r.Total
+		key := r.MetodoPago
+		// "qr" is a frontend alias for "transferencia" — aggregate into the same bucket
+		if key == "qr" {
+			key = "transferencia"
+		}
+		result[key] = result[key].Add(r.Total)
 	}
 	return result, nil
 }

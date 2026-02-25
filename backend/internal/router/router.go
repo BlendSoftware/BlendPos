@@ -140,6 +140,8 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 		{
 			fact.GET("/:venta_id", facturacionH.ObtenerComprobante)
 			fact.GET("/pdf/:id", facturacionH.DescargarPDF)
+			fact.DELETE("/:id", facturacionH.AnularComprobante)
+			fact.POST("/:id/reintentar", facturacionH.ReintentarComprobante)
 		}
 
 		prov := v1.Group("/proveedores", middleware.RequireRole("administrador"))

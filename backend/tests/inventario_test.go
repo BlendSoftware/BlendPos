@@ -47,6 +47,14 @@ func (r *stubProductoRepo) FindByID(_ context.Context, id uuid.UUID) (*model.Pro
 	return p, nil
 }
 
+func (r *stubProductoRepo) FindByIDTx(_ *gorm.DB, id uuid.UUID) (*model.Producto, error) {
+	p, ok := r.productos[id]
+	if !ok {
+		return nil, errors.New("record not found")
+	}
+	return p, nil
+}
+
 func (r *stubProductoRepo) FindByBarcode(_ context.Context, barcode string) (*model.Producto, error) {
 	for _, p := range r.productos {
 		if p.CodigoBarras == barcode && p.Activo {

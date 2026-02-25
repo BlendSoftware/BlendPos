@@ -123,6 +123,44 @@ func (h *FacturacionHandler) DescargarPDF(c *gin.Context) {
 	c.File(pdfPath)
 }
 
+// AnularComprobante DELETE /v1/facturacion/:id
+// Transitions an emitido comprobante to anulado state.
+func (h *FacturacionHandler) AnularComprobante(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID inválido"))
+		return
+	}
+	var body struct {
+		Motivo string `json:"motivo" validate:"required,min=5"`
+	}
+	if !bindAndValidate(c, &body) {
+		return
+	}
+	resp, err := h.svc.AnularComprobante(c.Request.Context(), id, body.Motivo)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// ReintentarComprobante POST /v1/facturacion/:id/reintentar
+// Resets an error/rechazado comprobante back to pendiente for retry.
+func (h *FacturacionHandler) ReintentarComprobante(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID inválido"))
+		return
+	}
+	resp, err := h.svc.ReintentarComprobante(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 type ProveedoresHandler struct{ svc service.ProveedorService }
 
 func NewProveedoresHandler(svc service.ProveedorService) *ProveedoresHandler {

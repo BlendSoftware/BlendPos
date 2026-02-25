@@ -109,6 +109,9 @@ func (s *ventaService) RegistrarVenta(ctx context.Context, usuarioID uuid.UUID, 
 		if err != nil {
 			return nil, fmt.Errorf("producto %s no encontrado", item.ProductoID)
 		}
+		if !p.Activo {
+			return nil, fmt.Errorf("producto %s está inactivo y no puede venderse", p.Nombre)
+		}
 		if p.StockActual < item.Cantidad {
 			conflictoStock = true
 		}
@@ -183,10 +186,10 @@ func (s *ventaService) RegistrarVenta(ctx context.Context, usuarioID uuid.UUID, 
 
 		// Descontar stock — uses DescontarStockTx (handles auto-desarme from Fase 3)
 		for _, r := range resolved {
-			// Fetch current stock before updating for movement record
-			prodBefore, _ := s.productoRepo.FindByID(ctx, r.productoID)
+			// Fetch current stock INSIDE tx for movement record
+			prodBefore, err := s.productoRepo.FindByIDTx(tx, r.productoID)
 			stockAntes := 0
-			if prodBefore != nil {
+			if err == nil && prodBefore != nil {
 				stockAntes = prodBefore.StockActual
 			}
 
@@ -221,7 +224,7 @@ func (s *ventaService) RegistrarVenta(ctx context.Context, usuarioID uuid.UUID, 
 				Descripcion:  fmt.Sprintf("Venta #%d", ticketNum),
 				ReferenciaID: &venta.ID,
 			}
-			if err := s.cajaRepo.CreateMovimiento(ctx, &mov); err != nil {
+			if err := s.cajaRepo.CreateMovimientoTx(tx, &mov); err != nil {
 				return err
 			}
 		}
@@ -309,7 +312,7 @@ func (s *ventaService) AnularVenta(ctx context.Context, id uuid.UUID, motivo str
 			}
 		}
 
-		return s.repo.UpdateEstado(ctx, id, "anulada")
+		return s.repo.UpdateEstadoTx(tx, id, "anulada")
 	})
 	return txErr
 }

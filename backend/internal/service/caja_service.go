@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"blendpos/internal/dto"
 	"blendpos/internal/model"
@@ -16,7 +17,7 @@ import (
 type CajaService interface {
 	Abrir(ctx context.Context, usuarioID uuid.UUID, req dto.AbrirCajaRequest) (*dto.ReporteCajaResponse, error)
 	RegistrarMovimiento(ctx context.Context, req dto.MovimientoManualRequest) error
-	Arqueo(ctx context.Context, req dto.ArqueoRequest) (*dto.ArqueoResponse, error)
+	Arqueo(ctx context.Context, req dto.ArqueoRequest, usuarioID *uuid.UUID) (*dto.ArqueoResponse, error)
 	ObtenerReporte(ctx context.Context, sesionID uuid.UUID) (*dto.ReporteCajaResponse, error)
 	// FindSesionAbierta is called by VentaService to validate an open session
 	FindSesionAbierta(ctx context.Context, sesionID uuid.UUID) error
@@ -87,10 +88,25 @@ func (s *cajaService) RegistrarMovimiento(ctx context.Context, req dto.Movimient
 // Blind count: calculates desvio AFTER receiving declaration (AC-04.4).
 // Closes the session and records classification.
 
-func (s *cajaService) Arqueo(ctx context.Context, req dto.ArqueoRequest) (*dto.ArqueoResponse, error) {
-	sesionID, err := uuid.Parse(req.SesionCajaID)
-	if err != nil {
-		return nil, fmt.Errorf("sesion_caja_id inválido: %w", err)
+func (s *cajaService) Arqueo(ctx context.Context, req dto.ArqueoRequest, usuarioID *uuid.UUID) (*dto.ArqueoResponse, error) {
+	var sesionID uuid.UUID
+	var err error
+
+	// Fallback: if sesion_caja_id is empty, look up the active session by usuario_id
+	if req.SesionCajaID == "" {
+		if usuarioID == nil {
+			return nil, errors.New("sesion_caja_id o usuario autenticado requerido")
+		}
+		sesion, lookupErr := s.repo.FindSesionAbiertaPorUsuario(ctx, *usuarioID)
+		if lookupErr != nil || sesion == nil {
+			return nil, errors.New("no hay sesión de caja abierta para este usuario")
+		}
+		sesionID = sesion.ID
+	} else {
+		sesionID, err = uuid.Parse(req.SesionCajaID)
+		if err != nil {
+			return nil, fmt.Errorf("sesion_caja_id inválido: %w", err)
+		}
 	}
 
 	sesion, err := s.repo.FindSesionByID(ctx, sesionID)
@@ -144,6 +160,8 @@ func (s *cajaService) Arqueo(ctx context.Context, req dto.ArqueoRequest) (*dto.A
 	sesion.Desvio = &desvioMonto
 	sesion.DesvioPct = &desvioPct
 	sesion.Estado = "cerrada"
+	now := time.Now()
+	sesion.ClosedAt = &now
 	sesion.ClasificacionDesvio = &clasificacion
 	sesion.Observaciones = req.Observaciones
 

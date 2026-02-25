@@ -17,7 +17,7 @@ type DeclaracionArqueo struct {
 }
 
 type ArqueoRequest struct {
-	SesionCajaID  string            `json:"sesion_caja_id" validate:"required,uuid"`
+	SesionCajaID  string            `json:"sesion_caja_id" validate:"omitempty,uuid"`
 	Declaracion   DeclaracionArqueo `json:"declaracion"    validate:"required"`
 	Observaciones *string           `json:"observaciones"`
 }

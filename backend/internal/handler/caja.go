@@ -58,7 +58,13 @@ func (h *CajaHandler) Arqueo(c *gin.Context) {
 	if !bindAndValidate(c, &req) {
 		return
 	}
-	resp, err := h.svc.Arqueo(c.Request.Context(), req)
+	// Extract usuario_id from JWT for fallback when sesion_caja_id is empty
+	claims := middleware.GetClaims(c)
+	var usuarioID *uuid.UUID
+	if uid, err := uuid.Parse(claims.UserID); err == nil {
+		usuarioID = &uid
+	}
+	resp, err := h.svc.Arqueo(c.Request.Context(), req, usuarioID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
 		return
