@@ -38,8 +38,8 @@ function mapProducto(p: ProductoResponse): IProducto {
 
 const ESTADO_BADGE = (activo: boolean) =>
     activo
-        ? <Badge color="teal"  size="sm" variant="light">Activo</Badge>
-        : <Badge color="gray"  size="sm" variant="light">Inactivo</Badge>;
+        ? <Badge color="teal" size="sm" variant="light">Activo</Badge>
+        : <Badge color="gray" size="sm" variant="light">Inactivo</Badge>;
 
 // ── Form values ───────────────────────────────────────────────────────────────
 
@@ -115,12 +115,12 @@ export function GestionProductosPage() {
         initialValues: EMPTY_FORM,
         validate: {
             codigoBarras: (v) => (v.trim() ? null : 'Requerido'),
-            nombre:        (v) => (v.trim().length >= 3 ? null : 'Mínimo 3 caracteres'),
-            precioCosto:   (v) => (v >= 0 ? null : 'Debe ser ≥ 0'),
-            precioVenta:   (v, values) =>
+            nombre: (v) => (v.trim().length >= 3 ? null : 'Mínimo 3 caracteres'),
+            precioCosto: (v) => (v >= 0 ? null : 'Debe ser ≥ 0'),
+            precioVenta: (v, values) =>
                 v > values.precioCosto ? null : 'El precio de venta debe ser mayor al costo',
-            stock:         (v) => (v >= 0 ? null : 'Debe ser ≥ 0'),
-            stockMinimo:   (v) => (v >= 0 ? null : 'Debe ser ≥ 0'),
+            stock: (v) => (v >= 0 ? null : 'Debe ser ≥ 0'),
+            stockMinimo: (v) => (v >= 0 ? null : 'Debe ser ≥ 0'),
         },
     });
 
@@ -355,7 +355,7 @@ export function GestionProductosPage() {
                         {[...Array(6)].map((_, i) => <Skeleton key={i} height={40} radius="sm" />)}
                     </Stack>
                 ) : (
-                    <Table highlightOnHover striped stripedColor="dark.7" verticalSpacing="sm">
+                    <Table highlightOnHover striped verticalSpacing="sm">
                         <Table.Thead>
                             <Table.Tr>
                                 <Table.Th>Código</Table.Th>
@@ -430,8 +430,8 @@ export function GestionProductosPage() {
                                                     variant="light"
                                                     color={
                                                         ((p.precioVenta - p.precioCosto) / p.precioCosto) * 100 >= 30 ? 'teal'
-                                                        : ((p.precioVenta - p.precioCosto) / p.precioCosto) * 100 >= 15 ? 'yellow'
-                                                        : 'red'
+                                                            : ((p.precioVenta - p.precioCosto) / p.precioCosto) * 100 >= 15 ? 'yellow'
+                                                                : 'red'
                                                     }
                                                 >
                                                     {(((p.precioVenta - p.precioCosto) / p.precioCosto) * 100).toFixed(0)}%

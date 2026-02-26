@@ -37,6 +37,7 @@ export interface LocalProduct {
     codigoBarras: string;
     nombre: string;
     precio: number;
+    stock: number;
 }
 
 class BlendPosDB extends Dexie {
@@ -57,6 +58,13 @@ class BlendPosDB extends Dexie {
             sales: 'id, fecha, synced',
             sync_queue: '++id, status, createdAt, type, nextAttemptAt',
             products: 'id, codigoBarras, nombre',
+        });
+
+        // v3: agrega stock al catálogo local para filtrar sin-stock en POS
+        this.version(3).stores({
+            sales: 'id, fecha, synced',
+            sync_queue: '++id, status, createdAt, type, nextAttemptAt',
+            products: 'id, codigoBarras, nombre, stock',
         });
     }
 }

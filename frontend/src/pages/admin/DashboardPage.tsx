@@ -19,16 +19,18 @@ import { listarVentas, type VentaListItem } from '../../services/api/ventas';
 
 const METODO_COLOR: Record<string, string> = {
     efectivo: 'teal',
-    debito:   'blue',
-    credito:  'violet',
-    qr:       'orange',
+    debito: 'blue',
+    credito: 'violet',
+    transferencia: 'cyan',
+    qr: 'orange',
 };
 
 function metodoIcon(m: string): React.ReactNode {
     if (m === 'efectivo') return <Banknote size={14} />;
-    if (m === 'debito')   return <CreditCard size={14} />;
-    if (m === 'credito')  return <Landmark size={14} />;
-    if (m === 'qr')       return <QrCode size={14} />;
+    if (m === 'debito') return <CreditCard size={14} />;
+    if (m === 'credito') return <Landmark size={14} />;
+    if (m === 'transferencia') return <Landmark size={14} />;
+    if (m === 'qr') return <QrCode size={14} />;
     return null;
 }
 
@@ -83,18 +85,20 @@ export function DashboardPage() {
     // Merge local + API ventas for today, deduplicate by id
     const localIds = new Set(historial.map((v) => v.id));
     const apiFiltradas = apiVentas.filter((v) => !localIds.has(v.id));
+    // Nota: Go shopspring/decimal serializa como string ("650.00"), hay que parsear.
+    const parseNum = (v: unknown): number => typeof v === 'number' ? v : parseFloat(String(v)) || 0;
     const ventasHoy = [
         ...historial.filter((v) => new Date(v.fecha).toLocaleDateString('en-CA') === hoyKey),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...apiFiltradas.map((v) => ({ id: v.id, fecha: v.created_at, total: v.total, totalConDescuento: v.total, metodoPago: v.pagos[0]?.metodo ?? 'efectivo', items: v.items.map((i) => ({ cantidad: i.cantidad })) } as any)),
+        ...apiFiltradas.map((v) => ({ id: v.id, fecha: v.created_at, total: parseNum(v.total), totalConDescuento: parseNum(v.total), metodoPago: v.pagos[0]?.metodo ?? 'efectivo', items: v.items.map((i) => ({ id: i.producto, nombre: i.producto, cantidad: i.cantidad, subtotal: parseNum(i.subtotal), precio: parseNum(i.precio_unitario), codigoBarras: '', descuento: 0 })), numeroTicket: v.numero_ticket, cajero: '' } as any)),
     ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
-    const totalHoy      = ventasHoy.reduce((s, v) => s + (v.totalConDescuento ?? v.total), 0);
-    const ticketProm    = ventasHoy.length ? totalHoy / ventasHoy.length : 0;
+    const totalHoy = ventasHoy.reduce((s, v) => s + (v.totalConDescuento ?? v.total), 0);
+    const ticketProm = ventasHoy.length ? totalHoy / ventasHoy.length : 0;
     const itemsVendidos = ventasHoy.reduce((s, v) => s + v.items.reduce((si: number, i: { cantidad: number }) => si + i.cantidad, 0), 0);
 
     const stockCritico = alertas;
-    const sinStock     = alertas.filter((a) => a.stock_actual === 0);
+    const sinStock = alertas.filter((a) => a.stock_actual === 0);
 
     const metodoPagoTotals = ventasHoy.reduce<Record<string, { count: number; total: number }>>((acc, v) => {
         if (!acc[v.metodoPago]) acc[v.metodoPago] = { count: 0, total: 0 };
@@ -148,7 +152,7 @@ export function DashboardPage() {
         .sort((a, b) => b.total - a.total)
         .slice(0, 8)
         .map((p) => ({
-            producto: p.nombre.length > 18 ? `${p.nombre.slice(0, 17)}…` : p.nombre,
+            producto: (p.nombre ?? 'Desconocido').length > 18 ? `${(p.nombre ?? 'Desconocido').slice(0, 17)}…` : (p.nombre ?? 'Desconocido'),
             cantidad: p.cantidad,
             total: p.total,
         }));
@@ -172,10 +176,10 @@ export function DashboardPage() {
                 </SimpleGrid>
             ) : (
                 <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                    <KpiCard label="Ventas hoy"     value={formatARS(totalHoy)}       sub={`${ventasHoy.length} transacciones`}  icon={<TrendingUp size={22} />}  color="blue"   />
-                    <KpiCard label="Ticket promedio" value={formatARS(ticketProm)}     sub="por transacción"                       icon={<ShoppingCart size={22} />} color="teal"   />
-                    <KpiCard label="Stock crítico"   value={String(stockCritico.length)} sub="productos bajo mínimo"               icon={<AlertTriangle size={22} />} color="yellow" />
-                    <KpiCard label="Sin stock"       value={String(sinStock.length)}   sub="productos agotados"                    icon={<Package size={22} />}      color="red"    />
+                    <KpiCard label="Ventas hoy" value={formatARS(totalHoy)} sub={`${ventasHoy.length} transacciones`} icon={<TrendingUp size={22} />} color="blue" />
+                    <KpiCard label="Ticket promedio" value={formatARS(ticketProm)} sub="por transacción" icon={<ShoppingCart size={22} />} color="teal" />
+                    <KpiCard label="Stock crítico" value={String(stockCritico.length)} sub="productos bajo mínimo" icon={<AlertTriangle size={22} />} color="yellow" />
+                    <KpiCard label="Sin stock" value={String(sinStock.length)} sub="productos agotados" icon={<Package size={22} />} color="red" />
                 </SimpleGrid>
             )}
 

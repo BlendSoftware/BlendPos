@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { thermalPrinter } from '../services/ThermalPrinterService';
 import { enqueueSale, trySyncQueue } from '../offline/sync';
+import { forceRefreshCatalog } from '../offline/catalog';
 import { useCajaStore } from './useCajaStore';
 import { usePrinterStore } from './usePrinterStore';
 
@@ -279,7 +280,18 @@ export const useSaleStore = create<SaleState>()(
                 const nextCounter = ticketCounter + 1;
                 const numeroTicket = nextCounter.toString().padStart(6, '0');
 
-                const sesionId: string | undefined = useCajaStore.getState().sesionId;
+                const sesionId: string | undefined = useCajaStore.getState().sesionId ?? undefined;
+
+                // BUG-FIX: Always build pagos array for ALL payment methods.
+                // Previously pagos was only populated for 'mixto', causing
+                // debito/credito/qr MovimientoCaja entries to never be created.
+                const finalTotal = pago.metodoPago === 'mixto' ? totalConDescuento || total : totalConDescuento || total;
+                let pagos: PagoDetalle[] | undefined = pago.pagos;
+                if (!pagos || pagos.length === 0) {
+                    if (pago.metodoPago !== 'mixto') {
+                        pagos = [{ metodo: pago.metodoPago as Exclude<MetodoPago, 'mixto'>, monto: finalTotal }];
+                    }
+                }
 
                 const record: SaleRecord = {
                     id: crypto.randomUUID(),
@@ -289,7 +301,7 @@ export const useSaleStore = create<SaleState>()(
                     total,
                     totalConDescuento,
                     metodoPago: pago.metodoPago,
-                    pagos: pago.pagos,
+                    pagos,
                     efectivoRecibido: pago.efectivoRecibido,
                     vuelto: pago.vuelto,
                     cajero,
@@ -304,6 +316,9 @@ export const useSaleStore = create<SaleState>()(
                 enqueueSale(record)
                     .then(() => trySyncQueue())
                     .catch(console.warn);
+
+                // BUG-FIX: Refresh catalog from backend so stock is updated.
+                forceRefreshCatalog().catch(console.warn);
 
                 const nextHistorial = [record, ...historial].slice(0, MAX_HISTORIAL);
                 set({

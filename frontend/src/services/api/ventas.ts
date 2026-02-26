@@ -115,15 +115,8 @@ export async function anularVenta(id: string, motivo: string): Promise<void> {
  * Sincroniza ventas creadas offline. El backend deduplica por offline_id.
  */
 export async function syncSalesBatch(sales: LocalSale[]): Promise<VentaResponse[]> {
-    const baseUrl = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
-    if (!baseUrl) {
-        // Modo sin backend configurado: simular respuesta exitosa
-        await new Promise((r) => setTimeout(r, 250));
-        return [];
-    }
-
     const ventas: RegistrarVentaRequest[] = sales.map((s) => ({
-        sesion_caja_id: (s as unknown as { sesion_caja_id?: string }).sesion_caja_id ?? '',
+        sesion_caja_id: s.sesionCajaId ?? '',
         offline_id: s.id,
         items: s.items.map((item) => ({
             producto_id: item.id,
@@ -133,7 +126,7 @@ export async function syncSalesBatch(sales: LocalSale[]): Promise<VentaResponse[
         pagos: s.pagos?.map((p) => ({
             metodo: p.metodo as PagoRequest['metodo'],
             monto: p.monto,
-        })) ?? [{ metodo: 'efectivo', monto: s.total }],
+        })) ?? [{ metodo: 'efectivo' as const, monto: s.total }],
     }));
 
     return apiClient.post<VentaResponse[]>('/v1/ventas/sync-batch', { ventas });

@@ -104,6 +104,17 @@ export function PosTerminal() {
             if (import.meta.env.VITE_API_BASE && navigator.onLine) {
                 try {
                     const apiProduct = await getPrecioPorBarcode(trimmed);
+                    // Check stock before adding
+                    if (apiProduct.stock_disponible <= 0) {
+                        notifications.show({
+                            title: 'Sin stock',
+                            message: `"${apiProduct.nombre}" no tiene stock disponible`,
+                            color: 'orange',
+                            icon: <AlertCircle size={16} />,
+                            autoClose: 3000,
+                        });
+                        return false;
+                    }
                     const local = await findCatalogProductByBarcode(trimmed);
                     if (local) {
                         addItem({ id: local.id, nombre: apiProduct.nombre, precio: apiProduct.precio_venta, codigoBarras: trimmed });
@@ -115,6 +126,7 @@ export function PosTerminal() {
             }
 
             // 2️⃣ Catálogo local (IndexedDB sincronizado desde backend) — por barcode
+            // findCatalogProductByBarcode ya filtra stock > 0
             const product = await findCatalogProductByBarcode(trimmed);
             if (product) {
                 addItem({ id: product.id, nombre: product.nombre, precio: product.precio, codigoBarras: product.codigoBarras });
@@ -122,6 +134,7 @@ export function PosTerminal() {
             }
 
             // 3️⃣ Catálogo local — búsqueda por nombre parcial
+            // searchCatalogProducts ya filtra stock > 0
             const results = await searchCatalogProducts(trimmed, 1);
             const match = results[0];
             if (match) {
@@ -132,7 +145,7 @@ export function PosTerminal() {
             // Producto no encontrado
             notifications.show({
                 title: 'Producto no encontrado',
-                message: `No se encontró ningún producto para: "${trimmed}"`,
+                message: `No se encontró ningún producto con stock para: "${trimmed}"`,
                 color: 'red',
                 icon: <AlertCircle size={16} />,
                 autoClose: 3000,

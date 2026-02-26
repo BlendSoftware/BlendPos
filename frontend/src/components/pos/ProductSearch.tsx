@@ -44,12 +44,15 @@ export function ProductSearch({ onClose, inputRef, initialQuery = '' }: ProductS
                 if (local.length === 0 && deferredQuery.trim()) {
                     try {
                         const apiResp = await listarProductos({ nombre: deferredQuery.trim(), limit: 50 });
-                        local = apiResp.data.map((p) => ({
-                            id: p.id,
-                            codigoBarras: p.codigo_barras,
-                            nombre: p.nombre,
-                            precio: typeof p.precio_venta === 'number' ? p.precio_venta : parseFloat(p.precio_venta as unknown as string),
-                        }));
+                        local = apiResp.data
+                            .filter((p) => p.activo && p.stock_actual > 0)
+                            .map((p) => ({
+                                id: p.id,
+                                codigoBarras: p.codigo_barras,
+                                nombre: p.nombre,
+                                precio: typeof p.precio_venta === 'number' ? p.precio_venta : parseFloat(p.precio_venta as unknown as string),
+                                stock: p.stock_actual ?? 0,
+                            }));
                     } catch {
                         // backend not available, local stays empty
                     }
@@ -59,12 +62,15 @@ export function ProductSearch({ onClose, inputRef, initialQuery = '' }: ProductS
                 if (local.length === 0 && !deferredQuery.trim()) {
                     try {
                         const apiResp = await listarProductos({ limit: 200 });
-                        local = apiResp.data.map((p) => ({
-                            id: p.id,
-                            codigoBarras: p.codigo_barras,
-                            nombre: p.nombre,
-                            precio: typeof p.precio_venta === 'number' ? p.precio_venta : parseFloat(p.precio_venta as unknown as string),
-                        }));
+                        local = apiResp.data
+                            .filter((p) => p.activo && p.stock_actual > 0)
+                            .map((p) => ({
+                                id: p.id,
+                                codigoBarras: p.codigo_barras,
+                                nombre: p.nombre,
+                                precio: typeof p.precio_venta === 'number' ? p.precio_venta : parseFloat(p.precio_venta as unknown as string),
+                                stock: p.stock_actual ?? 0,
+                            }));
                     } catch { /* offline */ }
                 }
 

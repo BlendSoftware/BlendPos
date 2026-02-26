@@ -164,8 +164,7 @@ export const useCajaStore = create<CajaState>()(
                 }),
 
             restaurar: async () => {
-                const baseUrl = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
-                if (!baseUrl || !navigator.onLine) return;
+                if (!navigator.onLine) return;
                 try {
                     const reporte = await getCajaActiva();
                     if (reporte) {
