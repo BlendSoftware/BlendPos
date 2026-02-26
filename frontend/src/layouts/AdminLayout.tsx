@@ -10,6 +10,7 @@ import {
     BarChart2, Tag,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
+import { ThemeToggle } from '../components/ThemeToggle';
 import styles from './AdminLayout.module.css';
 
 // ── Nav items ────────────────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ export function AdminLayout() {
                     <Text className={styles.brandSub}>Sistema de Gestión</Text>
                 </div>
 
-                <Divider my="xs" color="dark.6" />
+                <Divider my="xs" />
                 <div className={styles.navSectionLabel}>Navegación</div>
 
                 {NAV_ITEMS
@@ -96,7 +97,9 @@ export function AdminLayout() {
                             <Home size={18} />
                             Volver al POS
                         </button>
-                    </Tooltip>                    <Divider my="md" color="dark.6" />                    <button className={styles.navLinkDanger} onClick={handleLogout}>
+                    </Tooltip>
+                    <Divider my="md" />
+                    <button className={styles.navLinkDanger} onClick={handleLogout}>
                         <LogOut size={18} />
                         Cerrar sesión
                     </button>
@@ -118,6 +121,8 @@ export function AdminLayout() {
                     </Group>
 
                     <div className={styles.userMenu}>
+                        <ThemeToggle size="sm" />
+
                         <Badge
                             className={styles.rolBadge}
                             color={ROL_COLOR[user?.rol ?? 'cajero']}

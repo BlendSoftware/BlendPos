@@ -1,4 +1,4 @@
-﻿import {
+import {
     SimpleGrid, Paper, Text, Title, Group, Stack, Badge,
     Skeleton, Table, ThemeIcon, Divider, Center,
 } from '@mantine/core';
@@ -8,6 +8,7 @@ import {
     CheckCircle, CreditCard, Banknote, QrCode, Landmark,
 } from 'lucide-react';
 import { formatARS } from '../../api/mockAdmin';
+import styles from './DashboardPage.module.css';
 import { useEffect, useState } from 'react';
 import { useSaleStore } from '../../store/useSaleStore';
 import { getAlertasStock } from '../../services/api/inventario';
@@ -39,10 +40,8 @@ function KpiCard({ label, value, sub, icon, color }: {
     return (
         <Paper
             p="lg" radius="md" withBorder
-            style={{
-                background: 'var(--mantine-color-dark-8)',
-                borderLeft: `3px solid var(--mantine-color-${color}-5)`,
-            }}
+            className={styles.card}
+            style={{ borderLeft: `3px solid var(--mantine-color-${color}-5)` }}
         >
             <Group justify="space-between" align="flex-start" wrap="nowrap">
                 <Stack gap={2}>
@@ -71,7 +70,6 @@ export function DashboardPage() {
 
     useEffect(() => {
         const today = new Date().toLocaleDateString('en-CA');
-        setLoading(true);
         Promise.allSettled([
             getAlertasStock(),
             listarVentas({ fecha: today, estado: 'completada', limit: 200 }),
@@ -183,7 +181,7 @@ export function DashboardPage() {
 
             {/* Gráficos */}
             <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }}>
-                <Paper p="lg" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                <Paper p="lg" radius="md" withBorder className={styles.card}>
                     <Group justify="space-between" mb="md">
                         <div>
                             <Title order={5}>Ventas por hora</Title>
@@ -212,7 +210,7 @@ export function DashboardPage() {
                     )}
                 </Paper>
 
-                <Paper p="lg" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                <Paper p="lg" radius="md" withBorder className={styles.card}>
                     <Group justify="space-between" mb="md">
                         <div>
                             <Title order={5}>Métodos de pago</Title>
@@ -260,7 +258,7 @@ export function DashboardPage() {
                     )}
                 </Paper>
 
-                <Paper p="lg" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                <Paper p="lg" radius="md" withBorder className={styles.card}>
                     <Group justify="space-between" mb="md">
                         <div>
                             <Title order={5}>Top productos</Title>
@@ -294,7 +292,7 @@ export function DashboardPage() {
             {/* Paneles */}
             <SimpleGrid cols={{ base: 1, md: 2 }}>
                 {/* Stock crítico */}
-                <Paper p="lg" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                <Paper p="lg" radius="md" withBorder className={styles.card}>
                     <Group justify="space-between" mb="lg">
                         <Title order={5}>Alertas de stock</Title>
                         {stockCritico.length > 0 && (
@@ -318,10 +316,8 @@ export function DashboardPage() {
                             {stockCritico.slice(0, 7).map((a) => (
                                 <Paper
                                     key={a.producto_id} p="xs" radius="sm"
-                                    style={{
-                                        background: 'var(--mantine-color-dark-7)',
-                                        borderLeft: `2px solid var(--mantine-color-${a.stock_actual === 0 ? 'red' : 'yellow'}-6)`,
-                                    }}
+                                    className={styles.alertRow}
+                                    style={{ borderLeft: `2px solid var(--mantine-color-${a.stock_actual === 0 ? 'red' : 'yellow'}-6)` }}
                                 >
                                     <Group justify="space-between" wrap="nowrap">
                                         <Text size="sm" fw={500} lineClamp={1} style={{ flex: 1 }}>{a.nombre}</Text>
@@ -339,7 +335,7 @@ export function DashboardPage() {
                 </Paper>
 
                 {/* Ventas del día */}
-                <Paper p="lg" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                <Paper p="lg" radius="md" withBorder className={styles.card}>
                     <Group justify="space-between" mb="md">
                         <div>
                             <Title order={5}>Ventas del día</Title>
@@ -362,7 +358,7 @@ export function DashboardPage() {
                     ) : (
                         <Table verticalSpacing="sm" highlightOnHover withRowBorders={false}>
                             <Table.Thead>
-                                <Table.Tr style={{ borderBottom: '1px solid var(--mantine-color-dark-5)' }}>
+                                <Table.Tr style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                                     <Table.Th><Text size="xs" c="dimmed" fw={700} tt="uppercase">Ticket</Text></Table.Th>
                                     <Table.Th><Text size="xs" c="dimmed" fw={700} tt="uppercase">Hora</Text></Table.Th>
                                     <Table.Th><Text size="xs" c="dimmed" fw={700} tt="uppercase">Cajero</Text></Table.Th>
@@ -374,7 +370,7 @@ export function DashboardPage() {
                                 {ventasHoy.slice(0, 10).map((v) => (
                                     <Table.Tr key={v.id}>
                                         <Table.Td>
-                                            <Text size="sm" fw={700} ff="monospace" c="blue.4">#{v.numeroTicket}</Text>
+                                            <Text size="sm" fw={700} ff="monospace" className={styles.ticketCell}>#{v.numeroTicket}</Text>
                                         </Table.Td>
                                         <Table.Td>
                                             <Text size="sm" c="dimmed">
@@ -393,7 +389,7 @@ export function DashboardPage() {
                                             </Badge>
                                         </Table.Td>
                                         <Table.Td ta="right">
-                                            <Text size="sm" fw={800} c="teal.4">{formatARS(v.totalConDescuento ?? v.total)}</Text>
+                                            <Text size="sm" fw={800} className={styles.totalCell}>{formatARS(v.totalConDescuento ?? v.total)}</Text>
                                         </Table.Td>
                                     </Table.Tr>
                                 ))}

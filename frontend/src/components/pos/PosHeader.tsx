@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Group, Text, Badge, Flex, Tooltip, ActionIcon, Modal, Button } from '@mantine/core';
+import { Group, Text, Badge, Flex, Tooltip, ActionIcon, Modal, Button, useMantineColorScheme } from '@mantine/core';
 import { Wifi, WifiOff, User, Printer, PanelLeftOpen, Settings, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
@@ -9,6 +9,7 @@ import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { usePrinterStore } from '../../store/usePrinterStore';
 import { useCajaStore } from '../../store/useCajaStore';
 import { PrinterSettingsModal } from './PrinterSettingsModal';
+import { ThemeToggle } from '../ThemeToggle';
 import styles from './PosHeader.module.css';
 
 const ROL_COLOR: Record<string, string> = {
@@ -29,6 +30,8 @@ export function PosHeader() {
     const { config: printerConfig } = usePrinterStore();
     const { limpiar: limpiarCaja } = useCajaStore();
     const navigate = useNavigate();
+    const { colorScheme } = useMantineColorScheme();
+    const isDark = colorScheme === 'dark';
 
     useEffect(() => {
         const interval = setInterval(() => setTime(new Date()), 1000);
@@ -133,7 +136,7 @@ export function PosHeader() {
             </Modal>
             <Flex align="center" justify="space-between" h="100%" px="lg">
                 <Group gap="sm">
-                    <Text fw={800} size="xl" c="white" ff="monospace">
+                    <Text fw={800} size="xl" c={isDark ? 'white' : 'blue.7'} ff="monospace">
                         BLEND
                     </Text>
                     <Text fw={300} size="xl" c="dimmed">
@@ -144,7 +147,7 @@ export function PosHeader() {
                 <Group gap="xs">
                     <User size={18} color="#909296" />
                     <Text size="sm" c="dimmed">Cajero:</Text>
-                    <Text size="sm" fw={600} c="white">
+                    <Text size="sm" fw={600} c={isDark ? 'white' : 'dark.7'}>
                         {user?.nombre ?? 'Cargándose…'}
                     </Text>
                     {user?.rol && (
@@ -205,8 +208,11 @@ export function PosHeader() {
                         </Tooltip>
                     )}
 
+                    {/* Theme toggle */}
+                    <ThemeToggle size="md" />
+
                     {/* Logout button — visually separated, requires confirmation */}
-                    <div style={{ width: 1, height: 24, background: 'var(--mantine-color-dark-4)', margin: '0 8px' }} />
+                    <div style={{ width: 1, height: 24, background: 'var(--mantine-color-default-border)', margin: '0 8px' }} />
                     <Tooltip label="Cerrar sesión" withArrow>
                         <ActionIcon
                             variant="light"
@@ -243,7 +249,7 @@ export function PosHeader() {
                         </Group>
                     </Badge>
                     <div className={styles.clock}>
-                        <Text size="lg" fw={700} c="white" ff="monospace">
+                        <Text size="lg" fw={700} c={isDark ? 'white' : 'dark.7'} ff="monospace">
                             {formattedTime}
                         </Text>
                         <Text size="xs" c="dimmed" ta="right">

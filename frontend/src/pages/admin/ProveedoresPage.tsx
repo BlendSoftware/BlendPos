@@ -215,7 +215,7 @@ export function ProveedoresPage() {
 
                 {/* ── Tab: Lista ────────────────────────────────────────── */}
                 <Tabs.Panel value="lista" pt="lg">
-                    <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
+                    <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                         <Table verticalSpacing="sm">
                             <Table.Thead>
                                 <Table.Tr>
@@ -265,7 +265,7 @@ export function ProveedoresPage() {
                                         </Table.Tr>
                                         {expandedId === p.id && p.contactos.length > 0 && (
                                             <Table.Tr key={`${p.id}-contacts`}>
-                                                <Table.Td colSpan={6} style={{ background: 'var(--mantine-color-dark-7)', padding: '12px 24px' }}>
+                                                <Table.Td colSpan={6} style={{ background: 'var(--mantine-color-default-hover)', padding: '12px 24px' }}>
                                                     <Text size="xs" fw={600} mb="xs" c="dimmed">CONTACTOS</Text>
                                                     <List size="sm" spacing={4}>
                                                         {p.contactos.map((c, i) => (
@@ -313,7 +313,7 @@ export function ProveedoresPage() {
                                     accept={['text/csv', '.csv']}
                                     loading={csvLoading}
                                     maxSize={2 * 1024 * 1024}
-                                    style={{ background: 'var(--mantine-color-dark-8)', border: '2px dashed var(--mantine-color-dark-4)' }}
+                                    style={{ border: '2px dashed var(--mantine-color-default-border)' }}
                                 >
                                     <Stack align="center" gap="xs" py="xl">
                                         <Upload size={36} color="var(--mantine-color-dimmed)" />
@@ -361,7 +361,7 @@ export function ProveedoresPage() {
                                 </Group>
 
                                 {importResult.detalle_errores.length > 0 ? (
-                                    <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
+                                    <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                                         <Table verticalSpacing="xs">
                                             <Table.Thead>
                                                 <Table.Tr>
@@ -431,7 +431,7 @@ export function ProveedoresPage() {
                         <Divider label="Contactos" labelPosition="left" />
 
                         {form.values.contactos.map((_, idx) => (
-                            <Paper key={idx} p="sm" radius="sm" withBorder style={{ background: 'var(--mantine-color-dark-7)' }}>
+                            <Paper key={idx} p="sm" radius="sm" withBorder style={{ background: 'var(--mantine-color-default-hover)' }}>
                                 <Stack gap="xs">
                                     <Group justify="space-between" align="center">
                                         <Text size="xs" fw={600} c="dimmed">CONTACTO {idx + 1}</Text>

@@ -126,7 +126,7 @@ export function PriceCheckModal() {
                     <Box className={styles.resultBox}>
                         <Stack gap="xs">
                             <Group justify="space-between" align="flex-start">
-                                <Text size="md" fw={700} c="white" style={{ flex: 1 }}>
+                                <Text size="md" fw={700} style={{ flex: 1 }}>
                                     {found.nombre}
                                 </Text>
                             </Group>

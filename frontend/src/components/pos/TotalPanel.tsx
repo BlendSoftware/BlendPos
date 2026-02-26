@@ -54,7 +54,7 @@ export function TotalPanel() {
                     </Box>
                 )}
 
-                <Text className={styles.totalAmount} fw={800} c={hasDiscount ? 'green.4' : 'white'}>
+                <Text className={`${styles.totalAmount} ${hasDiscount ? styles.totalDiscount : styles.totalNormal}`} fw={800}>
                     {formatCurrency(displayTotal)}
                 </Text>
 
@@ -79,8 +79,8 @@ export function TotalPanel() {
                     className={styles.actionButton}
                 >
                     <Stack gap={0} align="flex-start">
-                        <Text size="lg" fw={700} c="white">COBRAR</Text>
-                        <Text size="xs" c="rgba(255,255,255,0.7)">F10</Text>
+                        <Text size="lg" fw={700}>COBRAR</Text>
+                        <Text size="xs" className={styles.shortcutLabel}>F10</Text>
                     </Stack>
                 </Button>
 
@@ -98,7 +98,7 @@ export function TotalPanel() {
                         <Text size="sm" fw={700}>
                             {hasDiscount ? `Descuento (${descuentoGlobal}%)` : 'DESCUENTO'}
                         </Text>
-                        <Text size="xs" opacity={0.7}>F8</Text>
+                        <Text size="xs" className={styles.shortcutLabel}>F8</Text>
                     </Stack>
                 </Button>
 
@@ -114,7 +114,7 @@ export function TotalPanel() {
                 >
                     <Stack gap={0} align="flex-start">
                         <Text size="lg" fw={700}>CANCELAR</Text>
-                        <Text size="xs" opacity={0.7}>ESC</Text>
+                        <Text size="xs" className={styles.shortcutLabel}>ESC</Text>
                     </Stack>
                 </Button>
             </Stack>

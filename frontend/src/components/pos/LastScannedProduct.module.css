@@ -36,3 +36,17 @@
     color: var(--mantine-color-white);
     line-height: 1.3;
 }
+
+/* Light mode */
+:global([data-mantine-color-scheme='light']) .emptyContainer {
+    border-color: var(--mantine-color-gray-4);
+}
+
+:global([data-mantine-color-scheme='light']) .productContainer {
+    background-color: var(--mantine-color-green-0);
+    border-color: rgba(43, 138, 62, 0.3);
+}
+
+:global([data-mantine-color-scheme='light']) .productName {
+    color: var(--mantine-color-dark-8);
+}

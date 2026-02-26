@@ -171,7 +171,7 @@ export function CierreCajaPage() {
 
                                 {/* Resumen de pagos digitales del sistema */}
                                 {reporte && (
-                                    <Paper p="md" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-7)' }}>
+                                    <Paper p="md" radius="md" withBorder style={{ background: 'var(--mantine-color-default-hover)' }}>
                                         <Text size="sm" fw={600} mb="xs" c="dimmed">Medios digitales (confirmados por el sistema)</Text>
                                         <SimpleGrid cols={3} spacing="sm">
                                             {[
@@ -179,7 +179,7 @@ export function CierreCajaPage() {
                                                 { label: 'Crédito', value: Number(reporte.monto_esperado?.credito ?? 0) },
                                                 { label: 'Transferencia', value: Number(reporte.monto_esperado?.transferencia ?? 0) },
                                             ].map(({ label, value }) => (
-                                                <Paper key={label} p="sm" radius="sm" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                                                <Paper key={label} p="sm" radius="sm" withBorder>
                                                     <Text size="xs" c="dimmed">{label}</Text>
                                                     <Text fw={700} c="blue.4">{formatARS(value)}</Text>
                                                 </Paper>
@@ -188,7 +188,7 @@ export function CierreCajaPage() {
                                     </Paper>
                                 )}
 
-                                <Paper p="lg" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                                <Paper p="lg" radius="md" withBorder>
                                     <Title order={5} mb="md">Conteo de denominaciones</Title>
                                     <Stack gap="sm">
                                         {form.values.items.map((item, i) => (
@@ -264,7 +264,7 @@ export function CierreCajaPage() {
                                 </Alert>
 
                                 {esSupervisor && (
-                                    <Paper p="lg" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                                    <Paper p="lg" radius="md" withBorder>
                                         <Title order={5} mb="md">Reporte completo — {user?.rol}</Title>
                                         <SimpleGrid cols={2} spacing="sm">
                                             {[
@@ -275,7 +275,7 @@ export function CierreCajaPage() {
                                                 { label: 'Total QR', value: formatARS(statsDia.totalQR), color: 'gray' },
                                                 { label: 'Ventas del día', value: String(statsDia.cantidadVentas), color: 'gray' },
                                             ].map(({ label, value, color }) => (
-                                                <Paper key={label} p="sm" radius="sm" withBorder style={{ background: 'var(--mantine-color-dark-7)' }}>
+                                                <Paper key={label} p="sm" radius="sm" withBorder style={{ background: 'var(--mantine-color-default-hover)' }}>
                                                     <Text size="xs" c="dimmed">{label}</Text>
                                                     <Text size="lg" fw={700} c={`${color}.4`}>{value}</Text>
                                                 </Paper>
@@ -294,7 +294,7 @@ export function CierreCajaPage() {
 
                 {/* ── TAB: Historial ── */}
                 <Tabs.Panel value="historial">
-                    <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
+                    <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                         <Table highlightOnHover verticalSpacing="sm">
                             <Table.Thead>
                                 <Table.Tr>

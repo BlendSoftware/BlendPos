@@ -175,7 +175,7 @@ export function UsuariosPage() {
                 style={{ maxWidth: 360 }}
             />
 
-            <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
+            <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                 <Table highlightOnHover verticalSpacing="sm">
                     <Table.Thead>
                         <Table.Tr>

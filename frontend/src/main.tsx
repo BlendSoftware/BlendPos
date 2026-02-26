@@ -21,7 +21,12 @@ import './pwa';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MantineProvider theme={posTheme} forceColorScheme="dark">
+    {/*
+      defaultColorScheme="dark": arranca en oscuro la primera vez.
+      Sin forceColorScheme → el usuario puede cambiar y Mantine persiste
+      la preferencia en localStorage automáticamente.
+    */}
+    <MantineProvider theme={posTheme} defaultColorScheme="dark">
       <ModalsProvider>
         <Notifications position="top-right" zIndex={1000} />
         <App />

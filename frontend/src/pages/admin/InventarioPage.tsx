@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
     Stack, Title, Text, Group, Button, Badge, Table,
     Modal, Alert, Tabs, Paper, SimpleGrid, Skeleton,
@@ -266,7 +266,7 @@ export function InventarioPage() {
                             Todos los productos están sobre su stock mínimo.
                         </Alert>
                     ) : (
-                        <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
+                        <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                             <Table highlightOnHover verticalSpacing="sm">
                                 <Table.Thead>
                                     <Table.Tr>
@@ -323,7 +323,7 @@ export function InventarioPage() {
                                 Usá el botón &quot;Crear vínculo&quot; para definir relaciones caja/unidad.
                             </Alert>
                         ) : (
-                            <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
+                            <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                                 <Table highlightOnHover verticalSpacing="sm">
                                     <Table.Thead>
                                         <Table.Tr>
@@ -377,7 +377,7 @@ export function InventarioPage() {
                 {/* Tab: Ajuste Manual */}
                 <Tabs.Panel value="ajuste" pt="lg">
                     <SimpleGrid cols={{ base: 1, md: 2 }}>
-                        <Paper p="lg" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                        <Paper p="lg" radius="md" withBorder>
                             <Title order={5} mb="md">Registrar movimiento</Title>
                             <form onSubmit={handleAjuste}>
                                 <Stack gap="md">
@@ -415,7 +415,7 @@ export function InventarioPage() {
                             </form>
                         </Paper>
 
-                        <Paper p="lg" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                        <Paper p="lg" radius="md" withBorder>
                             <Title order={5} mb="md">Vista previa</Title>
                             {ajusteForm.values.productoId ? (() => {
                                 const p = productos.find((x) => x.id === ajusteForm.values.productoId);
@@ -461,7 +461,7 @@ export function InventarioPage() {
 
                 {/* Tab: Movimientos */}
                 <Tabs.Panel value="movimientos" pt="lg">
-                    <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
+                    <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                         <Table highlightOnHover verticalSpacing="sm">
                             <Table.Thead>
                                 <Table.Tr>

@@ -298,7 +298,7 @@ export function PosTerminal() {
                 justifyContent: 'center',
                 height: '100vh',
                 width: '100vw',
-                background: 'var(--mantine-color-dark-8, #1a1b1e)',
+                background: 'var(--mantine-color-body)',
             }}>
                 <Loader size="xl" color="blue" type="dots" />
             </div>

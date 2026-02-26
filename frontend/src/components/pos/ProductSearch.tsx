@@ -129,7 +129,7 @@ export function ProductSearch({ onClose, inputRef, initialQuery = '' }: ProductS
                         <Group justify="space-between" mb="sm">
                             <Group gap="xs">
                                 <Search size={18} color="var(--mantine-color-blue-5)" />
-                                <Text fw={700} size="md" c="white">
+                                <Text fw={700} size="md">
                                     Buscar Producto
                                 </Text>
                             </Group>
@@ -185,7 +185,7 @@ export function ProductSearch({ onClose, inputRef, initialQuery = '' }: ProductS
                                 >
                                     <Group justify="space-between" gap="md">
                                         <div>
-                                            <Text size="sm" fw={600} c="white">
+                                            <Text size="sm" fw={600}>
                                                 {product.nombre}
                                             </Text>
                                             <Text size="xs" c="dimmed" ff="monospace">

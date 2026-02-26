@@ -8,6 +8,12 @@
     padding: var(--mantine-spacing-md);
 }
 
+/* Light mode */
+:global([data-mantine-color-scheme='light']) .summary {
+    background-color: var(--mantine-color-gray-1);
+    border: 1px solid var(--mantine-color-gray-3);
+}
+
 .modalTotal {
     color: #2b8a3e;
     font-variant-numeric: tabular-nums;

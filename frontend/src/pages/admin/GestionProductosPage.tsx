@@ -349,7 +349,7 @@ export function GestionProductosPage() {
             </Group>
 
             {/* Tabla */}
-            <Paper radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)', overflow: 'hidden' }}>
+            <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                 {loading ? (
                     <Stack p="md" gap="sm">
                         {[...Array(6)].map((_, i) => <Skeleton key={i} height={40} radius="sm" />)}

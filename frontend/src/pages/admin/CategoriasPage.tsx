@@ -123,7 +123,7 @@ export function CategoriasPage() {
                 rightSection={busqueda ? <ActionIcon size="sm" variant="subtle" onClick={() => setBusqueda('')}><X size={12} /></ActionIcon> : null}
             />
 
-            <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
+            <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                 <Table verticalSpacing="sm">
                     <Table.Thead>
                         <Table.Tr>

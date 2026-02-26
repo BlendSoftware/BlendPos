@@ -243,7 +243,7 @@ export function PaymentModal() {
                         {vuelto !== null && vuelto >= 0 && (
                             <Box className={styles.vueltoBox}>
                                 <Group justify="space-between">
-                                    <Text size="md" fw={700} c="white">Vuelto</Text>
+                                    <Text size="md" fw={700}>Vuelto</Text>
                                     <Text size="xl" fw={800} c="teal.4" ff="monospace">
                                         {formatCurrency(vuelto)}
                                     </Text>
@@ -340,7 +340,7 @@ export function PaymentModal() {
                         {cashDue > 0 && vuelto !== null && vuelto >= 0 && (
                             <Box className={styles.vueltoBox}>
                                 <Group justify="space-between">
-                                    <Text size="md" fw={700} c="white">Vuelto</Text>
+                                    <Text size="md" fw={700}>Vuelto</Text>
                                     <Text size="xl" fw={800} c="teal.4" ff="monospace">
                                         {formatCurrency(vuelto)}
                                     </Text>

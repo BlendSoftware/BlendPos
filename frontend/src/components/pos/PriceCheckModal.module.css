@@ -6,6 +6,12 @@
     animation: fadeIn 150ms ease;
 }
 
+/* Light mode */
+:global([data-mantine-color-scheme='light']) .resultBox {
+    background-color: var(--mantine-color-gray-1);
+    border-color: var(--mantine-color-gray-3);
+}
+
 .notFoundBox {
     background-color: rgba(255, 160, 0, 0.05);
     border: 1px solid rgba(255, 160, 0, 0.25);

@@ -110,7 +110,7 @@ export function SalesTable() {
 
                                 <Table.Td>
                                     <Box>
-                                        <Text size="sm" fw={600} c="white" lineClamp={1}>
+                                        <Text size="sm" fw={600} lineClamp={1}>
                                             {item.nombre}
                                         </Text>
                                         {item.descuento > 0 && (
@@ -169,7 +169,7 @@ export function SalesTable() {
                                                         startEdit(item.id, item.cantidad);
                                                     }}
                                                 >
-                                                    <Text size="sm" fw={700} c="white">
+                                                    <Text size="sm" fw={700}>
                                                         {item.cantidad}
                                                     </Text>
                                                 </Box>
@@ -193,7 +193,7 @@ export function SalesTable() {
                                 </Table.Td>
 
                                 <Table.Td style={{ textAlign: 'right' }}>
-                                    <Text size="sm" fw={700} c="white" ff="monospace">
+                                    <Text size="sm" fw={700} ff="monospace">
                                         {formatCurrency(item.subtotal)}
                                     </Text>
                                 </Table.Td>

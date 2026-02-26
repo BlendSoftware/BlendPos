@@ -17,7 +17,7 @@ export function LoginPage() {
 
     const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
 
-    const form = useForm({
+    const form = useForm<{ email: string; password: string }>({
         initialValues: { email: '', password: '' },
         validate: {
             email: (v) => (v.trim().length >= 2 ? null : 'Ingrese usuario o email'),
@@ -47,7 +47,7 @@ export function LoginPage() {
     });
 
     return (
-        <Center style={{ minHeight: '100vh', background: 'var(--mantine-color-dark-9)' }}>
+        <Center style={{ minHeight: '100vh', background: 'var(--mantine-color-body)' }}>
             <Box w={380}>
                 <Stack gap="xs" mb="xl" align="center">
                     <Title order={1} c="blue.4" fw={800} style={{ letterSpacing: '-1px' }}>
@@ -56,7 +56,7 @@ export function LoginPage() {
                     <Text c="dimmed" size="sm">Panel de Administración</Text>
                 </Stack>
 
-                <Paper p="xl" radius="md" withBorder style={{ background: 'var(--mantine-color-dark-8)' }}>
+                <Paper p="xl" radius="md" withBorder>
                     <Title order={3} mb="lg">Iniciar sesión</Title>
 
                     {error && (

@@ -54,7 +54,7 @@ function SaleRow({ sale }: { sale: SaleRecord }) {
                 <Group gap="sm">
                     <ShoppingBag size={16} color="var(--mantine-color-dark-3)" />
                     <Stack gap={0}>
-                        <Text size="sm" fw={600} c="white" ff="monospace">
+                        <Text size="sm" fw={600} ff="monospace">
                             #{sale.numeroTicket}
                         </Text>
                         <Group gap="xs">
@@ -120,7 +120,7 @@ function SaleRow({ sale }: { sale: SaleRecord }) {
                         <Group key={item.id} justify="space-between" py={4}>
                             <Group gap="xs">
                                 <Text size="xs" c="dimmed" w={20}>{item.cantidad}×</Text>
-                                <Text size="xs" c="white">{item.nombre}</Text>
+                                <Text size="xs">{item.nombre}</Text>
                                 {item.descuento > 0 && (
                                     <Badge size="xs" color="orange" variant="light">-{item.descuento}%</Badge>
                                 )}
@@ -160,7 +160,7 @@ export function SaleHistoryModal({ opened, onClose }: Props) {
                     <Group grow className={styles.statsRow}>
                         <Box className={styles.statCard}>
                             <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Ventas hoy</Text>
-                            <Text size="xl" fw={800} c="white">{totalTransactions}</Text>
+                            <Text size="xl" fw={800}>{totalTransactions}</Text>
                         </Box>
                         <Box className={styles.statCard}>
                             <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Total cobrado</Text>

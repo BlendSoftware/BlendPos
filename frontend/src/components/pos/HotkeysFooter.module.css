@@ -12,3 +12,9 @@
     min-width: 28px;
     text-align: center;
 }
+
+/* Light mode */
+:global([data-mantine-color-scheme='light']) .footer {
+    background-color: var(--mantine-color-white);
+    border-top-color: var(--mantine-color-gray-3);
+}

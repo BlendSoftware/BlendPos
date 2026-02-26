@@ -31,3 +31,22 @@
     padding: var(--mantine-spacing-xs) var(--mantine-spacing-md) var(--mantine-spacing-sm);
     background-color: var(--mantine-color-dark-7);
 }
+
+/* Light mode */
+:global([data-mantine-color-scheme='light']) .statCard {
+    background-color: var(--mantine-color-white);
+    border-color: var(--mantine-color-gray-3);
+}
+
+:global([data-mantine-color-scheme='light']) .saleCard {
+    background-color: var(--mantine-color-white);
+    border-color: var(--mantine-color-gray-3);
+}
+
+:global([data-mantine-color-scheme='light']) .saleHeader:hover {
+    background-color: var(--mantine-color-gray-1);
+}
+
+:global([data-mantine-color-scheme='light']) .saleDetail {
+    background-color: var(--mantine-color-gray-0);
+}

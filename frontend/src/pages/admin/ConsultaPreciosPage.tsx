@@ -44,7 +44,7 @@ export function ConsultaPreciosPage() {
         : null;
 
     return (
-        <Box style={{ minHeight: '100vh', background: 'var(--mantine-color-dark-9)', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '10vh' }}>
+        <Box style={{ minHeight: '100vh', background: 'var(--mantine-color-body)', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '10vh' }}>
             <Stack align="center" gap="xl" w="100%" maw={560} px="md">
                 <div style={{ textAlign: 'center' }}>
                     <Title order={1} fw={900} c="blue.4" style={{ fontSize: '2.5rem', letterSpacing: '-2px' }}>
@@ -84,19 +84,19 @@ export function ConsultaPreciosPage() {
 
                 {/* Resultado */}
                 {!loading && resultado === 'not_found' && (
-                    <Paper p="xl" radius="md" withBorder w="100%" style={{ background: 'var(--mantine-color-dark-8)', textAlign: 'center' }}>
+                    <Paper p="xl" radius="md" withBorder w="100%" style={{ textAlign: 'center' }}>
                         <Text size="xl" c="red.4" fw={700}>Producto no encontrado</Text>
                         <Text size="sm" c="dimmed" mt="xs">Verificá el código o el nombre ingresado.</Text>
                     </Paper>
                 )}
 
                 {!loading && resultado && resultado !== 'not_found' && (
-                    <Paper p="xl" radius="md" withBorder w="100%" style={{ background: 'var(--mantine-color-dark-8)' }}>
+                    <Paper p="xl" radius="md" withBorder w="100%" style={{  }}>
                         <Stack gap="sm" align="center">
                             {/* Imagen placeholder */}
                             <Center
                                 w={100} h={100}
-                                style={{ borderRadius: 12, background: 'var(--mantine-color-dark-6)', fontSize: '2.5rem' }}
+                                style={{ borderRadius: 12, background: 'var(--mantine-color-default-hover)', fontSize: '2.5rem' }}
                             >
                                 🛒
                             </Center>

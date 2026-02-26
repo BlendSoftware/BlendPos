@@ -13,3 +13,9 @@
 .quickBadge:hover {
     transform: scale(1.05);
 }
+
+/* Light mode */
+:global([data-mantine-color-scheme='light']) .summary {
+    background-color: var(--mantine-color-gray-1);
+    border: 1px solid var(--mantine-color-gray-3);
+}

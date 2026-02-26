@@ -35,6 +35,24 @@
     max-height: 70vh;
 }
 
+/* Light mode */
+:global([data-mantine-color-scheme='light']) .searchBox {
+    background-color: var(--mantine-color-white) !important;
+    border-color: var(--mantine-color-gray-3) !important;
+}
+
+:global([data-mantine-color-scheme='light']) .header {
+    border-bottom-color: var(--mantine-color-gray-3);
+}
+
+:global([data-mantine-color-scheme='light']) .resultItem {
+    border-bottom-color: var(--mantine-color-gray-2);
+}
+
+:global([data-mantine-color-scheme='light']) .resultsList {
+    scrollbar-color: var(--mantine-color-gray-4) transparent;
+}
+
 .header {
     padding: var(--mantine-spacing-md);
     border-bottom: 1px solid var(--mantine-color-dark-5);
@@ -82,6 +100,12 @@
     border-top: 1px solid var(--mantine-color-dark-5);
     background-color: var(--mantine-color-dark-8);
     flex-shrink: 0;
+}
+
+/* Light mode footer */
+:global([data-mantine-color-scheme='light']) .footer {
+    border-top-color: var(--mantine-color-gray-3);
+    background-color: var(--mantine-color-gray-0);
 }
 
 .closeBtn {

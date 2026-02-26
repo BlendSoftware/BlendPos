@@ -1,0 +1,35 @@
+/* Card base: en dark usa el fondo por defecto de Mantine Paper, en claro fuerza blanco */
+.card {
+    background: var(--mantine-color-dark-7);
+}
+
+:global([data-mantine-color-scheme='light']) .card {
+    background: var(--mantine-color-white);
+}
+
+/* Filas de alerta de stock */
+.alertRow {
+    background: var(--mantine-color-dark-6);
+    border-radius: var(--mantine-radius-sm);
+}
+
+:global([data-mantine-color-scheme='light']) .alertRow {
+    background: var(--mantine-color-gray-1);
+}
+
+/* Texto de totales en la tabla — visible en ambos modos */
+.totalCell {
+    color: var(--mantine-color-teal-4);
+}
+
+:global([data-mantine-color-scheme='light']) .totalCell {
+    color: var(--mantine-color-teal-7);
+}
+
+.ticketCell {
+    color: var(--mantine-color-blue-4);
+}
+
+:global([data-mantine-color-scheme='light']) .ticketCell {
+    color: var(--mantine-color-blue-7);
+}

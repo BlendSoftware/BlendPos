@@ -337,7 +337,7 @@ export function FacturacionPage() {
                 </Tooltip>
             </Group>
 
-            <Paper radius="md" withBorder style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
+            <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
                 <Table highlightOnHover verticalSpacing="sm">
                     <Table.Thead>
                         <Table.Tr>
@@ -430,7 +430,7 @@ export function FacturacionPage() {
 
                                 {expandedId === v.id && (
                                     <Table.Tr key={`${v.id}-detail`}>
-                                        <Table.Td colSpan={8} style={{ background: 'var(--mantine-color-dark-7)', padding: '12px 24px' }}>
+                                        <Table.Td colSpan={8} style={{ background: 'var(--mantine-color-default-hover)', padding: '12px 24px' }}>
                                             <Text size="xs" fw={600} mb="xs" c="dimmed">DETALLE DE ITEMS</Text>
                                             <Table verticalSpacing="xs">
                                                 <Table.Thead>

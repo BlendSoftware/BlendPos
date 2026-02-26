@@ -10,6 +10,13 @@
     scrollbar-color: var(--mantine-color-dark-4) transparent;
 }
 
+/* Light mode */
+:global([data-mantine-color-scheme='light']) .panel {
+    background-color: var(--mantine-color-white);
+    border-left-color: var(--mantine-color-gray-3);
+    scrollbar-color: var(--mantine-color-gray-4) transparent;
+}
+
 .scanSection {
     flex-shrink: 0;
 }
@@ -34,6 +41,33 @@
     font-family: 'Inter', monospace;
     letter-spacing: -1px;
     transition: color 300ms ease;
+}
+
+/* Precio sin descuento: blanco en oscuro, oscuro en claro */
+.totalNormal {
+    color: #ffffff;
+}
+:global([data-mantine-color-scheme='light']) .totalNormal {
+    color: var(--mantine-color-dark-8);
+}
+
+/* Precio con descuento: verde en ambos modos */
+.totalDiscount {
+    color: var(--mantine-color-green-5);
+}
+:global([data-mantine-color-scheme='light']) .totalDiscount {
+    color: var(--mantine-color-green-7);
+}
+
+/* Etiquetas de atajo de teclado (F10, F8, ESC) — heredan color del botón */
+.shortcutLabel {
+    opacity: 0.65;
+}
+
+/* En modo claro los botones son más pálidos, bajamos la opacidad menos */
+:global([data-mantine-color-scheme='light']) .shortcutLabel {
+    opacity: 1;
+    color: rgba(0, 0, 0, 0.45);
 }
 
 .actions {

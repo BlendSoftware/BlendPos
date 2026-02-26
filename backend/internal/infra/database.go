@@ -118,28 +118,28 @@ END $$`},
 		{"rename productos_codigo_barras_key → uni_productos_codigo_barras", `
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_constraint
-             WHERE conrelid = 'productos'::regclass AND conname = 'productos_codigo_barras_key') THEN
+             WHERE conrelid = to_regclass('productos') AND conname = 'productos_codigo_barras_key') THEN
     ALTER TABLE productos RENAME CONSTRAINT productos_codigo_barras_key TO uni_productos_codigo_barras;
   END IF;
 END $$`},
 		{"rename usuarios_username_key → uni_usuarios_username", `
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_constraint
-             WHERE conrelid = 'usuarios'::regclass AND conname = 'usuarios_username_key') THEN
+             WHERE conrelid = to_regclass('usuarios') AND conname = 'usuarios_username_key') THEN
     ALTER TABLE usuarios RENAME CONSTRAINT usuarios_username_key TO uni_usuarios_username;
   END IF;
 END $$`},
 		{"rename proveedores_cuit_key → uni_proveedores_cuit", `
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_constraint
-             WHERE conrelid = 'proveedores'::regclass AND conname = 'proveedores_cuit_key') THEN
+             WHERE conrelid = to_regclass('proveedores') AND conname = 'proveedores_cuit_key') THEN
     ALTER TABLE proveedores RENAME CONSTRAINT proveedores_cuit_key TO uni_proveedores_cuit;
   END IF;
 END $$`},
 		{"rename ventas_numero_ticket_key → uni_ventas_numero_ticket", `
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_constraint
-             WHERE conrelid = 'ventas'::regclass AND conname = 'ventas_numero_ticket_key') THEN
+             WHERE conrelid = to_regclass('ventas') AND conname = 'ventas_numero_ticket_key') THEN
     ALTER TABLE ventas RENAME CONSTRAINT ventas_numero_ticket_key TO uni_ventas_numero_ticket;
   END IF;
 END $$`},
@@ -148,7 +148,7 @@ END $$`},
 		{"rename ventas_offline_id_key → uni_ventas_offline_id", `
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_constraint
-             WHERE conrelid = 'ventas'::regclass AND conname = 'ventas_offline_id_key') THEN
+             WHERE conrelid = to_regclass('ventas') AND conname = 'ventas_offline_id_key') THEN
     ALTER TABLE ventas RENAME CONSTRAINT ventas_offline_id_key TO uni_ventas_offline_id;
   END IF;
 END $$`},
@@ -160,7 +160,7 @@ END $$`},
 DO $$ BEGIN
   -- Only rename if old constraint exists AND idx_padre_hijo does NOT yet exist
   IF EXISTS (SELECT 1 FROM pg_constraint
-             WHERE conrelid = 'producto_hijos'::regclass
+             WHERE conrelid = to_regclass('producto_hijos')
                AND conname = 'producto_hijos_producto_padre_id_producto_hijo_id_key')
      AND NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_padre_hijo') THEN
     ALTER TABLE producto_hijos
@@ -224,17 +224,31 @@ END $$`},
 // DO NOTHING semantics so re-running on an already-patched DB is safe.
 func applySchemaPatches(db *gorm.DB) error {
 	patches := []string{
-		// migration 000003: retry columns — ADD COLUMN IF NOT EXISTS is idempotent
-		`ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS retry_count   INT         NOT NULL DEFAULT 0`,
-		`ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ`,
-		`ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS last_error    TEXT`,
+	// migration 000003: retry columns — ADD COLUMN IF NOT EXISTS is idempotent
+		`DO $$ BEGIN
+		  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'comprobantes') THEN
+		    ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS retry_count   INT         NOT NULL DEFAULT 0;
+		    ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ;
+		    ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS last_error    TEXT;
+		  END IF;
+		END $$`,
 		// migration 000003: partial index for the retry cron query
-		`CREATE INDEX IF NOT EXISTS idx_comprobantes_pending_retry
-		    ON comprobantes (next_retry_at)
-		    WHERE estado = 'pendiente' AND next_retry_at IS NOT NULL`,
+		`DO $$ BEGIN
+		  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'comprobantes')
+		    AND NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_comprobantes_pending_retry') THEN
+		    CREATE INDEX idx_comprobantes_pending_retry
+		        ON comprobantes (next_retry_at)
+		        WHERE estado = 'pendiente' AND next_retry_at IS NOT NULL;
+		  END IF;
+		END $$`,
 		// migration 000002: historial_precios index (safe to re-create)
-		`CREATE INDEX IF NOT EXISTS idx_historial_precios_producto
-		    ON historial_precios (producto_id)`,
+		`DO $$ BEGIN
+		  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'historial_precios')
+		    AND NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_historial_precios_producto') THEN
+		    CREATE INDEX idx_historial_precios_producto
+		        ON historial_precios (producto_id);
+		  END IF;
+		END $$`,
 	}
 
 	for _, sql := range patches {

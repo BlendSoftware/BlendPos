@@ -7,6 +7,11 @@
     background-color: var(--mantine-color-dark-7);
 }
 
+/* Light mode */
+:global([data-mantine-color-scheme='light']) .posLayout {
+    background-color: var(--mantine-color-gray-1);
+}
+
 .mainContent {
     display: grid;
     grid-template-columns: 70fr 30fr;
