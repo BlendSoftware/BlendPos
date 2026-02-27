@@ -37,8 +37,8 @@ cd BlendPos
 
 ### 2. Iniciar los Contenedores
 
-```bash
-docker-compose up -d
+```powershell
+docker compose up -d
 ```
 
 Esto iniciará:
@@ -76,24 +76,18 @@ migrate -path ./backend/migrations -database "postgresql://blendpos:blendpos@loc
 
 ### Opción B: Ejecutar Migraciones con Docker
 
-Si no tienes golang-migrate instalado:
+Si no tienes golang-migrate instalado (las migraciones ya están disponibles dentro del contenedor backend):
 
-```bash
+```powershell
 # Windows (PowerShell) / Linux / Mac
-docker exec blendpos-postgres-1 psql -U blendpos -d blendpos -f /docker-entrypoint-initdb.d/000001_create_tables.up.sql
-docker exec blendpos-postgres-1 psql -U blendpos -d blendpos -f /docker-entrypoint-initdb.d/000002_historial_precios.up.sql
-docker exec blendpos-postgres-1 psql -U blendpos -d blendpos -f /docker-entrypoint-initdb.d/000003_comprobante_retry.up.sql
-docker exec blendpos-postgres-1 psql -U blendpos -d blendpos -f /docker-entrypoint-initdb.d/000004_fix_caja_overflow.up.sql
-docker exec blendpos-postgres-1 psql -U blendpos -d blendpos -f /docker-entrypoint-initdb.d/000005_missing_tables.up.sql
+docker exec blendpos-backend-1 psql -h postgres -U blendpos -d blendpos -f /app/migrations/000001_create_tables.up.sql
+docker exec blendpos-backend-1 psql -h postgres -U blendpos -d blendpos -f /app/migrations/000002_historial_precios.up.sql
+docker exec blendpos-backend-1 psql -h postgres -U blendpos -d blendpos -f /app/migrations/000003_comprobante_retry.up.sql
+docker exec blendpos-backend-1 psql -h postgres -U blendpos -d blendpos -f /app/migrations/000004_fix_caja_overflow.up.sql
+docker exec blendpos-backend-1 psql -h postgres -U blendpos -d blendpos -f /app/migrations/000005_missing_tables.up.sql
 ```
 
-**Nota:** Para que esto funcione, necesitas montar el directorio de migraciones en el contenedor. Agrega a `docker-compose.yml` en el servicio `postgres`:
-
-```yaml
-volumes:
-  - pg_data:/var/lib/postgresql/data
-  - ./backend/migrations:/docker-entrypoint-initdb.d  # ← Agregar esta línea
-```
+**Nota:** El directorio `backend/` ya está montado en `/app/` dentro del contenedor backend — no hace falta modificar nada en `docker-compose.yml`.
 
 ### Verificar Migraciones Aplicadas
 
@@ -116,25 +110,12 @@ Deberías ver las siguientes tablas:
 - `venta_items`
 - `venta_pagos`
 - `ventas`
-- `schema_migrations` (control de versiones)
 
 ---
 
 ## 👤 Crear Usuario Administrador
 
-### Método 1: Script SQL Directo (Más Rápido)
-
-```bash
-# Copiar el script al contenedor
-docker cp create_admin.sql blendpos-postgres-1:/tmp/create_admin.sql
-
-# Ejecutar el script
-docker exec blendpos-postgres-1 psql -U blendpos -d blendpos -f /tmp/create_admin.sql
-```
-
-### Método 2: Comando Directo
-
-```bash
+```powershell
 docker exec blendpos-postgres-1 psql -U blendpos -d blendpos -c "
 INSERT INTO usuarios (username, nombre, email, password_hash, rol, activo)
 VALUES (
@@ -251,27 +232,27 @@ Como se mencionó anteriormente:
 
 ### Reiniciar Todos los Servicios
 
-```bash
-docker-compose restart
+```powershell
+docker compose restart
 ```
 
 ### Reiniciar Solo el Backend
 
-```bash
+```powershell
 docker restart blendpos-backend-1
 ```
 
 ### Reiniciar Solo el Frontend
 
-```bash
+```powershell
 docker restart blendpos-frontend-1
 ```
 
 ### Ver Logs en Tiempo Real
 
-```bash
+```powershell
 # Todos los servicios
-docker-compose logs -f
+docker compose logs -f
 
 # Solo backend
 docker logs blendpos-backend-1 -f
@@ -282,16 +263,16 @@ docker logs blendpos-frontend-1 -f
 
 ### Detener Todos los Servicios
 
-```bash
-docker-compose down
+```powershell
+docker compose down
 ```
 
 ### Borrar TODO (incluyendo base de datos) y Empezar de Cero
 
-```bash
+```powershell
 # ⚠️ CUIDADO: Esto borra TODOS los datos
-docker-compose down -v
-docker-compose up -d
+docker compose down -v
+docker compose up -d
 # Luego volver a ejecutar migraciones y crear admin
 ```
 
@@ -337,11 +318,11 @@ Comandos útiles en psql:
 
 **Solución:**
 1. Verificar que el hash de la contraseña sea correcto:
-   ```bash
+   ```powershell
    docker exec blendpos-postgres-1 psql -U blendpos -d blendpos -c "SELECT username, password_hash FROM usuarios WHERE username = 'admin@blendpos.com';"
    ```
 2. El hash debe ser: `$2a$12$iQKQuegOS6I5CKgwERkq6.cuTYgfLKI.gZQe0TBThL8zqipXMyhxS`
-3. Si no coincide, volver a ejecutar el script de creación de admin
+3. Si no coincide, volver a ejecutar el comando de creación de admin de la sección anterior
 
 ### Base de Datos No Tiene Tablas
 
@@ -349,9 +330,9 @@ Comandos útiles en psql:
 
 **Solución:**
 1. Ejecutar migraciones manualmente (ver sección "Configuración de Base de Datos")
-2. Verificar que el archivo `schema_migrations` exista:
-   ```bash
-   docker exec blendpos-postgres-1 psql -U blendpos -d blendpos -c "SELECT * FROM schema_migrations;"
+2. Verificar qué tablas existen:
+   ```powershell
+   docker exec blendpos-postgres-1 psql -U blendpos -d blendpos -c "\dt"
    ```
 
 ### Puerto Ocupado (Address Already in Use)
