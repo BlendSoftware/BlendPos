@@ -9,9 +9,11 @@ RUN npm ci --ignore-scripts
 
 COPY . .
 
-# VITE_API_URL is injected at build time via ARG
+# Vite env vars are injected at build time via ARG
 ARG VITE_API_URL=https://api.example.com
+ARG VITE_API_BASE=https://api.example.com
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_API_BASE=$VITE_API_BASE
 
 RUN npm run build
 
