@@ -85,3 +85,27 @@ export async function searchCatalogProducts(query: string, limit = 200): Promise
         .slice(0, limit);
 }
 
+/** Obtiene el stock local actual de un producto en IndexedDB. */
+export async function getLocalStock(productId: string): Promise<number> {
+    const product = await db.products.get(productId);
+    return product?.stock ?? 0;
+}
+
+/**
+ * Descuenta stock localmente en IndexedDB tras confirmar una venta.
+ * Esto evita que el POS permita vender más de lo disponible entre
+ * la confirmación y la próxima sincronización con el backend.
+ */
+export async function deductLocalStock(items: { id: string; cantidad: number }[]): Promise<void> {
+    await db.transaction('rw', db.products, async () => {
+        for (const item of items) {
+            const product = await db.products.get(item.id);
+            if (product) {
+                await db.products.update(item.id, {
+                    stock: product.stock - item.cantidad,
+                });
+            }
+        }
+    });
+}
+

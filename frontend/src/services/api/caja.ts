@@ -15,6 +15,7 @@ export interface MontosPorMetodo {
     debito: number;
     credito: number;
     transferencia: number;
+    qr: number;
     total: number;
 }
 
@@ -58,6 +59,7 @@ export interface DeclaracionArqueo {
     debito: number;
     credito: number;
     transferencia: number;
+    qr: number;
 }
 
 export interface ArqueoRequest {

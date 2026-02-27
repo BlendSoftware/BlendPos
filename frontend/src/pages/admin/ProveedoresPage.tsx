@@ -67,6 +67,7 @@ export function ProveedoresPage() {
     const [csvLoading, setCsvLoading] = useState(false);
     const [importResult, setImportResult] = useState<CSVImportResponse | null>(null);
     const [csvProveedorId, setCsvProveedorId] = useState<string | null>(null);
+    const [csvPreview, setCsvPreview] = useState<{ headers: string[]; rows: string[][] } | null>(null);
 
     const fetchProveedores = useCallback(async () => {
         setLoading(true);
@@ -156,12 +157,29 @@ export function ProveedoresPage() {
         }
     });
 
-    // CSV drop — just store the file, no client-side preview
+    // CSV drop — parse and show preview before importing
     const onDrop = useCallback((files: FileWithPath[]) => {
         const file = files[0];
         if (!file) return;
         setCsvFile(file);
         setImportResult(null);
+        setCsvPreview(null);
+
+        // Parse CSV client-side for preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target?.result as string;
+            if (!text) return;
+            const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+            if (lines.length < 2) {
+                notifications.show({ title: 'CSV vacío', message: 'El archivo no contiene filas de datos', color: 'yellow' });
+                return;
+            }
+            const headers = lines[0].split(',').map((h) => h.trim());
+            const rows = lines.slice(1).map((line) => line.split(',').map((c) => c.trim()));
+            setCsvPreview({ headers, rows });
+        };
+        reader.readAsText(file, 'UTF-8');
     }, []);
 
     const aplicarCSV = async () => {
@@ -327,13 +345,52 @@ export function ProveedoresPage() {
 
                                 {csvFile && (
                                     <Group justify="flex-end" gap="sm">
-                                        <Button variant="subtle" leftSection={<X size={14} />} onClick={() => setCsvFile(null)}>
+                                        <Button variant="subtle" leftSection={<X size={14} />} onClick={() => { setCsvFile(null); setCsvPreview(null); }}>
                                             Quitar archivo
                                         </Button>
-                                        <Button leftSection={<CheckCircle size={14} />} loading={csvLoading} onClick={aplicarCSV}>
+                                        <Button leftSection={<CheckCircle size={14} />} loading={csvLoading} onClick={aplicarCSV} disabled={!csvPreview}>
                                             Importar precios
                                         </Button>
                                     </Group>
+                                )}
+
+                                {/* CSV preview table */}
+                                {csvPreview && !importResult && (
+                                    <Paper radius="md" withBorder style={{ overflow: 'auto', maxHeight: 340 }}>
+                                        <Alert color="blue" variant="light" mb="sm" p="xs">
+                                            <Text size="xs">
+                                                Vista previa: <strong>{csvPreview.rows.length}</strong> filas detectadas.
+                                                Revisá los datos antes de importar.
+                                            </Text>
+                                        </Alert>
+                                        <Table verticalSpacing="xs" highlightOnHover withColumnBorders>
+                                            <Table.Thead>
+                                                <Table.Tr>
+                                                    <Table.Th style={{ width: 50 }}><Text size="xs" c="dimmed">N°</Text></Table.Th>
+                                                    {csvPreview.headers.map((h, i) => (
+                                                        <Table.Th key={i}><Text size="xs" fw={600}>{h}</Text></Table.Th>
+                                                    ))}
+                                                </Table.Tr>
+                                            </Table.Thead>
+                                            <Table.Tbody>
+                                                {csvPreview.rows.slice(0, 50).map((row, i) => (
+                                                    <Table.Tr key={i}>
+                                                        <Table.Td><Text size="xs" c="dimmed" ff="monospace">{i + 2}</Text></Table.Td>
+                                                        {row.map((cell, j) => (
+                                                            <Table.Td key={j}><Text size="xs">{cell || '—'}</Text></Table.Td>
+                                                        ))}
+                                                    </Table.Tr>
+                                                ))}
+                                                {csvPreview.rows.length > 50 && (
+                                                    <Table.Tr>
+                                                        <Table.Td colSpan={csvPreview.headers.length + 1} ta="center">
+                                                            <Text size="xs" c="dimmed">… y {csvPreview.rows.length - 50} filas más</Text>
+                                                        </Table.Td>
+                                                    </Table.Tr>
+                                                )}
+                                            </Table.Tbody>
+                                        </Table>
+                                    </Paper>
                                 )}
                             </>
                         )}
@@ -354,7 +411,7 @@ export function ProveedoresPage() {
                                     </Group>
                                     <Button
                                         variant="subtle" size="sm" leftSection={<Upload size={14} />}
-                                        onClick={() => { setImportResult(null); setCsvFile(null); setCsvProveedorId(null); }}
+                                        onClick={() => { setImportResult(null); setCsvFile(null); setCsvProveedorId(null); setCsvPreview(null); }}
                                     >
                                         Importar otro archivo
                                     </Button>

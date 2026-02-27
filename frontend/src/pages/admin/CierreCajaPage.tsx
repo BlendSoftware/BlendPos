@@ -58,7 +58,8 @@ export function CierreCajaPage() {
     const statsDia = {
         totalEfectivoEsperado: reporte?.monto_esperado?.efectivo ?? 0,
         totalTarjeta: (reporte?.monto_esperado?.debito ?? 0) + (reporte?.monto_esperado?.credito ?? 0),
-        totalQR: reporte?.monto_esperado?.transferencia ?? 0,
+        totalQR: reporte?.monto_esperado?.qr ?? 0,
+        totalTransferencia: reporte?.monto_esperado?.transferencia ?? 0,
         cantidadVentas: 0,
     };
 
@@ -85,6 +86,7 @@ export function CierreCajaPage() {
         const debitoSistema = Number(reporte?.monto_esperado?.debito ?? 0);
         const creditoSistema = Number(reporte?.monto_esperado?.credito ?? 0);
         const transferenciaSistema = Number(reporte?.monto_esperado?.transferencia ?? 0);
+        const qrSistema = Number(reporte?.monto_esperado?.qr ?? 0);
         try {
             const resp = await cerrar({
                 sesion_caja_id: sesionId,
@@ -93,6 +95,7 @@ export function CierreCajaPage() {
                     debito: debitoSistema,
                     credito: creditoSistema,
                     transferencia: transferenciaSistema,
+                    qr: qrSistema,
                 },
                 observaciones: values.observaciones || undefined,
             });
@@ -173,10 +176,11 @@ export function CierreCajaPage() {
                                 {reporte && (
                                     <Paper p="md" radius="md" withBorder style={{ background: 'var(--mantine-color-default-hover)' }}>
                                         <Text size="sm" fw={600} mb="xs" c="dimmed">Medios digitales (confirmados por el sistema)</Text>
-                                        <SimpleGrid cols={3} spacing="sm">
+                                        <SimpleGrid cols={4} spacing="sm">
                                             {[
                                                 { label: 'Débito', value: Number(reporte.monto_esperado?.debito ?? 0) },
                                                 { label: 'Crédito', value: Number(reporte.monto_esperado?.credito ?? 0) },
+                                                { label: 'QR', value: Number(reporte.monto_esperado?.qr ?? 0) },
                                                 { label: 'Transferencia', value: Number(reporte.monto_esperado?.transferencia ?? 0) },
                                             ].map(({ label, value }) => (
                                                 <Paper key={label} p="sm" radius="sm" withBorder>
@@ -272,8 +276,7 @@ export function CierreCajaPage() {
                                                 { label: 'Efectivo esperado', value: formatARS(statsDia.totalEfectivoEsperado), color: 'blue' },
                                                 { label: 'Diferencia', value: formatARS(resultado.diferencia), color: resultado.diferencia >= 0 ? 'teal' : 'red' },
                                                 { label: 'Total tarjeta', value: formatARS(statsDia.totalTarjeta), color: 'gray' },
-                                                { label: 'Total QR', value: formatARS(statsDia.totalQR), color: 'gray' },
-                                                { label: 'Ventas del día', value: String(statsDia.cantidadVentas), color: 'gray' },
+                                                { label: 'Total QR', value: formatARS(statsDia.totalQR), color: 'gray' },                                                { label: 'Total transferencia', value: formatARS(statsDia.totalTransferencia), color: 'gray' },                                                { label: 'Ventas del día', value: String(statsDia.cantidadVentas), color: 'gray' },
                                             ].map(({ label, value, color }) => (
                                                 <Paper key={label} p="sm" radius="sm" withBorder style={{ background: 'var(--mantine-color-default-hover)' }}>
                                                     <Text size="xs" c="dimmed">{label}</Text>
@@ -331,7 +334,7 @@ export function CierreCajaPage() {
                                     const declaradoEfectivo = h.monto_declarado?.efectivo ?? 0;
                                     const diferencia = declaradoEfectivo - esperadoEfectivo;
                                     const tarjeta = (h.monto_esperado?.debito ?? 0) + (h.monto_esperado?.credito ?? 0);
-                                    const qr = h.monto_esperado?.transferencia ?? 0;
+                                    const qr = h.monto_esperado?.qr ?? 0;
                                     const totalVentas = h.monto_esperado?.total ?? 0;
                                     return (
                                         <Table.Tr key={h.sesion_caja_id}>

@@ -14,6 +14,7 @@ type DeclaracionArqueo struct {
 	Debito        decimal.Decimal `json:"debito"       validate:"min=0"`
 	Credito       decimal.Decimal `json:"credito"      validate:"min=0"`
 	Transferencia decimal.Decimal `json:"transferencia" validate:"min=0"`
+	QR            decimal.Decimal `json:"qr"           validate:"min=0"`
 }
 
 type ArqueoRequest struct {
@@ -43,6 +44,7 @@ type MontosPorMetodo struct {
 	Debito        decimal.Decimal `json:"debito"`
 	Credito       decimal.Decimal `json:"credito"`
 	Transferencia decimal.Decimal `json:"transferencia"`
+	QR            decimal.Decimal `json:"qr"`
 	Total         decimal.Decimal `json:"total"`
 }
 

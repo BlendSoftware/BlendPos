@@ -63,7 +63,7 @@ export function UsuariosPage() {
     }, [usuarios, busqueda]);
 
     const form = useForm({
-        initialValues: { nombre: '', username: '', email: '', password: '', rol: 'cajero' as Rol, activo: true, puntoDeVenta: '' as string },
+        initialValues: { nombre: '', username: '', email: '', password: '', confirmPassword: '', rol: 'cajero' as Rol, activo: true, puntoDeVenta: '' as string },
         validate: {
             nombre:   (v) => (v.trim().length >= 3 ? null : 'Mínimo 3 caracteres'),
             username: (v, _vals) => (!editTarget && !v.trim() ? 'Requerido' : null),
@@ -82,6 +82,12 @@ export function UsuariosPage() {
                 }
                 return null;
             },
+            confirmPassword: (v, vals) => {
+                if (editTarget && !vals.password) return null; // No requerido si no cambia password
+                if (!editTarget && !v) return 'Confirme la contraseña';
+                if (vals.password && v !== vals.password) return 'Las contraseñas no coinciden';
+                return null;
+            },
         },
     });
 
@@ -93,7 +99,7 @@ export function UsuariosPage() {
 
     const openEdit = (u: IUser) => {
         setEditTarget(u);
-        form.setValues({ nombre: u.nombre, username: '', email: u.email, password: '', rol: u.rol, activo: u.activo, puntoDeVenta: u.puntoDeVenta != null ? String(u.puntoDeVenta) : '' });
+        form.setValues({ nombre: u.nombre, username: '', email: u.email, password: '', confirmPassword: '', rol: u.rol, activo: u.activo, puntoDeVenta: u.puntoDeVenta != null ? String(u.puntoDeVenta) : '' });
         setModalOpen(true);
     };
 
@@ -248,6 +254,12 @@ export function UsuariosPage() {
                         <PasswordInput
                             label={editTarget ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña'}
                             {...form.getInputProps('password')}
+                        />
+                        <PasswordInput
+                            label="Confirmar contraseña"
+                            placeholder="Repetir contraseña"
+                            {...form.getInputProps('confirmPassword')}
+                            style={(editTarget && !form.values.password) ? { display: 'none' } : undefined}
                         />
                         <Select
                             label="Rol"

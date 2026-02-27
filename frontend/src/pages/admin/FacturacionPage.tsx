@@ -120,7 +120,8 @@ export function FacturacionPage() {
                         v.numeroTicket.includes(q) ||
                         v.cajeroNombre.toLowerCase().includes(q) ||
                         v.id.toLowerCase().includes(q);
-                    const matchMetodo = !filtroMetodo || v.metodoPago === filtroMetodo || v.pagos?.some((p) => p.metodo === filtroMetodo);
+                    const matchMetodo = !filtroMetodo || v.metodoPago === filtroMetodo || v.pagos?.some((p) => p.metodo === filtroMetodo)
+                        || (filtroMetodo === 'qr' && (v.metodoPago === 'transferencia' || v.pagos?.some((p) => p.metodo === 'transferencia')));
                     const matchEstado = !filtroEstado || (filtroEstado === 'anulada' ? v.anulada : !v.anulada);
                     return matchPeriodo && matchBusqueda && matchMetodo && matchEstado;
                 }

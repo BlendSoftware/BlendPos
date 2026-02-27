@@ -21,3 +21,6 @@ type MovimientoStock struct {
 
 	Producto *Producto `gorm:"foreignKey:ProductoID"`
 }
+
+// TableName overrides GORM's default pluralization (movimiento_stocks → movimientos_stock).
+func (MovimientoStock) TableName() string { return "movimientos_stock" }

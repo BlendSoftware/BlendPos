@@ -15,3 +15,6 @@ type Categoria struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
+
+// TableName overrides GORM's default singular → plural logic for Spanish names.
+func (Categoria) TableName() string { return "categorias" }

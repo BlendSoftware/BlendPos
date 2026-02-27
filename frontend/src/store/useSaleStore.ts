@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { notifications } from '@mantine/notifications';
 import { thermalPrinter } from '../services/ThermalPrinterService';
 import { enqueueSale, trySyncQueue } from '../offline/sync';
-import { forceRefreshCatalog } from '../offline/catalog';
+import { forceRefreshCatalog, getLocalStock, deductLocalStock } from '../offline/catalog';
 import { useCajaStore } from './useCajaStore';
 import { usePrinterStore } from './usePrinterStore';
 
@@ -124,7 +125,39 @@ export const useSaleStore = create<SaleState>()(
             ticketCounter: 0,
             tipoComprobante: 'ticket' as const,
 
-            addItem: (item) => {
+            addItem: async (item) => {
+                // ── Stock validation ──────────────────────────────────
+                try {
+                    const localStock = await getLocalStock(item.id);
+                    const { cart } = get();
+                    const existing = cart.find((c) => c.id === item.id);
+                    const currentInCart = existing?.cantidad ?? 0;
+
+                    if (localStock <= 0) {
+                        notifications.show({
+                            title: 'Sin stock',
+                            message: `"${item.nombre}" no tiene stock disponible`,
+                            color: 'orange',
+                            autoClose: 3000,
+                        });
+                        return;
+                    }
+
+                    if (currentInCart + 1 > localStock) {
+                        notifications.show({
+                            title: 'Stock insuficiente',
+                            message: `"${item.nombre}" solo tiene ${localStock} ud. en stock (ya hay ${currentInCart} en el carrito)`,
+                            color: 'orange',
+                            autoClose: 3000,
+                        });
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('[BlendPOS] Error al verificar stock local:', err);
+                    // En caso de error de IndexedDB, permitir la venta (offline-first)
+                }
+
+                // ── Add to cart ───────────────────────────────────────
                 const { cart } = get();
                 const existingIndex = cart.findIndex((c) => c.id === item.id);
 
@@ -187,11 +220,29 @@ export const useSaleStore = create<SaleState>()(
                 });
             },
 
-            updateQuantity: (id, cantidad) => {
+            updateQuantity: async (id, cantidad) => {
                 if (cantidad <= 0) {
                     get().removeItem(id);
                     return;
                 }
+
+                // ── Stock validation ──────────────────────────────────
+                try {
+                    const localStock = await getLocalStock(id);
+                    if (cantidad > localStock) {
+                        const item = get().cart.find((c) => c.id === id);
+                        notifications.show({
+                            title: 'Stock insuficiente',
+                            message: `"${item?.nombre ?? 'Producto'}" solo tiene ${localStock} ud. disponibles`,
+                            color: 'orange',
+                            autoClose: 3000,
+                        });
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('[BlendPOS] Error al verificar stock local:', err);
+                }
+
                 const { descuentoGlobal } = get();
                 const updatedCart = get().cart.map((c) =>
                     c.id === id
@@ -317,7 +368,13 @@ export const useSaleStore = create<SaleState>()(
                     .then(() => trySyncQueue())
                     .catch(console.warn);
 
-                // BUG-FIX: Refresh catalog from backend so stock is updated.
+                // 📦 Descontar stock localmente de inmediato para que el POS
+                // no permita vender más unidades de las disponibles antes de
+                // que el backend sincronice el stock real.
+                deductLocalStock(cart.map((i) => ({ id: i.id, cantidad: i.cantidad })))
+                    .catch(console.warn);
+
+                // Refrescar catálogo desde backend (actualiza stock real si hay conexión).
                 forceRefreshCatalog().catch(console.warn);
 
                 const nextHistorial = [record, ...historial].slice(0, MAX_HISTORIAL);

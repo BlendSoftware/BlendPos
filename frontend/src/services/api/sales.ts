@@ -2,6 +2,16 @@ import type { LocalSale } from '../../offline/db';
 import { apiClient } from '../../api/client';
 
 /**
+ * Result returned by the backend for each individual sale in a sync-batch.
+ */
+export interface SyncSaleResult {
+    id?: string;
+    numero_ticket?: number;
+    estado: string;
+    conflicto_stock?: boolean;
+}
+
+/**
  * Transforma una LocalSale (formato frontend) a RegistrarVentaRequest (formato backend).
  * Asegura que items, pagos y campos clave estén en el schema correcto.
  */
@@ -33,7 +43,13 @@ function toRegistrarVentaRequest(sale: LocalSale): Record<string, unknown> {
     };
 }
 
-export async function syncSalesBatch(sales: LocalSale[]): Promise<void> {
+/**
+ * Sends a batch of local sales to the backend for sync.
+ * Returns per-sale results so the caller can determine which sales
+ * were accepted and which were rejected.
+ */
+export async function syncSalesBatch(sales: LocalSale[]): Promise<SyncSaleResult[]> {
     const ventas = sales.map(toRegistrarVentaRequest);
-    await apiClient.post<unknown>('/v1/ventas/sync-batch', { ventas });
+    const resp = await apiClient.post<SyncSaleResult[]>('/v1/ventas/sync-batch', { ventas });
+    return resp.data;
 }

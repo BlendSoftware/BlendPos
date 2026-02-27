@@ -128,16 +128,18 @@ func (s *cajaService) Arqueo(ctx context.Context, req dto.ArqueoRequest, usuario
 		Debito:        sums["debito"],
 		Credito:       sums["credito"],
 		Transferencia: sums["transferencia"],
+		QR:            sums["qr"],
 	}
-	esperado.Total = esperado.Efectivo.Add(esperado.Debito).Add(esperado.Credito).Add(esperado.Transferencia)
+	esperado.Total = esperado.Efectivo.Add(esperado.Debito).Add(esperado.Credito).Add(esperado.Transferencia).Add(esperado.QR)
 
 	declarado := dto.MontosPorMetodo{
 		Efectivo:      req.Declaracion.Efectivo,
 		Debito:        req.Declaracion.Debito,
 		Credito:       req.Declaracion.Credito,
 		Transferencia: req.Declaracion.Transferencia,
+		QR:            req.Declaracion.QR,
 	}
-	declarado.Total = declarado.Efectivo.Add(declarado.Debito).Add(declarado.Credito).Add(declarado.Transferencia)
+	declarado.Total = declarado.Efectivo.Add(declarado.Debito).Add(declarado.Credito).Add(declarado.Transferencia).Add(declarado.QR)
 
 	desvioMonto := declarado.Total.Sub(esperado.Total)
 	var desvioPct decimal.Decimal
@@ -271,8 +273,9 @@ func (s *cajaService) buildReporte(ctx context.Context, sesion *model.SesionCaja
 		Debito:        sums["debito"],
 		Credito:       sums["credito"],
 		Transferencia: sums["transferencia"],
+		QR:            sums["qr"],
 	}
-	esperado.Total = esperado.Efectivo.Add(esperado.Debito).Add(esperado.Credito).Add(esperado.Transferencia)
+	esperado.Total = esperado.Efectivo.Add(esperado.Debito).Add(esperado.Credito).Add(esperado.Transferencia).Add(esperado.QR)
 
 	reporte := &dto.ReporteCajaResponse{
 		SesionCajaID:  sesion.ID.String(),

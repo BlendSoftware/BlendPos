@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS movimiento_cajas (
     id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
     sesion_caja_id  UUID          NOT NULL REFERENCES sesion_cajas(id),
     tipo            VARCHAR(20)   NOT NULL CHECK (tipo IN ('venta','ingreso_manual','egreso_manual','anulacion')),
-    metodo_pago     VARCHAR(20)   CHECK (metodo_pago IN ('efectivo','debito','credito','transferencia')),
+    metodo_pago     VARCHAR(20)   CHECK (metodo_pago IN ('efectivo','debito','credito','transferencia','qr')),
     monto           DECIMAL(12,2) NOT NULL,
     descripcion     TEXT          NOT NULL,
     referencia_id   UUID,
@@ -140,7 +140,7 @@ CREATE INDEX idx_venta_items_venta ON venta_items(venta_id);
 CREATE TABLE IF NOT EXISTS venta_pagos (
     id       UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
     venta_id UUID          NOT NULL REFERENCES ventas(id),
-    metodo   VARCHAR(20)   NOT NULL CHECK (metodo IN ('efectivo','debito','credito','transferencia')),
+    metodo   VARCHAR(20)   NOT NULL CHECK (metodo IN ('efectivo','debito','credito','transferencia','qr')),
     monto    DECIMAL(12,2) NOT NULL
 );
 

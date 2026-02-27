@@ -11,6 +11,7 @@ import (
 	"blendpos/internal/worker"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
@@ -68,6 +69,13 @@ func runTx(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) error) error {
 //   6. (async) dispatch facturacion job if needed
 
 func (s *ventaService) RegistrarVenta(ctx context.Context, usuarioID uuid.UUID, req dto.RegistrarVentaRequest) (*dto.VentaResponse, error) {
+	return s.registrarVentaInternal(ctx, usuarioID, req, false)
+}
+
+// registrarVentaInternal is the shared implementation for both online and offline sales.
+// When fromSync=true (SyncBatch), stock conflicts are auto-compensated within threshold.
+// When fromSync=false (online POS), insufficient stock is rejected with an error.
+func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uuid.UUID, req dto.RegistrarVentaRequest, fromSync bool) (*dto.VentaResponse, error) {
 	sesionID, err := uuid.Parse(req.SesionCajaID)
 	if err != nil {
 		return nil, fmt.Errorf("sesion_caja_id inválido: %w", err)
@@ -113,6 +121,10 @@ func (s *ventaService) RegistrarVenta(ctx context.Context, usuarioID uuid.UUID, 
 			return nil, fmt.Errorf("producto %s está inactivo y no puede venderse", p.Nombre)
 		}
 		if p.StockActual < item.Cantidad {
+			if !fromSync {
+				// Online sales: hard reject — stock insuficiente
+				return nil, fmt.Errorf("stock insuficiente para %s: disponible %d, solicitado %d", p.Nombre, p.StockActual, item.Cantidad)
+			}
 			conflictoStock = true
 		}
 		lineSubtotal := p.PrecioVenta.Mul(decimal.NewFromInt(int64(item.Cantidad))).Sub(item.Descuento)
@@ -140,9 +152,27 @@ func (s *ventaService) RegistrarVenta(ctx context.Context, usuarioID uuid.UUID, 
 	}
 	vuelto := totalPagos.Sub(total)
 
-	// 5. ACID transaction
+	// 5. ACID transaction with row-level stock lock
 	var venta model.Venta
 	txErr := runTx(ctx, s.repo.DB(), func(tx *gorm.DB) error {
+		// Re-validate stock INSIDE the transaction with SELECT ... FOR UPDATE
+		// to prevent race conditions between concurrent POS terminals.
+		if !fromSync {
+			for _, r := range resolved {
+				var stockActual int
+				row := tx.Raw("SELECT stock_actual FROM productos WHERE id = ? FOR UPDATE", r.productoID).Row()
+				if row == nil {
+					return fmt.Errorf("producto %s no encontrado en TX", r.nombre)
+				}
+				if err := row.Scan(&stockActual); err != nil {
+					return fmt.Errorf("error leyendo stock de %s: %w", r.nombre, err)
+				}
+				if stockActual < r.cantidad {
+					return fmt.Errorf("stock insuficiente para %s: disponible %d, solicitado %d", r.nombre, stockActual, r.cantidad)
+				}
+			}
+		}
+
 		ticketNum, err := s.repo.NextTicketNumber(ctx, tx)
 		if err != nil {
 			return err
@@ -320,78 +350,41 @@ func (s *ventaService) AnularVenta(ctx context.Context, id uuid.UUID, motivo str
 // ── SyncBatch ─────────────────────────────────────────────────────────────────
 // Processes a batch of offline sales. Idempotent: uses offline_id deduplication.
 //
-// Auto-compensation rules (Fase 8):
-//   - Stock deficit ≤ conflictoStockThreshold units: auto-compensate (accept sale,
-//     allow stock to go negative, flag for supervisor review).
-//   - Stock deficit > conflictoStockThreshold units: reject the sale entirely.
-//   - If more than maxConflictRatio of the batch would be conflicts, reject the
-//     remainder to prevent runaway negative inventory.
-
-const (
-	conflictoStockThreshold = 3   // max auto-compensable deficit per item
-	maxConflictRatio        = 0.5 // max fraction of batch allowed to have conflicts
-)
+// Offline-first principle: sales made at the physical POS MUST be recorded
+// regardless of stock levels. If stock goes negative, the sale is flagged
+// (ConflictoStock=true) for supervisor review, but never rejected.
+// Rejecting an offline sale would mean losing a financial record of a
+// transaction that already happened in the real world.
 
 func (s *ventaService) SyncBatch(ctx context.Context, usuarioID uuid.UUID, req dto.SyncBatchRequest) ([]dto.VentaResponse, error) {
 	results := make([]dto.VentaResponse, 0, len(req.Ventas))
-	conflictCount := 0
-	maxConflicts := int(float64(len(req.Ventas)) * maxConflictRatio)
-	if maxConflicts < 1 {
-		maxConflicts = 1
-	}
 
-	for _, ventaReq := range req.Ventas {
-		// Pre-flight stock check to classify the conflict before touching the DB.
-		exceeded, err := s.checkStockExceedsThreshold(ctx, ventaReq)
-		if err != nil {
-			results = append(results, dto.VentaResponse{ConflictoStock: true, Estado: "error"})
-			continue
+	for i, ventaReq := range req.Ventas {
+		offlineID := ""
+		if ventaReq.OfflineID != nil {
+			offlineID = *ventaReq.OfflineID
 		}
 
-		if exceeded {
-			// Deficit > threshold — reject sale, do not decrement stock.
-			conflictCount++
-			results = append(results, dto.VentaResponse{ConflictoStock: true, Estado: "rechazada"})
-			continue
-		}
-
-		// Check if we've already hit the max conflict quota (even for auto-compensable)
-		if conflictCount >= maxConflicts {
-			results = append(results, dto.VentaResponse{ConflictoStock: true, Estado: "rechazada"})
-			continue
-		}
-
-		resp, regErr := s.RegistrarVenta(ctx, usuarioID, ventaReq)
+		resp, regErr := s.registrarVentaInternal(ctx, usuarioID, ventaReq, true)
 		if regErr != nil {
+			log.Warn().
+				Int("index", i).
+				Str("offline_id", offlineID).
+				Err(regErr).
+				Msg("sync-batch: venta rechazada")
 			results = append(results, dto.VentaResponse{ConflictoStock: true, Estado: "error"})
 			continue
 		}
 		if resp.ConflictoStock {
-			conflictCount++
+			log.Info().
+				Int("index", i).
+				Str("offline_id", offlineID).
+				Int("ticket", resp.NumeroTicket).
+				Msg("sync-batch: venta aceptada con conflicto de stock")
 		}
 		results = append(results, *resp)
 	}
 	return results, nil
-}
-
-// checkStockExceedsThreshold returns true when ANY item in the sale has a deficit
-// strictly greater than conflictoStockThreshold, meaning the sale must be rejected.
-func (s *ventaService) checkStockExceedsThreshold(ctx context.Context, req dto.RegistrarVentaRequest) (bool, error) {
-	for _, item := range req.Items {
-		pid, err := uuid.Parse(item.ProductoID)
-		if err != nil {
-			continue
-		}
-		p, err := s.productoRepo.FindByID(ctx, pid)
-		if err != nil {
-			return false, err
-		}
-		deficit := item.Cantidad - p.StockActual
-		if deficit > conflictoStockThreshold {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // ListVentas returns a paginated list of sales, filtered by date and estado.

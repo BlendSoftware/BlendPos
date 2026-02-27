@@ -14,6 +14,7 @@ import { useSaleStore } from '../../store/useSaleStore';
 import { getAlertasStock } from '../../services/api/inventario';
 import type { AlertaStockResponse } from '../../services/api/inventario';
 import { listarVentas, type VentaListItem } from '../../services/api/ventas';
+import { trySyncQueue, recoverLostSales } from '../../offline/sync';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -72,25 +73,34 @@ export function DashboardPage() {
 
     useEffect(() => {
         const today = new Date().toLocaleDateString('en-CA');
-        Promise.allSettled([
-            getAlertasStock(),
-            listarVentas({ fecha: today, estado: 'completada', limit: 200 }),
-        ]).then(([alertasRes, ventasRes]) => {
-            if (alertasRes.status === 'fulfilled') setAlertas(alertasRes.value);
-            if (ventasRes.status === 'fulfilled') setApiVentas(ventasRes.value.data);
-        }).finally(() => setLoading(false));
+        // Recover sales that were silently lost (marked synced but not in backend),
+        // then flush pending offline sales before loading dashboard data.
+        recoverLostSales()
+            .then(() => trySyncQueue())
+            .catch(() => {})
+            .finally(() => {
+            Promise.allSettled([
+                getAlertasStock(),
+                listarVentas({ fecha: today, estado: 'completada', limit: 200 }),
+            ]).then(([alertasRes, ventasRes]) => {
+                if (alertasRes.status === 'fulfilled') setAlertas(alertasRes.value);
+                if (ventasRes.status === 'fulfilled') setApiVentas(ventasRes.value.data);
+            }).finally(() => setLoading(false));
+        });
     }, []);
 
     const hoyKey = new Date().toLocaleDateString('en-CA');
-    // Merge local + API ventas for today, deduplicate by id
-    const localIds = new Set(historial.map((v) => v.id));
-    const apiFiltradas = apiVentas.filter((v) => !localIds.has(v.id));
-    // Nota: Go shopspring/decimal serializa como string ("650.00"), hay que parsear.
+    // Merge local + API ventas for today, deduplicate by id.
+    // API data is the source of truth. Only add local sales not yet reflected in backend
+    // to minimize discrepancy between Dashboard and Facturación (which uses backend-only).
     const parseNum = (v: unknown): number => typeof v === 'number' ? v : parseFloat(String(v)) || 0;
+    const apiIds = new Set(apiVentas.map((v) => v.id));
+    // Local sales not yet in backend (pending sync)
+    const localOnly = historial.filter((v) => new Date(v.fecha).toLocaleDateString('en-CA') === hoyKey && !apiIds.has(v.id));
     const ventasHoy = [
-        ...historial.filter((v) => new Date(v.fecha).toLocaleDateString('en-CA') === hoyKey),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...apiFiltradas.map((v) => ({ id: v.id, fecha: v.created_at, total: parseNum(v.total), totalConDescuento: parseNum(v.total), metodoPago: v.pagos[0]?.metodo ?? 'efectivo', items: v.items.map((i) => ({ id: i.producto, nombre: i.producto, cantidad: i.cantidad, subtotal: parseNum(i.subtotal), precio: parseNum(i.precio_unitario), codigoBarras: '', descuento: 0 })), numeroTicket: v.numero_ticket, cajero: '' } as any)),
+        ...apiVentas.map((v) => ({ id: v.id, fecha: v.created_at, total: parseNum(v.total), totalConDescuento: parseNum(v.total), metodoPago: v.pagos[0]?.metodo ?? 'efectivo', items: v.items.map((i) => ({ id: i.producto, nombre: i.producto, cantidad: i.cantidad, subtotal: parseNum(i.subtotal), precio: parseNum(i.precio_unitario), codigoBarras: '', descuento: 0 })), numeroTicket: v.numero_ticket, cajero: '' } as any)),
+        ...localOnly,
     ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
     const totalHoy = ventasHoy.reduce((s, v) => s + (v.totalConDescuento ?? v.total), 0);

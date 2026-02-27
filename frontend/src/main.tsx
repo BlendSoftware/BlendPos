@@ -19,6 +19,12 @@ import './index.css';
 import './pwa';
 // El catálogo se sincroniza al montar el PosTerminal (solo cuando el usuario ya está autenticado).
 
+// ── Startup: recover any lost/errored offline sales and flush sync queue ──
+import { recoverLostSales, trySyncQueue } from './offline/sync';
+recoverLostSales()
+    .then(() => trySyncQueue())
+    .catch(() => {}); // best-effort — user must be online & authenticated
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/*
