@@ -99,7 +99,7 @@ func (r *ventaRepo) List(ctx context.Context, filter dto.VentaFilter) ([]model.V
 		orderDir = "ASC"
 	}
 
-	err := q.Preload("Items.Producto").Preload("Pagos").
+	err := q.Preload("Items.Producto").Preload("Pagos").Preload("Usuario").
 		Order(orderCol + " " + orderDir).
 		Offset(offset).Limit(filter.Limit).
 		Find(&ventas).Error

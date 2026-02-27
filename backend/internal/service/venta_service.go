@@ -440,11 +440,16 @@ func ventaToListItem(v *model.Venta) *dto.VentaListItem {
 	for _, p := range v.Pagos {
 		pagos = append(pagos, dto.PagoRequest{Metodo: p.Metodo, Monto: p.Monto})
 	}
+	cajeroNombre := ""
+	if v.Usuario != nil {
+		cajeroNombre = v.Usuario.Nombre
+	}
 	return &dto.VentaListItem{
 		ID:             v.ID.String(),
 		NumeroTicket:   v.NumeroTicket,
 		SesionCajaID:   v.SesionCajaID.String(),
 		UsuarioID:      v.UsuarioID.String(),
+		CajeroNombre:   cajeroNombre,
 		Total:          v.Total,
 		DescuentoTotal: v.DescuentoTotal,
 		Subtotal:       v.Subtotal,

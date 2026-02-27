@@ -22,6 +22,7 @@ type VentaListItem struct {
 	NumeroTicket   int                 `json:"numero_ticket"`
 	SesionCajaID   string              `json:"sesion_caja_id"`
 	UsuarioID      string              `json:"usuario_id"`
+	CajeroNombre   string              `json:"cajero_nombre"`
 	Total          decimal.Decimal     `json:"total"`
 	DescuentoTotal decimal.Decimal     `json:"descuento_total"`
 	Subtotal       decimal.Decimal     `json:"subtotal"`

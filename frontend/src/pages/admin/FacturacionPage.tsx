@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, Fragment } from 'react';
 import {
     Stack, Title, Text, Group, Table, Paper, Badge, ActionIcon,
     Tooltip, TextInput, Modal, Button, Select, Alert, UnstyledButton,
@@ -7,7 +7,7 @@ import { DateInput } from '@mantine/dates';
 import { Printer, Download, ChevronDown, ChevronUp, Search, Ban, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
-import { useSaleStore, type SaleRecord, type MetodoPago } from '../../store/useSaleStore';
+import { type SaleRecord, type MetodoPago } from '../../store/useSaleStore';
 import { anularVenta, listarVentas, type VentaListItem } from '../../services/api/ventas';
 import { getComprobante, descargarPDF } from '../../services/api/facturacion';
 import { thermalPrinter } from '../../services/ThermalPrinterService';
@@ -16,7 +16,12 @@ import { formatARS } from '../../api/mockAdmin';
 import type { IVenta } from '../../types';
 
 const METODO_COLOR: Record<string, string> = {
-    efectivo: 'teal', debito: 'blue', credito: 'violet', transferencia: 'orange',
+    efectivo: 'teal', debito: 'blue', credito: 'violet', transferencia: 'orange', qr: 'orange',
+};
+
+const METODO_LABEL: Record<string, string> = {
+    efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito',
+    transferencia: 'Transferencia', qr: 'QR / Transferencia',
 };
 
 type Periodo = 'hoy' | 'ayer' | 'semana' | 'mes' | 'personalizado' | 'todas';
@@ -37,7 +42,6 @@ function matchesPeriodo(fecha: string, periodo: Periodo): boolean {
 
 export function FacturacionPage() {
     const { hasRole } = useAuthStore();
-    const historialLocal = useSaleStore((s) => s.historial);
     const [apiVentas, setApiVentas] = useState<VentaListItem[]>([]);
     const [loadingVentas, setLoadingVentas] = useState(false);
     const [desde, setDesde] = useState<Date | null>(null);
@@ -51,7 +55,7 @@ export function FacturacionPage() {
         setLoadingVentas(true);
         try {
             const resp = await listarVentas({
-                estado: 'completada',
+                estado: 'all',
                 limit: 200,
                 desde: toDateStr(desde),
                 hasta: toDateStr(hasta),
@@ -66,63 +70,32 @@ export function FacturacionPage() {
 
     useEffect(() => { cargarVentas(); }, [cargarVentas]);
 
-    // Map SaleRecord to IVenta for display, merging API data with local session
+    // Map API ventas → IVenta[] for display (single source of truth: backend)
     const ventas: IVenta[] = useMemo(() => {
-        // Convert local session records
-        const localIds = new Set(historialLocal.map((r) => r.id));
-        const localVentas: IVenta[] = historialLocal.map((r: SaleRecord) => ({
-            id: r.id,
-            numeroTicket: r.numeroTicket,
-            items: r.items.map((item) => ({
-                productoId: item.id,
-                productoNombre: item.nombre,
-                codigoBarras: item.codigoBarras,
+        return apiVentas.map((v) => ({
+            id: v.id,
+            numeroTicket: String(v.numero_ticket).padStart(6, '0'),
+            items: v.items.map((item) => ({
+                productoId: '',
+                productoNombre: item.producto,
+                codigoBarras: '',
                 cantidad: item.cantidad,
-                precioUnitario: item.precio,
-                descuento: item.descuento,
+                precioUnitario: item.precio_unitario,
+                descuento: 0,
                 subtotal: item.subtotal,
             })),
-            subtotal: r.total,
-            descuentoGlobal: 0,
-            total: r.totalConDescuento,
-            metodoPago: r.metodoPago,
-            pagos: r.pagos?.map((p) => ({ metodo: p.metodo, monto: p.monto })),
-            vuelto: r.vuelto,
-            cajeroId: 'local',
-            cajeroNombre: r.cajero,
-            fecha: r.fecha instanceof Date ? r.fecha.toISOString() : String(r.fecha),
-            anulada: false,
-        }));
-        // Merge API ventas (deduplicate by id against local)
-        const apiConverted: IVenta[] = (apiVentas
-            .filter((v) => !localIds.has(v.id))
-            .map((v) => ({
-                id: v.id,
-                numeroTicket: String(v.numero_ticket),
-                items: v.items.map((item) => ({
-                    productoId: '',
-                    productoNombre: item.producto,
-                    codigoBarras: '',
-                    cantidad: item.cantidad,
-                    precioUnitario: item.precio_unitario,
-                    descuento: 0,
-                    subtotal: item.subtotal,
-                })),
-                subtotal: v.subtotal,
-                descuentoGlobal: v.descuento_total,
-                total: v.total,
-                metodoPago: (v.pagos[0]?.metodo ?? 'efectivo') as MetodoPago,
-                pagos: v.pagos.map((p) => ({ metodo: p.metodo, monto: p.monto })),
-                vuelto: 0,
-                cajeroId: v.usuario_id,
-                cajeroNombre: '',
-                fecha: v.created_at,
-                anulada: v.estado === 'anulada',
-            }))) as unknown as IVenta[];
-        return [...localVentas, ...apiConverted].sort(
-            (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
-        );
-    }, [historialLocal, apiVentas]);
+            subtotal: v.subtotal,
+            descuentoGlobal: v.descuento_total,
+            total: v.total,
+            metodoPago: (v.pagos[0]?.metodo ?? 'efectivo') as MetodoPago,
+            pagos: v.pagos.map((p) => ({ metodo: p.metodo, monto: p.monto })),
+            vuelto: 0,
+            cajeroId: v.usuario_id,
+            cajeroNombre: v.cajero_nombre || '',
+            fecha: v.created_at,
+            anulada: v.estado === 'anulada',
+        })) as unknown as IVenta[];
+    }, [apiVentas]);
 
     const [busqueda, setBusqueda] = useState('');
     const [periodo, setPeriodo] = useState<string>('todas');
@@ -137,7 +110,7 @@ export function FacturacionPage() {
     const filtered = useMemo(() => {
         const q = busqueda.toLowerCase();
         let result = ventas
-            .map((v) => ({ ...v, anulada: anuladas.has(v.id) }))
+            .map((v) => ({ ...v, anulada: v.anulada || anuladas.has(v.id) }))
             .filter(
                 (v) => {
                     const matchPeriodo = periodo === 'personalizado'
@@ -152,7 +125,7 @@ export function FacturacionPage() {
                     return matchPeriodo && matchBusqueda && matchMetodo && matchEstado;
                 }
             );
-        
+
         // Ordenamiento
         result.sort((a, b) => {
             let valA: any;
@@ -169,7 +142,7 @@ export function FacturacionPage() {
             if (valA > valB) return sortDir === 'asc' ? 1 : -1;
             return 0;
         });
-        
+
         return result;
     }, [ventas, anuladas, busqueda, periodo, filtroMetodo, filtroEstado, desde, hasta, sortBy, sortDir]);
 
@@ -236,6 +209,8 @@ export function FacturacionPage() {
             icon: <Ban size={14} />,
         });
         setAnularTarget(null);
+        // Refresh from backend to get updated estado
+        cargarVentas();
     };
 
     const canAnular = hasRole(['admin', 'supervisor']);
@@ -276,12 +251,12 @@ export function FacturacionPage() {
                     value={periodo}
                     onChange={(v) => setPeriodo(v ?? 'todas')}
                     data={[
-                        { value: 'hoy',    label: 'Hoy' },
-                        { value: 'ayer',   label: 'Ayer' },
+                        { value: 'hoy', label: 'Hoy' },
+                        { value: 'ayer', label: 'Ayer' },
                         { value: 'semana', label: 'Última semana' },
-                        { value: 'mes',    label: 'Último mes' },
+                        { value: 'mes', label: 'Último mes' },
                         { value: 'personalizado', label: 'Rango personalizado' },
-                        { value: 'todas',  label: 'Todas' },
+                        { value: 'todas', label: 'Todas' },
                     ]}
                     style={{ width: 170 }}
                     clearable
@@ -314,7 +289,7 @@ export function FacturacionPage() {
                         { value: 'efectivo', label: 'Efectivo' },
                         { value: 'debito', label: 'Débito' },
                         { value: 'credito', label: 'Crédito' },
-                        { value: 'transferencia', label: 'Transferencia' },
+                        { value: 'qr', label: 'QR / Transferencia' },
                     ]}
                     style={{ width: 140 }}
                     clearable
@@ -373,7 +348,7 @@ export function FacturacionPage() {
                     </Table.Thead>
                     <Table.Tbody>
                         {filtered.map((v) => (
-                            <>
+                            <Fragment key={v.id}>
                                 <Table.Tr
                                     key={v.id}
                                     style={{ cursor: 'pointer', opacity: v.anulada ? 0.5 : 1 }}
@@ -392,8 +367,8 @@ export function FacturacionPage() {
                                     </Table.Td>
                                     <Table.Td><Text size="sm">{v.cajeroNombre}</Text></Table.Td>
                                     <Table.Td>
-                                        <Badge color={METODO_COLOR[v.metodoPago]} size="sm" variant="light">
-                                            {v.metodoPago}
+                                        <Badge color={METODO_COLOR[v.metodoPago] ?? 'gray'} size="sm" variant="light">
+                                            {METODO_LABEL[v.metodoPago] ?? v.metodoPago}
                                         </Badge>
                                     </Table.Td>
                                     <Table.Td>
@@ -457,7 +432,7 @@ export function FacturacionPage() {
                                         </Table.Td>
                                     </Table.Tr>
                                 )}
-                            </>
+                            </Fragment>
                         ))}
                     </Table.Tbody>
                 </Table>

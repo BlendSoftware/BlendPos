@@ -39,6 +39,7 @@ export interface VentaListItem {
     numero_ticket: number;
     sesion_caja_id: string;
     usuario_id: string;
+    cajero_nombre: string;
     total: number;
     descuento_total: number;
     subtotal: number;

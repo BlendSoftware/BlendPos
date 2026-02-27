@@ -24,8 +24,9 @@ type Venta struct {
 	ConflictoStock bool    `gorm:"not null;default:false"`
 	CreatedAt      time.Time
 
-	Items []VentaItem `gorm:"foreignKey:VentaID"`
-	Pagos []VentaPago `gorm:"foreignKey:VentaID"`
+	Usuario *Usuario  `gorm:"foreignKey:UsuarioID"`
+	Items   []VentaItem `gorm:"foreignKey:VentaID"`
+	Pagos   []VentaPago `gorm:"foreignKey:VentaID"`
 }
 
 func (Venta) TableName() string { return "ventas" }
