@@ -51,5 +51,5 @@ function toRegistrarVentaRequest(sale: LocalSale): Record<string, unknown> {
 export async function syncSalesBatch(sales: LocalSale[]): Promise<SyncSaleResult[]> {
     const ventas = sales.map(toRegistrarVentaRequest);
     const resp = await apiClient.post<SyncSaleResult[]>('/v1/ventas/sync-batch', { ventas });
-    return resp.data;
+    return resp;
 }
