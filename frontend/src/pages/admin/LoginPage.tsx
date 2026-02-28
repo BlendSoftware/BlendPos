@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     Center, Paper, Title, Text, TextInput, PasswordInput,
@@ -11,9 +11,17 @@ import { useAuthStore } from '../../store/useAuthStore';
 export function LoginPage() {
     const navigate = useNavigate();
     const location = useLocation();
-    const { login } = useAuthStore();
+    const { login, isAuthenticated, user } = useAuthStore();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    // Route guard: redirect if already authenticated
+    useEffect(() => {
+        if (isAuthenticated) {
+            const isAdminRole = user?.rol === 'admin' || user?.rol === 'supervisor';
+            navigate(isAdminRole ? '/admin/dashboard' : '/', { replace: true });
+        }
+    }, [isAuthenticated, user, navigate]);
 
     const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
 
@@ -84,9 +92,7 @@ export function LoginPage() {
                         </Stack>
                     </form>
 
-                    <Text c="dimmed" size="xs" mt="lg" ta="center">
-                        Demo: admin / blendpos2026
-                    </Text>
+
                 </Paper>
             </Box>
         </Center>

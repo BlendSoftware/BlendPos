@@ -24,8 +24,8 @@ function mapProducto(p: ProductoResponse): IProducto {
         nombre: p.nombre,
         descripcion: p.descripcion ?? '',
         categoria: (p.categoria as CategoriaProducto) ?? 'otros',
-        precioCosto: p.precio_costo,
-        precioVenta: p.precio_venta,
+        precioCosto: typeof p.precio_costo === 'number' ? p.precio_costo : Number(p.precio_costo),
+        precioVenta: typeof p.precio_venta === 'number' ? p.precio_venta : Number(p.precio_venta),
         stock: p.stock_actual,
         stockMinimo: p.stock_minimo,
         activo: p.activo,
@@ -118,7 +118,7 @@ export function GestionProductosPage() {
             nombre: (v) => (v.trim().length >= 3 ? null : 'Mínimo 3 caracteres'),
             precioCosto: (v) => (v >= 0 ? null : 'Debe ser ≥ 0'),
             precioVenta: (v, values) =>
-                v > values.precioCosto ? null : 'El precio de venta debe ser mayor al costo',
+                Number(v) > Number(values.precioCosto) ? null : 'El precio de venta debe ser mayor al costo',
             stock: (v) => (v >= 0 ? null : 'Debe ser ≥ 0'),
             stockMinimo: (v) => (v >= 0 ? null : 'Debe ser ≥ 0'),
         },
@@ -189,13 +189,17 @@ export function GestionProductosPage() {
 
     const openEdit = (p: IProducto) => {
         setEditTarget(p);
+        // Match category to loaded categories (case-insensitive) for Select binding
+        const matchedCat = categorias.find(
+            (c) => c.nombre.toLowerCase() === (p.categoria ?? '').toLowerCase()
+        );
         form.setValues({
             codigoBarras: p.codigoBarras,
             nombre: p.nombre,
             descripcion: p.descripcion,
-            categoria: p.categoria,
-            precioCosto: p.precioCosto,
-            precioVenta: p.precioVenta,
+            categoria: (matchedCat?.nombre ?? p.categoria) as CategoriaProducto,
+            precioCosto: Number(p.precioCosto),
+            precioVenta: Number(p.precioVenta),
             stock: p.stock,
             stockMinimo: p.stockMinimo,
             activo: p.activo,

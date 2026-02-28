@@ -68,4 +68,5 @@ type ReporteCajaResponse struct {
 	Observaciones  *string          `json:"observaciones"`
 	OpenedAt       string           `json:"opened_at"`
 	ClosedAt       *string          `json:"closed_at"`
+	VentasDelDia   int64            `json:"ventas_del_dia"`
 }

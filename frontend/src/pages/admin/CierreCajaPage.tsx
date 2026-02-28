@@ -51,7 +51,7 @@ export function CierreCajaPage() {
         setLoadingHistorial(true);
         getHistorialCajas(1, 20)
             .then((resp) => setHistorial(resp.data))
-            .catch(() => {})
+            .catch(() => { })
             .finally(() => setLoadingHistorial(false));
     }, [activeTab]);
 
@@ -60,7 +60,7 @@ export function CierreCajaPage() {
         totalTarjeta: (reporte?.monto_esperado?.debito ?? 0) + (reporte?.monto_esperado?.credito ?? 0),
         totalQR: reporte?.monto_esperado?.qr ?? 0,
         totalTransferencia: reporte?.monto_esperado?.transferencia ?? 0,
-        cantidadVentas: 0,
+        cantidadVentas: reporte?.ventas_del_dia ?? 0,
     };
 
     const form = useForm<FormValues>({
@@ -256,8 +256,8 @@ export function CierreCajaPage() {
                                         resultado.diferencia === 0
                                             ? 'Arqueo exacto'
                                             : resultado.diferencia > 0
-                                            ? 'Sobrante de caja'
-                                            : 'Faltante de caja'
+                                                ? 'Sobrante de caja'
+                                                : 'Faltante de caja'
                                     }
                                 >
                                     {esSupervisor
@@ -276,7 +276,7 @@ export function CierreCajaPage() {
                                                 { label: 'Efectivo esperado', value: formatARS(statsDia.totalEfectivoEsperado), color: 'blue' },
                                                 { label: 'Diferencia', value: formatARS(resultado.diferencia), color: resultado.diferencia >= 0 ? 'teal' : 'red' },
                                                 { label: 'Total tarjeta', value: formatARS(statsDia.totalTarjeta), color: 'gray' },
-                                                { label: 'Total QR', value: formatARS(statsDia.totalQR), color: 'gray' },                                                { label: 'Total transferencia', value: formatARS(statsDia.totalTransferencia), color: 'gray' },                                                { label: 'Ventas del día', value: String(statsDia.cantidadVentas), color: 'gray' },
+                                                { label: 'Total QR', value: formatARS(statsDia.totalQR), color: 'gray' }, { label: 'Total transferencia', value: formatARS(statsDia.totalTransferencia), color: 'gray' }, { label: 'Ventas del día', value: String(statsDia.cantidadVentas), color: 'gray' },
                                             ].map(({ label, value, color }) => (
                                                 <Paper key={label} p="sm" radius="sm" withBorder style={{ background: 'var(--mantine-color-default-hover)' }}>
                                                     <Text size="xs" c="dimmed">{label}</Text>
@@ -314,7 +314,7 @@ export function CierreCajaPage() {
                             </Table.Thead>
                             <Table.Tbody>
                                 {loadingHistorial ? (
-                                    [1,2,3].map((i) => (
+                                    [1, 2, 3].map((i) => (
                                         <Table.Tr key={i}>
                                             {[...Array(9)].map((_, j) => (
                                                 <Table.Td key={j}><Skeleton height={14} /></Table.Td>

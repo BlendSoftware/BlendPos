@@ -37,6 +37,7 @@ export interface ReporteCajaResponse {
     observaciones: string | null;
     opened_at: string;
     closed_at: string | null;
+    ventas_del_dia: number;
 }
 
 export interface ArqueoResponse {

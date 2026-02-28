@@ -20,6 +20,7 @@ type CajaRepository interface {
 	CreateMovimientoTx(tx *gorm.DB, m *model.MovimientoCaja) error
 	ListMovimientos(ctx context.Context, sesionCajaID uuid.UUID) ([]model.MovimientoCaja, error)
 	SumMovimientosByMetodo(ctx context.Context, sesionCajaID uuid.UUID) (map[string]decimal.Decimal, error)
+	CountVentasBySesion(ctx context.Context, sesionCajaID uuid.UUID) (int64, error)
 	ListSesiones(ctx context.Context, page, limit int) ([]model.SesionCaja, int64, error)
 }
 
@@ -110,4 +111,13 @@ func (r *cajaRepo) ListSesiones(ctx context.Context, page, limit int) ([]model.S
 		Offset(offset).Limit(limit).
 		Find(&sesiones).Error
 	return sesiones, total, err
+}
+
+func (r *cajaRepo) CountVentasBySesion(ctx context.Context, sesionCajaID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Venta{}).
+		Where("sesion_caja_id = ? AND estado = 'completada'", sesionCajaID).
+		Count(&count).Error
+	return count, err
 }

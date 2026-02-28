@@ -241,6 +241,8 @@ export function PosTerminal() {
                     else if (isDiscountModalOpen) closeDiscountModal();
                     else if (historyOpen) setHistoryOpen(false);
                     else if (searchVisible) closeSearch();
+                    // Clear scanner input after closing any modal to prevent "null" text
+                    if (scannerRef.current) scannerRef.current.value = '';
                     // NOTE: No clearCart() on bare Escape to prevent accidental cart deletion
                     break;
 

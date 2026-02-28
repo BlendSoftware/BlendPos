@@ -287,6 +287,12 @@ func (s *cajaService) buildReporte(ctx context.Context, sesion *model.SesionCaja
 		OpenedAt:      sesion.OpenedAt.Format("2006-01-02T15:04:05Z"),
 	}
 
+	// Count completed sales for this session
+	ventasCount, err := s.repo.CountVentasBySesion(ctx, sesion.ID)
+	if err == nil {
+		reporte.VentasDelDia = ventasCount
+	}
+
 	if sesion.MontoDeclarado != nil {
 		montoDeclarado := dto.MontosPorMetodo{Total: *sesion.MontoDeclarado}
 		reporte.MontoDeclarado = &montoDeclarado
