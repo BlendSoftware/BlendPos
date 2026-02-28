@@ -47,7 +47,7 @@ interface FormValues {
     codigoBarras: string;
     nombre: string;
     descripcion: string;
-    categoria: CategoriaProducto;
+    categoria: string;
     precioCosto: number;
     precioVenta: number;
     stock: number;
@@ -189,15 +189,18 @@ export function GestionProductosPage() {
 
     const openEdit = (p: IProducto) => {
         setEditTarget(p);
-        // Match category to loaded categories (case-insensitive) for Select binding
+        // Match product's category to the exact value in the loaded Select options.
+        // The Select uses c.nombre as value, so we must find the matching name
+        // (case-insensitive) to avoid a mismatch where the Select shows empty.
+        const productCat = p.categoria ?? '';
         const matchedCat = categorias.find(
-            (c) => c.nombre.toLowerCase() === (p.categoria ?? '').toLowerCase()
+            (c) => c.nombre.toLowerCase() === productCat.toLowerCase()
         );
         form.setValues({
             codigoBarras: p.codigoBarras,
             nombre: p.nombre,
             descripcion: p.descripcion,
-            categoria: (matchedCat?.nombre ?? p.categoria) as CategoriaProducto,
+            categoria: matchedCat?.nombre ?? productCat,
             precioCosto: Number(p.precioCosto),
             precioVenta: Number(p.precioVenta),
             stock: p.stock,
@@ -498,6 +501,8 @@ export function GestionProductosPage() {
                             <Select
                                 label="Categoría"
                                 data={categorias.map((c) => ({ value: c.nombre, label: c.nombre }))}
+                                searchable
+                                allowDeselect={false}
                                 {...form.getInputProps('categoria')}
                             />
                         </Group>

@@ -27,6 +27,7 @@ import styles from './PosTerminal.module.css';
 export function PosTerminal() {
     const scannerRef = useRef<HTMLInputElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
+    const [scannerValue, setScannerValue] = useState('');
     const [searchVisible, setSearchVisible] = useState(false);
     const [searchInitialQuery, setSearchInitialQuery] = useState('');
     const [historyOpen, setHistoryOpen] = useState(false);
@@ -169,17 +170,16 @@ export function PosTerminal() {
 
             // +/- quantity hotkeys: only if nothing typed yet in the scanner field
             if ((e.key === '+' || e.key === '-' || e.key === 'Add' || e.key === 'Subtract') &&
-                (e.currentTarget.value === '' || e.key === 'Add' || e.key === 'Subtract')) {
+                (scannerValue === '' || e.key === 'Add' || e.key === 'Subtract')) {
                 return; // el window listener lo maneja
             }
 
             if (e.key !== 'Enter') return;
-            const input = e.currentTarget;
-            handleAddProduct(input.value).then((added) => {
-                if (added) input.value = '';
+            handleAddProduct(scannerValue).then((added) => {
+                if (added) setScannerValue('');
             });
         },
-        [handleAddProduct]
+        [handleAddProduct, scannerValue]
     );
 
     const openSearch = useCallback((initialQuery = '') => {
@@ -190,8 +190,8 @@ export function PosTerminal() {
     const closeSearch = useCallback(() => {
         setSearchVisible(false);
         setSearchInitialQuery('');
-        // Clear the scanner input when closing search
-        if (scannerRef.current) scannerRef.current.value = '';
+        // Clear the scanner input via state (controlled component)
+        setScannerValue('');
         setTimeout(() => scannerRef.current?.focus(), 50);
     }, []);
 
@@ -241,8 +241,8 @@ export function PosTerminal() {
                     else if (isDiscountModalOpen) closeDiscountModal();
                     else if (historyOpen) setHistoryOpen(false);
                     else if (searchVisible) closeSearch();
-                    // Clear scanner input after closing any modal to prevent "null" text
-                    if (scannerRef.current) scannerRef.current.value = '';
+                    // Clear scanner input via state to prevent "null" text
+                    setScannerValue('');
                     // NOTE: No clearCart() on bare Escape to prevent accidental cart deletion
                     break;
 
@@ -331,6 +331,7 @@ export function PosTerminal() {
                 <section className={styles.salesSection}>
                     <TextInput
                         ref={scannerRef}
+                        value={scannerValue}
                         placeholder="Escanee código de barras o escriba nombre del producto..."
                         leftSection={<ScanLine size={18} />}
                         size="md"
@@ -339,6 +340,7 @@ export function PosTerminal() {
                         onKeyDown={handleScannerKeyDown}
                         onChange={(e) => {
                             const val = e.currentTarget.value;
+                            setScannerValue(val);
                             // Si el valor contiene letras, abrir búsqueda automáticamente
                             if (val && /[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]/.test(val) && !searchVisible && !anyModalOpen) {
                                 openSearch(val);
