@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Table, Text, Flex, Box, ActionIcon, NumberInput, Tooltip, Badge } from '@mantine/core';
 import { ScanBarcode, Trash2, Plus, Minus } from 'lucide-react';
-import { useSaleStore } from '../../store/useSaleStore';
+import { useCartStore } from '../../store/useCartStore';
 import styles from './SalesTable.module.css';
 
 function formatCurrency(value: number): string {
@@ -13,12 +13,12 @@ function formatCurrency(value: number): string {
 }
 
 export function SalesTable() {
-    const cart = useSaleStore((s) => s.cart);
-    const lastAdded = useSaleStore((s) => s.lastAdded);
-    const selectedRowIndex = useSaleStore((s) => s.selectedRowIndex);
-    const updateQuantity = useSaleStore((s) => s.updateQuantity);
-    const removeItem = useSaleStore((s) => s.removeItem);
-    const setSelectedRowIndex = useSaleStore((s) => s.setSelectedRowIndex);
+    const cart = useCartStore((s) => s.cart);
+    const lastAdded = useCartStore((s) => s.lastAdded);
+    const selectedRowIndex = useCartStore((s) => s.selectedRowIndex);
+    const updateQuantity = useCartStore((s) => s.updateQuantity);
+    const removeItem = useCartStore((s) => s.removeItem);
+    const setSelectedRowIndex = useCartStore((s) => s.setSelectedRowIndex);
 
     // Track which item is being edited inline
     const [editingId, setEditingId] = useState<string | null>(null);

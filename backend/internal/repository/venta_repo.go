@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"blendpos/internal/dto"
 	"blendpos/internal/model"
@@ -70,17 +72,32 @@ func (r *ventaRepo) List(ctx context.Context, filter dto.VentaFilter) ([]model.V
 		q = q.Where("estado = ?", filter.Estado)
 	}
 
-	// Date range: Desde/Hasta overrides Fecha
+	// Date range: Desde/Hasta overrides Fecha.
+	// All comparisons use timestamptz range bounds (e.g. created_at >= X AND created_at < Y)
+	// instead of DATE(created_at) so the existing index on created_at can be used (P2-006).
 	if filter.Desde != "" && filter.Hasta != "" {
-		q = q.Where("DATE(created_at) BETWEEN ? AND ?", filter.Desde, filter.Hasta)
+		desde, err1 := dayStart(filter.Desde)
+		hasta, err2 := dayEnd(filter.Hasta)
+		if err1 == nil && err2 == nil {
+			q = q.Where("created_at >= ? AND created_at < ?", desde, hasta)
+		}
 	} else if filter.Desde != "" {
-		q = q.Where("DATE(created_at) >= ?", filter.Desde)
+		desde, err := dayStart(filter.Desde)
+		if err == nil {
+			q = q.Where("created_at >= ?", desde)
+		}
 	} else if filter.Hasta != "" {
-		q = q.Where("DATE(created_at) <= ?", filter.Hasta)
+		hasta, err := dayEnd(filter.Hasta)
+		if err == nil {
+			q = q.Where("created_at < ?", hasta)
+		}
 	} else if filter.Fecha != "" {
-		q = q.Where("DATE(created_at) = ?", filter.Fecha)
+		desde, err1 := dayStart(filter.Fecha)
+		hasta, err2 := dayEnd(filter.Fecha)
+		if err1 == nil && err2 == nil {
+			q = q.Where("created_at >= ? AND created_at < ?", desde, hasta)
+		}
 	}
-	// If no date filter at all: return all (no implicit TODAY — caller sets limit)
 
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -99,10 +116,39 @@ func (r *ventaRepo) List(ctx context.Context, filter dto.VentaFilter) ([]model.V
 		orderDir = "ASC"
 	}
 
-	err := q.Preload("Items.Producto").Preload("Pagos").Preload("Usuario").
+	err := q.Preload("Pagos").Preload("Usuario").
 		Order(orderCol + " " + orderDir).
 		Offset(offset).Limit(filter.Limit).
 		Find(&ventas).Error
+	// NOTE: Items.Producto is intentionally NOT preloaded in List to avoid the N+1
+	// query storm (up to 3× queries per row).  Item details are only needed in the
+	// FindByID/detail view.  List callers that need item counts should use the
+	// aggregate fields on Venta (total, subtotal) instead.
 
 	return ventas, total, err
+}
+
+// ── Date helpers ──────────────────────────────────────────────────────────────
+// Using timestamptz range bounds instead of DATE() ensures the index on
+// created_at can be used by the query planner (P2-006).
+
+const dateLayout = "2006-01-02"
+
+// dayStart parses a YYYY-MM-DD string and returns the UTC start of that day.
+func dayStart(dateStr string) (time.Time, error) {
+	t, err := time.ParseInLocation(dateLayout, dateStr, time.UTC)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid date %q: %w", dateStr, err)
+	}
+	return t, nil
+}
+
+// dayEnd returns the exclusive upper bound (start of the next day) for a
+// half-open interval [dayStart, dayEnd), so: created_at >= dayStart AND created_at < dayEnd.
+func dayEnd(dateStr string) (time.Time, error) {
+	t, err := dayStart(dateStr)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return t.AddDate(0, 0, 1), nil
 }

@@ -5,8 +5,10 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { CreditCard, Check, X, Wallet, AlertCircle, CheckCircle, Mail } from 'lucide-react';
+import { usePOSUIStore } from '../../store/usePOSUIStore';
+import { useCartStore } from '../../store/useCartStore';
+import type { MetodoPago, PagoDetalle } from '../../store/useCartStore';
 import { useSaleStore } from '../../store/useSaleStore';
-import type { MetodoPago, PagoDetalle } from '../../store/useSaleStore';
 import styles from './PaymentModal.module.css';
 
 function formatCurrency(value: number): string {
@@ -18,12 +20,12 @@ function formatCurrency(value: number): string {
 }
 
 export function PaymentModal() {
-    const isOpen = useSaleStore((s) => s.isPaymentModalOpen);
-    const closePaymentModal = useSaleStore((s) => s.closePaymentModal);
-    const total = useSaleStore((s) => s.total);
-    const descuentoGlobal = useSaleStore((s) => s.descuentoGlobal);
-    const totalConDescuento = useSaleStore((s) => s.totalConDescuento);
-    const cart = useSaleStore((s) => s.cart);
+    const isOpen = usePOSUIStore((s) => s.isPaymentModalOpen);
+    const closePaymentModal = usePOSUIStore((s) => s.closePaymentModal);
+    const total = useCartStore((s) => s.total);
+    const descuentoGlobal = useCartStore((s) => s.descuentoGlobal);
+    const totalConDescuento = useCartStore((s) => s.totalConDescuento);
+    const cart = useCartStore((s) => s.cart);
     const confirmSale = useSaleStore((s) => s.confirmSale);
 
     const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');

@@ -47,9 +47,11 @@ services:
       PORT: 8000
       DATABASE_URL: postgres://blendpos:blendpos@postgres:5432/blendpos?sslmode=disable
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: dev_secret_change_in_production
+      JWT_SECRET: dev_secret_change_in_production  # ⚠️ CHANGE in production — use a 256-bit random secret
       AFIP_SIDECAR_URL: http://afip-sidecar:8001
       AFIP_CUIT_EMISOR: "20442477060"
+      ALLOWED_ORIGINS: "http://localhost:5173"
+      INTERNAL_API_TOKEN: "dev_internal_token_change_in_production"
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,6 +70,8 @@ services:
       AFIP_KEY_PATH: /certs/afip.key
       AFIP_CACHE_DIR: /tmp/afip_cache
       LOG_LEVEL: INFO
+      INTERNAL_API_TOKEN: "dev_internal_token_change_in_production"
+      REDIS_URL: "redis://redis:6379/0"
     volumes:
       - ./afip-sidecar/certs:/certs:ro
 

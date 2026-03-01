@@ -1,6 +1,7 @@
 import { Stack, Text, Button, Divider, Group, Badge, Box } from '@mantine/core';
 import { ShoppingCart, CreditCard, X, Percent } from 'lucide-react';
-import { useSaleStore } from '../../store/useSaleStore';
+import { useCartStore } from '../../store/useCartStore';
+import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { LastScannedProduct } from './LastScannedProduct';
 import styles from './TotalPanel.module.css';
 
@@ -13,13 +14,13 @@ function formatCurrency(value: number): string {
 }
 
 export function TotalPanel() {
-    const total = useSaleStore((s) => s.total);
-    const descuentoGlobal = useSaleStore((s) => s.descuentoGlobal);
-    const totalConDescuento = useSaleStore((s) => s.totalConDescuento);
-    const cart = useSaleStore((s) => s.cart);
-    const openPaymentModal = useSaleStore((s) => s.openPaymentModal);
-    const clearCart = useSaleStore((s) => s.clearCart);
-    const openDiscountModal = useSaleStore((s) => s.openDiscountModal);
+    const total = useCartStore((s) => s.total);
+    const descuentoGlobal = useCartStore((s) => s.descuentoGlobal);
+    const totalConDescuento = useCartStore((s) => s.totalConDescuento);
+    const cart = useCartStore((s) => s.cart);
+    const openPaymentModal = usePOSUIStore((s) => s.openPaymentModal);
+    const clearCart = useCartStore((s) => s.clearCart);
+    const openDiscountModal = usePOSUIStore((s) => s.openDiscountModal);
 
     const itemCount = cart.reduce((sum, item) => sum + item.cantidad, 0);
     const hasDiscount = descuentoGlobal > 0;

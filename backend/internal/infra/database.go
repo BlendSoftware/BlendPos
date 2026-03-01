@@ -2,7 +2,9 @@ package infra
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/rs/zerolog/log"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -26,6 +28,8 @@ func NewDatabase(dsn string) (*gorm.DB, error) {
 	}
 	sqlDB.SetMaxOpenConns(25)
 	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)  // prevent stale connections after PG restarts
+	sqlDB.SetConnMaxIdleTime(2 * time.Minute)  // reclaim idle connections faster under low load
 
 	if err := applyPreMigrationPatches(db); err != nil {
 		return nil, fmt.Errorf("pre-migration patches: %w", err)
@@ -74,7 +78,14 @@ func NewDatabase(dsn string) (*gorm.DB, error) {
 //
 // This function is fully idempotent: each statement is guarded by an existence
 // check so re-running on an already-patched schema is a no-op.
+//
+// ⚠️  Migration path: for NEW deployments, migration 000009 consolidates all of
+// the DDL below into a proper SQL migration file.  This function remains here as
+// a safety net for EXISTING deployments that were spun up before 000009 existed.
+// It will silently become a no-op once the DB has been patched (all guards return
+// false immediately after the first run).
 func applyPreMigrationPatches(db *gorm.DB) error {
+	log.Debug().Msg("database: running pre-migration compatibility patches (idempotent)")
 	patches := []struct{ descr, sql string }{
 		// 1. Drop stale standalone INDEX objects (not backed by a constraint) that were
 		//    left by a previous failed migration attempt.  These must be dropped BEFORE
@@ -214,7 +225,9 @@ END $$`},
 		if err := db.Exec(p.sql).Error; err != nil {
 			return fmt.Errorf("pre-patch %q: %w", p.descr, err)
 		}
+		log.Debug().Str("patch", p.descr).Msg("database: pre-migration patch applied")
 	}
+	log.Info().Int("count", len(patches)).Msg("database: pre-migration patches completed")
 	return nil
 }
 

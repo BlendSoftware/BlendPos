@@ -33,11 +33,15 @@ func (h *VentasHandler) RegistrarVenta(c *gin.Context) {
 		return
 	}
 	claims := middleware.GetClaims(c)
-	usuarioID, _ := uuid.Parse(claims.UserID)
-
-	resp, err := h.svc.RegistrarVenta(c.Request.Context(), usuarioID, req)
+	usuarioID, err := uuid.Parse(claims.UserID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
+		c.JSON(http.StatusInternalServerError, apierror.New("Token malformado: user_id inválido"))
+		return
+	}
+
+	resp, err2 := h.svc.RegistrarVenta(c.Request.Context(), usuarioID, req)
+	if err2 != nil {
+		c.JSON(http.StatusBadRequest, apierror.New(err2.Error()))
 		return
 	}
 	c.JSON(http.StatusCreated, resp)
@@ -117,7 +121,11 @@ func (h *VentasHandler) SyncBatch(c *gin.Context) {
 		return
 	}
 	claims := middleware.GetClaims(c)
-	usuarioID, _ := uuid.Parse(claims.UserID)
+	usuarioID, parseErr := uuid.Parse(claims.UserID)
+	if parseErr != nil {
+		c.JSON(http.StatusInternalServerError, apierror.New("Token malformado: user_id inválido"))
+		return
+	}
 
 	resp, err := h.svc.SyncBatch(c.Request.Context(), usuarioID, req)
 	if err != nil {

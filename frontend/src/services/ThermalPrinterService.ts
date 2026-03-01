@@ -7,7 +7,8 @@
  * en consola simulando la salida de papel.
  */
 
-import type { CartItem, SaleRecord } from '../store/useSaleStore';
+import type { CartItem } from '../store/useCartStore';
+import type { SaleRecord } from '../store/useSaleStore';
 
 // ── Printer configuration ─────────────────────────────────────────────────────
 

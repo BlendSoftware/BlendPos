@@ -12,6 +12,9 @@ httpx==0.27.0
 # AFIP/ARCA integration
 pyafipws==2.7.1874
 
+# Redis — persists WSAA token across restarts (P2-010)
+redis==5.0.4
+
 # Utilidades
 python-multipart==0.0.9
 

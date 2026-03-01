@@ -25,9 +25,16 @@ type Config struct {
 	JWTExpirationHours int    `mapstructure:"JWT_EXPIRATION_HOURS"`
 	JWTRefreshHours    int    `mapstructure:"JWT_REFRESH_HOURS"`
 
+	// CORS — comma-separated list of allowed origins
+	// e.g. "http://localhost:5173" for dev, "https://pos.miempresa.com" for prod
+	AllowedOrigins string `mapstructure:"ALLOWED_ORIGINS"`
+
 	// AFIP Sidecar
-	AFIPSidecarURL string `mapstructure:"AFIP_SIDECAR_URL"`
-	AFIPCUITEmisor string `mapstructure:"AFIP_CUIT_EMISOR"`
+	AFIPSidecarURL  string `mapstructure:"AFIP_SIDECAR_URL"`
+	AFIPCUITEmisor  string `mapstructure:"AFIP_CUIT_EMISOR"`
+	// InternalAPIToken authenticates Go backend → AFIP Sidecar calls.
+	// Must match INTERNAL_API_TOKEN in the sidecar container.
+	InternalAPIToken string `mapstructure:"INTERNAL_API_TOKEN"`
 
 	// SMTP
 	SMTPHost     string `mapstructure:"SMTP_HOST"`
@@ -55,7 +62,9 @@ func Load() (*Config, error) {
 	viper.SetDefault("EMAIL_WORKERS", 0)       // 0 = fallback to WORKER_POOL_SIZE
 	viper.SetDefault("JWT_EXPIRATION_HOURS", 8)
 	viper.SetDefault("JWT_REFRESH_HOURS", 24)
+	viper.SetDefault("ALLOWED_ORIGINS", "http://localhost:5173")
 	viper.SetDefault("AFIP_SIDECAR_URL", "http://afip-sidecar:8001")
+	viper.SetDefault("INTERNAL_API_TOKEN", "")
 	viper.SetDefault("SMTP_PORT", 587)
 	viper.SetDefault("PDF_STORAGE_PATH", "/tmp/blendpos/pdfs")
 	viper.SetDefault("DATABASE_URL", "postgres://blendpos:blendpos@localhost:5432/blendpos?sslmode=disable")

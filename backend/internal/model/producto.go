@@ -14,7 +14,12 @@ type Producto struct {
 	CodigoBarras string    `gorm:"uniqueIndex;not null"`
 	Nombre       string    `gorm:"index;not null"`
 	Descripcion  *string
+	// Categoria is the legacy string column kept for backward compatibility.
+	// New code should use CategoriaID + the Categoria FK association.
+	// Will be dropped in migration 000009 once all writes use CategoriaID.
 	Categoria    string          `gorm:"not null"`
+	// CategoriaID is the normalized FK reference added in migration 000008 (P2-007).
+	CategoriaID  uuid.UUID       `gorm:"type:uuid;not null;index"`
 	PrecioCosto  decimal.Decimal `gorm:"type:decimal(10,2);not null"`
 	PrecioVenta  decimal.Decimal `gorm:"type:decimal(10,2);not null"`
 	// MargenPct is derived from (PrecioVenta - PrecioCosto) / PrecioCosto * 100
@@ -28,5 +33,6 @@ type Producto struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 
-	Proveedor *Proveedor `gorm:"foreignKey:ProveedorID"`
+	CategoriaFK *Categoria `gorm:"foreignKey:CategoriaID"`
+	Proveedor   *Proveedor `gorm:"foreignKey:ProveedorID"`
 }

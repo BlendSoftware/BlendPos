@@ -147,10 +147,10 @@ func (w *FacturacionWorker) buildAFIPPayload(venta *model.Venta, ventaID string)
 		TipoDocReceptor: 99, // 99 = Consumidor Final
 		NroDocReceptor:  "0",
 		Concepto:        1, // Productos
-		ImporteNeto:     venta.Total.InexactFloat64(),
-		ImporteExento:   0,
-		ImporteIVA:      0,
-		ImporteTotal:    venta.Total.InexactFloat64(),
+		ImporteNeto:     venta.Total.StringFixed(2),
+		ImporteExento:   decimal.Zero.StringFixed(2),
+		ImporteIVA:      decimal.Zero.StringFixed(2),
+		ImporteTotal:    venta.Total.StringFixed(2),
 		VentaID:         ventaID,
 	}
 }

@@ -8,13 +8,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
-	ClaimsKey = "claims"
+	ClaimsKey        = "claims"
+	revokedKeyPrefix = "jwt:revoked:"
 )
 
 // JWTClaims are the custom claims embedded in every access token.
+// The embedded RegisteredClaims.ID field carries the "jti" (JWT ID) claim
+// used for token revocation checks.
 type JWTClaims struct {
 	UserID       string `json:"user_id"`
 	Username     string `json:"username"`
@@ -24,7 +28,9 @@ type JWTClaims struct {
 }
 
 // JWTAuth validates the Bearer token on every protected route.
-func JWTAuth(secret string) gin.HandlerFunc {
+// If rdb is non-nil, it also checks whether the token's jti has been
+// added to the Redis revocation set (e.g. after an explicit logout).
+func JWTAuth(secret string, rdb *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" || !strings.HasPrefix(header, "Bearer ") {
@@ -44,6 +50,16 @@ func JWTAuth(secret string) gin.HandlerFunc {
 		if err != nil || !token.Valid {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, apierror.New("Token invalido o expirado"))
 			return
+		}
+
+		// Revocation check: if the jti appears in Redis the token was explicitly
+		// invalidated (logout). Fail fast without touching the DB.
+		if rdb != nil && claims.ID != "" {
+			n, redisErr := rdb.Exists(c.Request.Context(), revokedKeyPrefix+claims.ID).Result()
+			if redisErr == nil && n > 0 {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, apierror.New("Token revocado"))
+				return
+			}
 		}
 
 		c.Set(ClaimsKey, claims)

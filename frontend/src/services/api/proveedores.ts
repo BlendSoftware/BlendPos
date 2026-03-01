@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { apiClient } from '../../api/client';
+import { tokenStore } from '../../store/tokenStore';
 
 // ── Response Types ────────────────────────────────────────────────────────────
 
@@ -134,10 +135,7 @@ export async function importarCSV(
     form.append('proveedor_id', proveedorId);
 
     // Usamos fetch directo porque apiClient serializa a JSON
-    const raw = localStorage.getItem('blendpos-auth');
-    const token: string | null = raw
-        ? ((JSON.parse(raw) as { state?: { token?: string } }).state?.token ?? null)
-        : null;
+    const token = tokenStore.getAccessToken();
 
     const baseUrl = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
     const resp = await fetch(`${baseUrl}/v1/csv/import`, {

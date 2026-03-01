@@ -15,5 +15,8 @@ python-multipart==0.0.9
 # PyAfipWs dependencies
 pysimplesoap==1.16.2
 
+# Redis — persists WSAA token across restarts (P2-010)
+redis==5.0.4
+
 # Testing (opcional, para test_client.py)
 rich==13.7.1

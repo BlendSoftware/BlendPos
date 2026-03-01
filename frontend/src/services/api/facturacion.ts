@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { apiClient } from '../../api/client';
+import { tokenStore } from '../../store/tokenStore';
 
 // ── Response Types ────────────────────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ export async function getComprobante(ventaId: string): Promise<FacturacionRespon
  * Retorna la URL pública del PDF. Para descarga directa se usa un <a href> con esa URL.
  */
 export function getPDFUrl(comprobanteId: string): string {
-    const baseUrl = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
+    const baseUrl = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
     return `${baseUrl}/v1/facturacion/pdf/${comprobanteId}`;
 }
 
@@ -48,10 +49,7 @@ export function getPDFUrl(comprobanteId: string): string {
  * Descarga el PDF del comprobante en el navegador.
  */
 export async function descargarPDF(comprobanteId: string, nombreArchivo?: string): Promise<void> {
-    const raw = localStorage.getItem('blendpos-auth');
-    const token: string | null = raw
-        ? ((JSON.parse(raw) as { state?: { token?: string } }).state?.token ?? null)
-        : null;
+    const token = tokenStore.getAccessToken();
 
     const url = getPDFUrl(comprobanteId);
     const resp = await fetch(url, {

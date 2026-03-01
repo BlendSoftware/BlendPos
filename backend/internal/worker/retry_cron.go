@@ -15,6 +15,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -89,10 +90,10 @@ func processRetries(ctx context.Context, cfg RetryCronConfig) {
 			TipoDocReceptor: 99,
 			NroDocReceptor:  "0",
 			Concepto:        1,
-			ImporteNeto:     comp.MontoNeto.InexactFloat64(),
-			ImporteExento:   0,
-			ImporteIVA:      comp.MontoIVA.InexactFloat64(),
-			ImporteTotal:    comp.MontoTotal.InexactFloat64(),
+			ImporteNeto:     comp.MontoNeto.StringFixed(2),
+			ImporteExento:   decimal.Zero.StringFixed(2),
+			ImporteIVA:      comp.MontoIVA.StringFixed(2),
+			ImporteTotal:    comp.MontoTotal.StringFixed(2),
 			VentaID:         comp.VentaID.String(),
 		}
 

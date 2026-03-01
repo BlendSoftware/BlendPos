@@ -15,6 +15,8 @@ import { DiscountModal } from '../components/pos/DiscountModal';
 import { SaleHistoryModal } from '../components/pos/SaleHistoryModal';
 import { AbrirCajaModal } from '../components/pos/AbrirCajaModal';
 
+import { useCartStore } from '../store/useCartStore';
+import { usePOSUIStore } from '../store/usePOSUIStore';
 import { useSaleStore } from '../store/useSaleStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCajaStore } from '../store/useCajaStore';
@@ -34,12 +36,20 @@ export function PosTerminal() {
 
     const {
         cart,
+        addItem,
+        clearCart,
+        moveSelectionUp,
+        moveSelectionDown,
+        removeSelectedItem,
+        selectedRowIndex,
+        updateQuantity,
+    } = useCartStore();
+
+    const {
         isPaymentModalOpen,
         isPriceCheckModalOpen,
         isDiscountModalOpen,
         isComprobanteModalOpen,
-        addItem,
-        clearCart,
         openPaymentModal,
         closePaymentModal,
         openComprobanteModal,
@@ -49,12 +59,7 @@ export function PosTerminal() {
         openDiscountModal,
         closeDiscountModal,
         openItemDiscountModal,
-        moveSelectionUp,
-        moveSelectionDown,
-        removeSelectedItem,
-        selectedRowIndex,
-        updateQuantity,
-    } = useSaleStore();
+    } = usePOSUIStore();
 
     const setCajero = useSaleStore((s) => s.setCajero);
     const { user } = useAuthStore();

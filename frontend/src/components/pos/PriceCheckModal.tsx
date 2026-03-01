@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react';
 import { Modal, TextInput, Stack, Text, Group, Badge, Divider, Box } from '@mantine/core';
 import { Tag, ScanLine, Search } from 'lucide-react';
-import { useSaleStore } from '../../store/useSaleStore';
-import { MOCK_PRODUCTS, findProductByBarcode, type MockProduct } from '../../api/mockProducts';
+import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { findCatalogProductByBarcode, searchCatalogProducts } from '../../offline/catalog';
+
+type MockProduct = { id: string; nombre: string; precio: number; codigoBarras: string };
 import styles from './PriceCheckModal.module.css';
 
 function formatCurrency(value: number): string {
@@ -15,8 +16,8 @@ function formatCurrency(value: number): string {
 }
 
 export function PriceCheckModal() {
-    const isOpen = useSaleStore((s) => s.isPriceCheckModalOpen);
-    const close = useSaleStore((s) => s.closePriceCheckModal);
+    const isOpen = usePOSUIStore((s) => s.isPriceCheckModalOpen);
+    const close = usePOSUIStore((s) => s.closePriceCheckModal);
     const [query, setQuery] = useState('');
     const [found, setFound] = useState<MockProduct | null>(null);
     const [notFound, setNotFound] = useState(false);
@@ -42,13 +43,6 @@ export function PriceCheckModal() {
             return;
         }
 
-        const byBarcodeMock = findProductByBarcode(trimmed);
-        if (byBarcodeMock) {
-            setFound(byBarcodeMock);
-            setNotFound(false);
-            return;
-        }
-
         const res = await searchCatalogProducts(trimmed, 1);
         const byName = res[0];
 
@@ -61,16 +55,8 @@ export function PriceCheckModal() {
             });
             setNotFound(false);
         } else {
-            const byNameMock = MOCK_PRODUCTS.find((p) =>
-                p.nombre.toLowerCase().includes(trimmed.toLowerCase())
-            );
-            if (byNameMock) {
-                setFound(byNameMock);
-                setNotFound(false);
-            } else {
-                setFound(null);
-                setNotFound(true);
-            }
+            setFound(null);
+            setNotFound(true);
         }
     }, []);
 

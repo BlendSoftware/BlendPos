@@ -5,20 +5,17 @@
 // cada módulo por llamadas a apiClient.get/post/put/delete.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { tokenStore } from '../store/tokenStore';
+
 // VITE_API_BASE debe apuntar al backend Go, SIN path final (ej: http://localhost:8000)
 const BASE_URL = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
 
 
-// Lee el token JWT del store persistido en localStorage sin importar Zustand
+// Read the JWT access token from the in-memory store (P1-003).
+// Tokens are never written to localStorage — this function can only return
+// a value if the user has logged in during the current page session.
 function getToken(): string | null {
-    try {
-        const raw = localStorage.getItem('blendpos-auth');
-        if (!raw) return null;
-        const parsed = JSON.parse(raw) as { state?: { token?: string } };
-        return parsed?.state?.token ?? null;
-    } catch {
-        return null;
-    }
+    return tokenStore.getAccessToken();
 }
 
 type QueryParams = Record<string, string | number | boolean | undefined | null>;
@@ -49,10 +46,10 @@ async function request<T>(
     const response = await fetch(url, { ...init, headers });
 
     if (response.status === 401) {
-        // Solo redirigir si había un token (sesión expirada), no si era anónimo.
-        // Evita el loop: llamada sin token → 401 → reload → 401 → ...
+        // Only redirect if there was a token (expired session), not on anonymous calls.
+        // Avoid the loop: unauthenticated call → 401 → reload → 401 → ...
         if (token) {
-            localStorage.removeItem('blendpos-auth');
+            tokenStore.clearTokens();
             if (window.location.pathname !== '/login') {
                 window.location.href = '/login';
             }

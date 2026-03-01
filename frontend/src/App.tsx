@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 // Error boundary
@@ -5,6 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Auth
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { useAuthStore } from './store/useAuthStore';
 
 // Layouts
 import { AdminLayout } from './layouts/AdminLayout';
@@ -27,6 +29,11 @@ import { UsuariosPage }          from './pages/admin/UsuariosPage';
 import { CategoriasPage }        from './pages/admin/CategoriasPage';
 
 function App() {
+    // On mount, attempt a silent token refresh so the user stays logged in
+    // after a hard page reload without re-entering credentials (P1-003).
+    const initAuth = useAuthStore((s) => s.initAuth);
+    useEffect(() => { void initAuth(); }, [initAuth]);
+
     return (
         <ErrorBoundary>
             <BrowserRouter>

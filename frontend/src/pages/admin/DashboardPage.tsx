@@ -7,7 +7,7 @@ import {
     TrendingUp, ShoppingCart, Package, AlertTriangle,
     CheckCircle, CreditCard, Banknote, QrCode, Landmark,
 } from 'lucide-react';
-import { formatARS } from '../../api/mockAdmin';
+import { formatARS } from '../../utils/format';
 import styles from './DashboardPage.module.css';
 import { useEffect, useState } from 'react';
 import { useSaleStore } from '../../store/useSaleStore';

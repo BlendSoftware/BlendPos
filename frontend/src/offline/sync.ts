@@ -98,17 +98,26 @@ export async function trySyncQueue(): Promise<void> {
     try {
         const results: SyncSaleResult[] = await syncSalesBatch(sales);
 
+        // Correlate results by offline_id (P2-005).
+        // The backend echoes each request's offline_id in the response object so
+        // we are not vulnerable to any re-ordering or partial responses.
+        const byOfflineId = new Map<string, SyncSaleResult>(
+            results
+                .filter((r) => Boolean(r.offline_id))
+                .map((r) => [r.offline_id as string, r]),
+        );
+
         // Correlate results with sales (backend returns one result per sale, same order)
         const okSaleIds: string[] = [];
         const failedEntries: { saleId: string; estado: string }[] = [];
 
-        for (let i = 0; i < sales.length; i++) {
-            const result = results[i];
+        for (const sale of sales) {
+            const result = byOfflineId.get(sale.id);
             if (result && isSyncSuccess(result)) {
-                okSaleIds.push(sales[i].id);
+                okSaleIds.push(sale.id);
             } else {
                 failedEntries.push({
-                    saleId: sales[i].id,
+                    saleId: sale.id,
                     estado: result?.estado ?? 'unknown',
                 });
             }
@@ -183,11 +192,16 @@ export async function recoverLostSales(): Promise<number> {
     let recovered = 0;
     const createdAt = nowIso();
 
-    // 1. Reset all 'error' queue items to 'pending' for a fresh retry
+    // 1. Reset 'error' queue items to 'pending' for a fresh retry.
+    //    If an item already went through a full recovery cycle (tries >= MAX_TRIES_BEFORE_ERROR),
+    //    it means it failed even after being reset — treat it as a permanent failure and delete it.
     const errorItems = await db.sync_queue.where('status').equals('error').toArray();
     if (errorItems.length > 0) {
+        const toReset = errorItems.filter((q) => (q.tries ?? 0) < MAX_TRIES_BEFORE_ERROR);
+        const toPurge = errorItems.filter((q) => (q.tries ?? 0) >= MAX_TRIES_BEFORE_ERROR);
+
         await db.transaction('rw', db.sync_queue, async () => {
-            for (const q of errorItems) {
+            for (const q of toReset) {
                 await db.sync_queue.put({
                     ...q,
                     status: 'pending',
@@ -196,9 +210,13 @@ export async function recoverLostSales(): Promise<number> {
                     updatedAt: createdAt,
                 });
             }
+            if (toPurge.length > 0) {
+                await db.sync_queue.bulkDelete(toPurge.map((q) => q.id!));
+                console.warn(`[sync] purged ${toPurge.length} permanently-failed queue items`, toPurge.map((q) => q.lastError));
+            }
         });
-        recovered += errorItems.length;
-        console.info(`[sync] reset ${errorItems.length} error queue items to pending`);
+        recovered += toReset.length;
+        if (toReset.length > 0) console.info(`[sync] reset ${toReset.length} error queue items to pending`);
     }
 
     // 2. Re-enqueue synced sales that don't have a queue entry

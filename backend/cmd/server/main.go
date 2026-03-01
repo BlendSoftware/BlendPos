@@ -64,7 +64,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	afipClient := infra.NewAFIPClient(cfg.AFIPSidecarURL)
+	afipClient := infra.NewAFIPClient(cfg.AFIPSidecarURL, cfg.InternalAPIToken)
 	mailer := infra.NewMailer(cfg)
 	dispatcher := worker.NewDispatcher(rdb, afipClient, mailer)
 	comprobanteRepo := repository.NewComprobanteRepository(db)

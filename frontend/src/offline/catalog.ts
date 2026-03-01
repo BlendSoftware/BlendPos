@@ -1,8 +1,21 @@
 import { db, type LocalProduct } from './db';
-import { MOCK_PRODUCTS } from '../api/mockProducts';
 import { listarProductos } from '../services/api/products';
 
 const SEED_LIMIT = 5000;
+const LAST_SYNC_KEY = 'catalogLastSyncAt';
+
+// ── Sync meta helpers ─────────────────────────────────────────────────────────
+
+async function getLastSyncAt(): Promise<string | null> {
+    const meta = await db.sync_meta.get(LAST_SYNC_KEY);
+    return meta?.value ?? null;
+}
+
+async function setLastSyncAt(iso: string): Promise<void> {
+    await db.sync_meta.put({ key: LAST_SYNC_KEY, value: iso });
+}
+
+// ── Full seed (first launch or explicit reset) ────────────────────────────────
 
 /** Descarga el catálogo completo del backend y reemplaza IndexedDB. */
 export async function seedCatalogFromAPI(): Promise<boolean> {
@@ -10,7 +23,7 @@ export async function seedCatalogFromAPI(): Promise<boolean> {
         const resp = await listarProductos({ limit: SEED_LIMIT, page: 1 });
         if (resp.data && resp.data.length > 0) {
             const seed: LocalProduct[] = resp.data
-                .filter((p) => p.activo) // solo productos activos
+                .filter((p) => p.activo)
                 .map((p) => ({
                     id: p.id,
                     codigoBarras: p.codigo_barras,
@@ -18,9 +31,9 @@ export async function seedCatalogFromAPI(): Promise<boolean> {
                     precio: typeof p.precio_venta === 'number' ? p.precio_venta : parseFloat(p.precio_venta as unknown as string),
                     stock: p.stock_actual ?? 0,
                 }));
-            // Reemplazar todo el catálogo local con lo que viene del backend
             await db.products.clear();
             await db.products.bulkPut(seed);
+            await setLastSyncAt(new Date().toISOString());
             return true;
         }
         return false;
@@ -30,33 +43,69 @@ export async function seedCatalogFromAPI(): Promise<boolean> {
     }
 }
 
+// ── Delta sync (subsequent syncs) ────────────────────────────────────────────
+
 /**
- * Sincroniza el catálogo SIEMPRE desde el backend.
- * Si el backend falla, usa mocks como fallback (solo si IndexedDB está vacío).
+ * Descarga solo los productos modificados desde la última sincronización.
+ * Si no hay registro previo, hace una sincronización completa.
+ * Devuelve true si hubo cambios; false si no hay conectividad o sin cambios.
+ */
+export async function deltaSyncCatalog(): Promise<boolean> {
+    const lastSync = await getLastSyncAt();
+
+    // No previous sync: fall back to full seed
+    if (!lastSync) {
+        return seedCatalogFromAPI();
+    }
+
+    try {
+        const syncStart = new Date().toISOString();
+        const resp = await listarProductos({
+            limit: SEED_LIMIT,
+            page: 1,
+            activo: 'all',        // include deactivated so we can mark them locally
+            updated_after: lastSync,
+        });
+
+        if (!resp.data || resp.data.length === 0) {
+            // No changes since last sync — update timestamp to avoid redundant queries
+            await setLastSyncAt(syncStart);
+            return false;
+        }
+
+        // Upsert changed products; soft-delete (stock=0) for deactivated ones
+        const upserts: LocalProduct[] = resp.data.map((p) => ({
+            id: p.id,
+            codigoBarras: p.codigo_barras,
+            nombre: p.nombre,
+            precio: typeof p.precio_venta === 'number' ? p.precio_venta : parseFloat(p.precio_venta as unknown as string),
+            // If product was deactivated, set stock=0 so the POS blocks sales
+            stock: p.activo ? (p.stock_actual ?? 0) : 0,
+        }));
+
+        await db.products.bulkPut(upserts);
+        await setLastSyncAt(syncStart);
+        return true;
+    } catch (err) {
+        console.warn('[BlendPOS] Delta sync falló, usando catálogo local:', err);
+        return false;
+    }
+}
+
+/**
+ * Sincroniza el catálogo desde el backend.
+ * Si no hay conectividad y ya hay datos en IndexedDB, los usa tal cual.
  * Se llama en cada mount del POS → productos siempre sincronizados con gestión.
  */
 export async function seedCatalogFromMocksIfEmpty(): Promise<void> {
-    const synced = await seedCatalogFromAPI();
-    if (synced) return;
-
-    // Fallback: mocks locales solo si IndexedDB está vacío
-    const count = await db.products.count();
-    if (count > 0) return;
-
-    const seed: LocalProduct[] = MOCK_PRODUCTS.slice(0, SEED_LIMIT).map((p) => ({
-        id: p.id,
-        codigoBarras: p.codigoBarras,
-        nombre: p.nombre,
-        precio: p.precio,
-        stock: 'stock' in p ? (p as unknown as { stock: number }).stock : 99,
-    }));
-
-    await db.products.bulkPut(seed);
+    await seedCatalogFromAPI();
+    // Si el backend no está disponible, el catálogo local (IndexedDB) se usa tal cual.
+    // No se cargan datos mock — el POS mostrará "sin productos" hasta que haya conexión.
 }
 
-/** Fuerza una re-sincronización completa del catálogo desde el backend. */
+/** Fuerza una re-sincronización delta del catálogo desde el backend. */
 export async function forceRefreshCatalog(): Promise<void> {
-    await seedCatalogFromAPI();
+    await deltaSyncCatalog();
 }
 
 export async function findCatalogProductByBarcode(barcode: string): Promise<LocalProduct | undefined> {

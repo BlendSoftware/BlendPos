@@ -9,6 +9,9 @@ export interface SyncSaleResult {
     numero_ticket?: number;
     estado: string;
     conflicto_stock?: boolean;
+    /** Echoes the offline_id sent in the request so the client can correlate
+     *  results by ID rather than by array position (P2-005). */
+    offline_id?: string;
 }
 
 /**

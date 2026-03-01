@@ -28,11 +28,26 @@ type ProductoService interface {
 type productoService struct {
 	repo    repository.ProductoRepository
 	movRepo repository.MovimientoStockRepository
+	catRepo repository.CategoriaRepository
 	rdb     *redis.Client
 }
 
-func NewProductoService(repo repository.ProductoRepository, movRepo repository.MovimientoStockRepository, rdb *redis.Client) ProductoService {
-	return &productoService{repo: repo, movRepo: movRepo, rdb: rdb}
+func NewProductoService(repo repository.ProductoRepository, movRepo repository.MovimientoStockRepository, catRepo repository.CategoriaRepository, rdb *redis.Client) ProductoService {
+	return &productoService{repo: repo, movRepo: movRepo, catRepo: catRepo, rdb: rdb}
+}
+
+// lookupCategoriaID busca la categoría por nombre y devuelve su ID.
+// Si catRepo es nil (en tests) devuelve uuid.Nil sin error para mantener
+// compatibilidad con los stubs de test que no usan DB real.
+func (s *productoService) lookupCategoriaID(ctx context.Context, nombre string) (uuid.UUID, error) {
+	if s.catRepo == nil {
+		return uuid.Nil, nil
+	}
+	cat, err := s.catRepo.ObtenerPorNombre(ctx, nombre)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("categoría '%s' no encontrada", nombre)
+	}
+	return cat.ID, nil
 }
 
 // precioCacheKey returns the Redis key for a product's price cache entry.
@@ -94,11 +109,17 @@ func (s *productoService) Crear(ctx context.Context, req dto.CrearProductoReques
 		provID = &id
 	}
 
+	catID, err := s.lookupCategoriaID(ctx, req.Categoria)
+	if err != nil {
+		return nil, err
+	}
+
 	p := &model.Producto{
 		CodigoBarras: req.CodigoBarras,
 		Nombre:       req.Nombre,
 		Descripcion:  req.Descripcion,
 		Categoria:    req.Categoria,
+		CategoriaID:  catID,
 		PrecioCosto:  req.PrecioCosto,
 		PrecioVenta:  req.PrecioVenta,
 		StockActual:  req.StockActual,
@@ -176,7 +197,12 @@ func (s *productoService) Actualizar(ctx context.Context, id uuid.UUID, req dto.
 		p.Descripcion = req.Descripcion
 	}
 	if req.Categoria != nil {
+		nuevoCatID, catErr := s.lookupCategoriaID(ctx, *req.Categoria)
+		if catErr != nil {
+			return nil, catErr
+		}
 		p.Categoria = *req.Categoria
+		p.CategoriaID = nuevoCatID
 	}
 	if req.PrecioCosto != nil {
 		p.PrecioCosto = *req.PrecioCosto

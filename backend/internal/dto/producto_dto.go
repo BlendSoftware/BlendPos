@@ -36,9 +36,12 @@ type ProductoFilter struct {
 	Categoria   string `form:"categoria"`
 	ProveedorID string `form:"proveedor_id"`
 	// Activo: "true" = solo activos (default), "false" = solo inactivos, "all" = todos
-	Activo string `form:"activo,default=true"`
-	Page   int    `form:"page,default=1"  validate:"min=1"`
-	Limit  int    `form:"limit,default=20" validate:"min=1,max=100"`
+	Activo       string `form:"activo,default=true"`
+	// UpdatedAfter: ISO-8601 timestamp — return only products updated after this time.
+	// Used by the frontend delta-sync to avoid downloading the full catalog on every POS mount.
+	UpdatedAfter string `form:"updated_after"`
+	Page         int    `form:"page,default=1"  validate:"min=1"`
+	Limit        int    `form:"limit,default=20" validate:"min=1,max=100"`
 }
 
 // ─── Response DTOs ───────────────────────────────────────────────────────────

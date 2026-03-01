@@ -2,9 +2,11 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"blendpos/internal/apierror"
 	"blendpos/internal/dto"
+	"blendpos/internal/middleware"
 	"blendpos/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -59,6 +61,35 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// Logout godoc
+// @Summary      Cerrar sesión (revocar token)
+// @Description  Invalida el access token actual agregando su jti a la blocklist de Redis.
+// @Tags         auth
+// @Security     BearerAuth
+// @Produce      json
+// @Success      204
+// @Failure      401  {object} apierror.APIError
+// @Router       /v1/auth/logout [post]
+func (h *AuthHandler) Logout(c *gin.Context) {
+	claims := middleware.GetClaims(c)
+	if claims == nil || claims.ID == "" {
+		c.JSON(http.StatusUnauthorized, apierror.New("Token invalido"))
+		return
+	}
+
+	// Calculate remaining lifetime so the Redis key TTL matches the token expiry.
+	var remaining time.Duration
+	if claims.ExpiresAt != nil {
+		remaining = time.Until(claims.ExpiresAt.Time)
+	}
+
+	if err := h.svc.Logout(c.Request.Context(), claims.ID, remaining); err != nil {
+		c.JSON(http.StatusInternalServerError, apierror.New("No se pudo revocar el token"))
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // ── Usuarios Handler ─────────────────────────────────────────────────────────

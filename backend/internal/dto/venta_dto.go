@@ -90,6 +90,9 @@ type VentaResponse struct {
 	Pagos          []PagoRequest       `json:"pagos"`
 	Vuelto         decimal.Decimal     `json:"vuelto"`
 	Estado         string              `json:"estado"`
+	// OfflineID echoes the offline_id from the request so clients can correlate
+	// batch results without relying on fragile array-index matching (P2-005).
+	OfflineID      *string             `json:"offline_id,omitempty"`
 	ConflictoStock bool                `json:"conflicto_stock"`
 	CreatedAt      string              `json:"created_at"`
 }

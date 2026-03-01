@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { CartItem, MetodoPago, PagoDetalle } from '../store/useSaleStore';
+import type { CartItem, MetodoPago, PagoDetalle } from '../store/useCartStore';
 
 export interface LocalSale {
     id: string;
@@ -40,10 +40,16 @@ export interface LocalProduct {
     stock: number;
 }
 
+export interface SyncMeta {
+    key: string;   // e.g. 'catalogLastSyncAt'
+    value: string; // ISO-8601 timestamp
+}
+
 class BlendPosDB extends Dexie {
     sales!: Table<LocalSale, string>;
     sync_queue!: Table<SyncQueueItem, number>;
     products!: Table<LocalProduct, string>;
+    sync_meta!: Table<SyncMeta, string>;
 
     constructor() {
         super('blendpos-db');
@@ -65,6 +71,14 @@ class BlendPosDB extends Dexie {
             sales: 'id, fecha, synced',
             sync_queue: '++id, status, createdAt, type, nextAttemptAt',
             products: 'id, codigoBarras, nombre, stock',
+        });
+
+        // v4: agrega sync_meta para rastrear lastSyncAt del catálogo (delta sync)
+        this.version(4).stores({
+            sales: 'id, fecha, synced',
+            sync_queue: '++id, status, createdAt, type, nextAttemptAt',
+            products: 'id, codigoBarras, nombre, stock',
+            sync_meta: 'key',
         });
     }
 }

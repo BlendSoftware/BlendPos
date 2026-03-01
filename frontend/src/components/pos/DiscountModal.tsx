@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Modal, Stack, Text, Group, Button, Slider, NumberInput, Divider, Badge, Alert } from '@mantine/core';
 import { Percent, Check, ShieldAlert } from 'lucide-react';
-import { useSaleStore } from '../../store/useSaleStore';
+import { useCartStore } from '../../store/useCartStore';
+import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import styles from './DiscountModal.module.css';
 
@@ -19,14 +20,14 @@ const QUICK_DISCOUNTS = [5, 10, 15, 20, 25, 30];
 const CAJERO_DESCUENTO_MAX = 30;
 
 export function DiscountModal() {
-    const isOpen = useSaleStore((s) => s.isDiscountModalOpen);
-    const close = useSaleStore((s) => s.closeDiscountModal);
-    const total = useSaleStore((s) => s.total);
-    const descuentoGlobal = useSaleStore((s) => s.descuentoGlobal);
-    const setGlobalDiscount = useSaleStore((s) => s.setGlobalDiscount);
-    const discountTargetItemId = useSaleStore((s) => s.discountTargetItemId);
-    const cart = useSaleStore((s) => s.cart);
-    const setItemDiscount = useSaleStore((s) => s.setItemDiscount);
+    const isOpen = usePOSUIStore((s) => s.isDiscountModalOpen);
+    const close = usePOSUIStore((s) => s.closeDiscountModal);
+    const total = useCartStore((s) => s.total);
+    const descuentoGlobal = useCartStore((s) => s.descuentoGlobal);
+    const setGlobalDiscount = useCartStore((s) => s.setGlobalDiscount);
+    const discountTargetItemId = usePOSUIStore((s) => s.discountTargetItemId);
+    const cart = useCartStore((s) => s.cart);
+    const setItemDiscount = useCartStore((s) => s.setItemDiscount);
     const { hasRole } = useAuthStore();
 
     const targetItem = discountTargetItemId

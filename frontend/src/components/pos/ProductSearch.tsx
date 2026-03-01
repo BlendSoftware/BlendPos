@@ -4,7 +4,7 @@ import { Search, X } from 'lucide-react';
 import type { LocalProduct } from '../../offline/db';
 import { searchCatalogProducts } from '../../offline/catalog';
 import { listarProductos } from '../../services/api/products';
-import { useSaleStore } from '../../store/useSaleStore';
+import { useCartStore } from '../../store/useCartStore';
 import styles from './ProductSearch.module.css';
 
 interface ProductSearchProps {
@@ -25,7 +25,7 @@ export function ProductSearch({ onClose, inputRef, initialQuery = '' }: ProductS
     const [query, setQuery] = useState(initialQuery);
     const [highlightIndex, setHighlightIndex] = useState(0);
     const deferredQuery = useDeferredValue(query);
-    const addItem = useSaleStore((s) => s.addItem);
+    const addItem = useCartStore((s) => s.addItem);
     const listRef = useRef<HTMLDivElement>(null);
 
     const [results, setResults] = useState<LocalProduct[]>([]);

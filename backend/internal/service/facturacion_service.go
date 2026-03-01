@@ -17,6 +17,7 @@ import (
 type FacturacionService interface {
 	ObtenerComprobante(ctx context.Context, ventaID uuid.UUID) (*dto.FacturacionResponse, error)
 	ObtenerPDFPath(ctx context.Context, id uuid.UUID) (string, error)
+	VerificarAccesoComprobante(ctx context.Context, id uuid.UUID, rol string, puntoDeVenta *int) error
 	AnularComprobante(ctx context.Context, id uuid.UUID, motivo string) (*dto.FacturacionResponse, error)
 	ReintentarComprobante(ctx context.Context, id uuid.UUID) (*dto.FacturacionResponse, error)
 }
@@ -49,6 +50,24 @@ func (s *facturacionService) ObtenerPDFPath(ctx context.Context, id uuid.UUID) (
 		return "", fmt.Errorf("PDF no disponible — el comprobante está en estado '%s'", comp.Estado)
 	}
 	return *comp.PDFPath, nil
+}
+
+// VerificarAccesoComprobante checks that the caller has access to the given comprobante.
+// Administradores can access any comprobante. Supervisores are restricted to their
+// assigned punto_de_venta; if their token has no PuntoDeVenta set (nil) access is
+// denied to avoid inadvertently exposing cross-PdV data.
+func (s *facturacionService) VerificarAccesoComprobante(ctx context.Context, id uuid.UUID, rol string, puntoDeVenta *int) error {
+	if rol == "administrador" {
+		return nil
+	}
+	comp, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("comprobante no encontrado")
+	}
+	if puntoDeVenta == nil || comp.PuntoDeVenta != *puntoDeVenta {
+		return fmt.Errorf("acceso denegado al comprobante %s", id)
+	}
+	return nil
 }
 
 // AnularComprobante transitions a comprobante from "emitido" to "anulado".

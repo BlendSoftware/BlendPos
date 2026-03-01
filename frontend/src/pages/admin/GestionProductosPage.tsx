@@ -2,12 +2,12 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
     Stack, Title, Text, Group, Button, TextInput, Select, Badge,
     Table, ActionIcon, Tooltip, Modal, NumberInput, Textarea,
-    Switch, Skeleton, Paper, Divider, Alert, UnstyledButton,
+    Switch, Skeleton, Paper, Divider, Alert, UnstyledButton, Checkbox,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { Plus, Search, Edit, PowerOff, Power, X, AlertCircle, PackagePlus, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
-import { formatARS } from '../../api/mockAdmin';
+import { Plus, Search, Edit, PowerOff, Power, X, AlertCircle, PackagePlus, ChevronUp, ChevronDown, ChevronsUpDown, Trash2 } from 'lucide-react';
+import { formatARS } from '../../utils/format';
 import {
     listarProductos, crearProducto, actualizarProducto, desactivarProducto, reactivarProducto, ajustarStock,
     type ProductoResponse,
@@ -78,6 +78,19 @@ export function GestionProductosPage() {
     // ── Stock adjustment modal state ───────────────────────────────────────
     const [stockModalOpen, setStockModalOpen] = useState(false);
     const [stockTarget, setStockTarget] = useState<IProducto | null>(null);
+
+    // ── Delete state ──────────────────────────────────────────────────────
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+
+    const toggleSelect = (id: string) =>
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+
     const stockForm = useForm({
         initialValues: { delta: 0, motivo: '' },
         validate: {
@@ -164,6 +177,19 @@ export function GestionProductosPage() {
         });
     }, [productos, busqueda, filtroCategoria, filtroEstado, mostrarInactivos, sortBy, sortDir]);
 
+    const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
+    const toggleSelectAll = () => {
+        if (allFilteredSelected) {
+            setSelectedIds((prev) => {
+                const next = new Set(prev);
+                filtered.forEach((p) => next.delete(p.id));
+                return next;
+            });
+        } else {
+            setSelectedIds((prev) => new Set([...prev, ...filtered.map((p) => p.id)]));
+        }
+    };
+
     const toggleSort = (col: string) => {
         if (sortBy === col) {
             if (sortDir === 'asc') setSortDir('desc');
@@ -233,6 +259,31 @@ export function GestionProductosPage() {
                 color: 'red',
             });
         }
+    };
+
+    const handleBulkDelete = async () => {
+        setDeleting(true);
+        const ids = [...selectedIds];
+        let ok = 0;
+        let fail = 0;
+        for (const id of ids) {
+            try {
+                await desactivarProducto(id);
+                ok++;
+            } catch {
+                fail++;
+            }
+        }
+        await fetchProductos();
+        setSelectedIds(new Set());
+        setBulkDeleteOpen(false);
+        setDeleting(false);
+        notifications.show({
+            title: `${ok} producto${ok !== 1 ? 's' : ''} eliminado${ok !== 1 ? 's' : ''}`,
+            message: fail > 0 ? `${fail} no se pudieron eliminar` : 'Operación completada',
+            color: fail > 0 ? 'orange' : 'red',
+            icon: <Trash2 size={14} />,
+        });
     };
 
     const openStockModal = (p: IProducto) => {
@@ -310,6 +361,16 @@ export function GestionProductosPage() {
                     <Text c="dimmed" size="sm">{productos.filter((p) => p.activo).length} activos · {productos.length} total</Text>
                 </div>
                 <Group gap="sm">
+                    {selectedIds.size > 0 && (
+                        <Button
+                            color="red"
+                            variant="light"
+                            leftSection={<Trash2 size={15} />}
+                            onClick={() => setBulkDeleteOpen(true)}
+                        >
+                            Eliminar {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+                        </Button>
+                    )}
                     <Switch
                         label="Mostrar inactivos"
                         checked={mostrarInactivos}
@@ -365,6 +426,14 @@ export function GestionProductosPage() {
                     <Table highlightOnHover striped verticalSpacing="sm">
                         <Table.Thead>
                             <Table.Tr>
+                                <Table.Th style={{ width: 36 }}>
+                                    <Checkbox
+                                        size="sm"
+                                        checked={allFilteredSelected}
+                                        indeterminate={selectedIds.size > 0 && !allFilteredSelected}
+                                        onChange={toggleSelectAll}
+                                    />
+                                </Table.Th>
                                 <Table.Th>Código</Table.Th>
                                 <Table.Th>
                                     <UnstyledButton onClick={() => toggleSort('nombre')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'inherit', fontWeight: 'inherit' }}>
@@ -410,6 +479,13 @@ export function GestionProductosPage() {
                             ) : (
                                 filtered.map((p) => (
                                     <Table.Tr key={p.id} style={{ opacity: p.activo ? 1 : 0.5 }}>
+                                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                                            <Checkbox
+                                                size="sm"
+                                                checked={selectedIds.has(p.id)}
+                                                onChange={() => toggleSelect(p.id)}
+                                            />
+                                        </Table.Td>
                                         <Table.Td>
                                             <Text size="xs" ff="monospace">{p.codigoBarras}</Text>
                                         </Table.Td>
@@ -476,6 +552,7 @@ export function GestionProductosPage() {
                                                         {p.activo ? <PowerOff size={15} /> : <Power size={15} />}
                                                     </ActionIcon>
                                                 </Tooltip>
+
                                             </Group>
                                         </Table.Td>
                                     </Table.Tr>
@@ -559,6 +636,62 @@ export function GestionProductosPage() {
                     </Stack>
                 </form>
             </Modal>
+            {/* ── Modal Eliminar en masa ──────────────────────────────────── */}
+            <Modal
+                opened={bulkDeleteOpen}
+                onClose={() => setBulkDeleteOpen(false)}
+                title={<Text fw={700} c="red">Eliminar productos seleccionados</Text>}
+                size="sm"
+                centered
+            >
+                <Stack gap="md">
+                    <Alert color="red" variant="light" icon={<AlertCircle size={16} />}>
+                        Vas a eliminar <strong>{selectedIds.size} producto{selectedIds.size !== 1 ? 's' : ''}</strong>.<br />
+                        Dejarán de aparecer en el catálogo y en el POS.
+                        El historial de ventas se conserva.
+                    </Alert>
+                    <Group justify="flex-end">
+                        <Button variant="subtle" onClick={() => setBulkDeleteOpen(false)}>Cancelar</Button>
+                        <Button
+                            color="red"
+                            leftSection={<Trash2 size={14} />}
+                            loading={deleting}
+                            onClick={handleBulkDelete}
+                        >
+                            Eliminar {selectedIds.size} producto{selectedIds.size !== 1 ? 's' : ''}
+                        </Button>
+                    </Group>
+                </Stack>
+            </Modal>
+
+            {/* ── Modal Eliminar en masa ────────────────────────────────── */}
+            <Modal
+                opened={bulkDeleteOpen}
+                onClose={() => setBulkDeleteOpen(false)}
+                title={<Text fw={700} c="red">Eliminar productos seleccionados</Text>}
+                size="sm"
+                centered
+            >
+                <Stack gap="md">
+                    <Alert color="red" variant="light" icon={<AlertCircle size={16} />}>
+                        Vas a eliminar <strong>{selectedIds.size} producto{selectedIds.size !== 1 ? 's' : ''}</strong>.<br />
+                        Dejarán de aparecer en el catálogo y en el POS.
+                        El historial de ventas se conserva.
+                    </Alert>
+                    <Group justify="flex-end">
+                        <Button variant="subtle" onClick={() => setBulkDeleteOpen(false)}>Cancelar</Button>
+                        <Button
+                            color="red"
+                            leftSection={<Trash2 size={14} />}
+                            loading={deleting}
+                            onClick={handleBulkDelete}
+                        >
+                            Eliminar {selectedIds.size} producto{selectedIds.size !== 1 ? 's' : ''}
+                        </Button>
+                    </Group>
+                </Stack>
+            </Modal>
+
             {/* ── Modal Ajuste de Stock ───────────────────────────────────── */}
             <Modal
                 opened={stockModalOpen}

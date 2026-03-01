@@ -49,6 +49,7 @@ func (s *cajaService) Abrir(ctx context.Context, usuarioID uuid.UUID, req dto.Ab
 		UsuarioID:    usuarioID,
 		MontoInicial: req.MontoInicial,
 		Estado:       "abierta",
+		OpenedAt:     time.Now(),
 	}
 	if err := s.repo.CreateSesion(ctx, sesion); err != nil {
 		return nil, err

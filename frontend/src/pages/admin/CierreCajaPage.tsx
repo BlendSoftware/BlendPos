@@ -8,7 +8,7 @@ import { notifications } from '@mantine/notifications';
 import { Lock, CheckCircle, AlertTriangle, History, ClipboardList, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useCajaStore } from '../../store/useCajaStore';
-import { formatARS } from '../../api/mockAdmin';
+import { formatARS } from '../../utils/format';
 import type { IArqueoItem } from '../../types';
 import type { ReporteCajaResponse, ArqueoResponse as ApiArqueoResponse } from '../../services/api/caja';
 import { getHistorialCajas } from '../../services/api/caja';

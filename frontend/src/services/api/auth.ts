@@ -40,3 +40,12 @@ export async function loginApi(username: string, password: string): Promise<Logi
 export async function refreshApi(refreshToken: string): Promise<LoginResponse> {
     return apiClient.post<LoginResponse>('/v1/auth/refresh', { refresh_token: refreshToken });
 }
+
+/**
+ * POST /v1/auth/logout
+ * Revoca el access token actual en el servidor (agrega su jti a la blocklist de Redis).
+ * Best-effort: los errores no bloquean el logout local.
+ */
+export async function logoutApi(): Promise<void> {
+    await apiClient.post<void>('/v1/auth/logout', {});
+}

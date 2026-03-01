@@ -1,6 +1,7 @@
 package router
 
 import (
+	"strings"
 	"time"
 
 	"blendpos/internal/config"
@@ -14,6 +15,7 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -29,15 +31,19 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 	r := gin.New()
 
 	// Global middleware chain (order matters)
+	r.Use(gzip.Gzip(gzip.DefaultCompression)) // 7.5 — compress JSON responses (saves ~70% on product lists)
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger())
 	r.Use(middleware.Recovery())
-	r.Use(middleware.CORS())
+	origins := strings.Split(cfg.AllowedOrigins, ",")
+	r.Use(middleware.CORS(origins))
+	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.GlobalTimeout(30 * time.Second))
 	r.Use(middleware.ErrorHandler())
-	r.Use(middleware.RateLimiter(1000, time.Minute)) // 1000 req/min per IP
+	r.Use(middleware.RateLimiter(rdb, 1000, time.Minute)) // 1000 req/min per IP (Redis-backed)
 
 	// ── Infrastructure ───────────────────────────────────────────────────────
-	afipClient := infra.NewAFIPClient(cfg.AFIPSidecarURL)
+	afipClient := infra.NewAFIPClient(cfg.AFIPSidecarURL, cfg.InternalAPIToken)
 	mailer := infra.NewMailer(cfg)
 
 	// ── Repositories ─────────────────────────────────────────────────────────
@@ -52,15 +58,15 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 	categoriaRepo := repository.NewCategoriaRepository(db)
 
 	// ── Services ─────────────────────────────────────────────────────────────
-	authSvc := service.NewAuthService(usuarioRepo, cfg)
-	productoSvc := service.NewProductoService(productoRepo, movimientoStockRepo, rdb)
+	authSvc := service.NewAuthService(usuarioRepo, cfg, rdb)
+	productoSvc := service.NewProductoService(productoRepo, movimientoStockRepo, categoriaRepo, rdb)
 	inventarioSvc := service.NewInventarioService(productoRepo, movimientoStockRepo)
 	cajaSvc := service.NewCajaService(cajaRepo)
 
 	// Worker dispatcher — injected into services that enqueue async jobs
 	dispatcher := worker.NewDispatcher(rdb, afipClient, mailer)
 
-	ventaSvc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, dispatcher)
+	ventaSvc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, dispatcher, comprobanteRepo)
 	facturacionSvc := service.NewFacturacionService(comprobanteRepo, dispatcher)
 	proveedorSvc := service.NewProveedorService(proveedorRepo, productoRepo)
 	categoriaSvc := service.NewCategoriaService(categoriaRepo)
@@ -86,15 +92,20 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 	// Auth (public)
 	auth := r.Group("/v1/auth")
 	{
-		auth.POST("/login", middleware.LoginRateLimiter(), authH.Login)
+		auth.POST("/login", middleware.LoginRateLimiter(rdb), authH.Login)
 		auth.POST("/refresh", authH.Refresh)
 	}
 
 	// Price check — no auth required (RF-27)
-	r.GET("/v1/precio/:barcode", consultaH.GetPrecioPorBarcode)
+	// Dedicated rate limit: 60 req/min per IP to prevent catalog scraping.
+	r.GET("/v1/precio/:barcode", middleware.RateLimiter(rdb, 60, time.Minute), consultaH.GetPrecioPorBarcode)
 
 	// Protected routes
-	jwtMW := middleware.JWTAuth(cfg.JWTSecret)
+	jwtMW := middleware.JWTAuth(cfg.JWTSecret, rdb)
+
+	// Authenticated logout — requires a valid (non-revoked) token
+	auth.POST("/logout", jwtMW, authH.Logout)
+
 	v1 := r.Group("/v1", jwtMW)
 	{
 		// Roles: cajero, supervisor, administrador — declared per-endpoint

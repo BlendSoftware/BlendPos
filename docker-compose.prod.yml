@@ -43,7 +43,10 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    # appendfsync always: flush every write to disk immediately.
+    # Required for a fiscal POS — an OS crash must never lose a committed sale.
+    # Trade-off: slightly higher write latency vs. the default "everysec".
+    command: redis-server --appendonly yes --appendfsync always --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
 
@@ -61,6 +64,8 @@ services:
       JWT_EXPIRATION_HOURS: 8
       JWT_REFRESH_HOURS: 24
       AFIP_SIDECAR_URL: http://afip-sidecar:8001
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USER: ${SMTP_USER}
@@ -88,6 +93,8 @@ services:
       AFIP_HOMOLOGACION: "false"
       AFIP_CERT_PATH: /certs/afip.crt
       AFIP_KEY_PATH: /certs/afip.key
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      REDIS_URL: ${REDIS_URL}
     volumes:
       - ./afip-sidecar/certs:/certs:ro
     # NOT exposed externally — only backend can reach it via internal network

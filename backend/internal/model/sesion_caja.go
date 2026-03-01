@@ -23,7 +23,7 @@ type SesionCaja struct {
 	// ClasificacionDesvio: "normal" | "advertencia" | "critico"
 	ClasificacionDesvio *string `gorm:"type:varchar(20)"`
 	Observaciones       *string
-	OpenedAt            time.Time
+	OpenedAt            time.Time  `gorm:"not null;default:now()"`
 	ClosedAt            *time.Time
 
 	Movimientos []MovimientoCaja `gorm:"foreignKey:SesionCajaID"`

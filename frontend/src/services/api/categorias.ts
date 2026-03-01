@@ -1,4 +1,4 @@
-import { useAuthStore } from '../../store/useAuthStore';
+import { tokenStore } from '../../store/tokenStore';
 
 const API_BASE = import.meta.env.VITE_API_BASE as string;
 
@@ -10,8 +10,8 @@ export interface CategoriaResponse {
 }
 
 function authHeaders(): HeadersInit {
-    const token = useAuthStore.getState().token;
-    return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+    const token = tokenStore.getAccessToken();
+    return { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` };
 }
 
 export async function listarCategorias(): Promise<CategoriaResponse[]> {

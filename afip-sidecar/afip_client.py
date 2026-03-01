@@ -43,7 +43,8 @@ class AFIPClient:
         cert_path: str,
         key_path: str,
         homologacion: bool = True,
-        cache_dir: str = "/tmp/afip_cache"
+        cache_dir: str = "/tmp/afip_cache",
+        rdb=None,
     ):
         """
         Inicializa el cliente AFIP.
@@ -54,6 +55,8 @@ class AFIPClient:
             key_path: Ruta a la clave privada .key
             homologacion: True para testing, False para producción
             cache_dir: Directorio para cache de tokens
+            rdb: Redis client instance (optional). When provided, the WSAA token
+                 is persisted in Redis so it survives sidecar restarts (P2-010).
         """
         self.cuit_emisor = cuit_emisor
         self.cert_path = cert_path
@@ -61,6 +64,10 @@ class AFIPClient:
         self.homologacion = homologacion
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Redis client for WSAA token persistence (P2-010).
+        # If None, tokens are kept in memory only (lost on restart).
+        self._rdb = rdb
         
         # Subdirectorio para tickets (separado del cache WSDL)
         self.tickets_dir = self.cache_dir / "tickets"
@@ -92,6 +99,74 @@ class AFIPClient:
             "HOMOLOGACION" if homologacion else "PRODUCCION"
         )
     
+    # ── Redis WSAA cache (P2-010) ─────────────────────────────────────────────
+    # WSAA tokens are valid for ~12 hours. Persisting them in Redis means the
+    # sidecar can survive a restart or a pod reschedule without requiring an
+    # immediate re-auth (which AFIP rate-limits with "alreadyAuthenticated").
+
+    _REDIS_TOKEN_KEY = "afip:wsaa:token"
+    _REDIS_SIGN_KEY  = "afip:wsaa:sign"
+    _REDIS_EXP_KEY   = "afip:wsaa:expiracion"
+    _REDIS_TTL_SEC   = 43200  # 12 hours — matches AFIP token lifetime
+
+    def _save_token_to_cache(self) -> None:
+        """Persist the current WSAA token+sign in Redis."""
+        if self._rdb is None or not self._token or not self._sign or not self._token_expiracion:
+            return
+        try:
+            pipe = self._rdb.pipeline()
+            pipe.set(self._REDIS_TOKEN_KEY, self._token, ex=self._REDIS_TTL_SEC)
+            pipe.set(self._REDIS_SIGN_KEY,  self._sign,  ex=self._REDIS_TTL_SEC)
+            pipe.set(self._REDIS_EXP_KEY,   self._token_expiracion.isoformat(), ex=self._REDIS_TTL_SEC)
+            pipe.execute()
+            logger.debug("Token WSAA guardado en Redis (TTL %ds)", self._REDIS_TTL_SEC)
+        except Exception as e:
+            # Non-fatal: memory fallback still works
+            logger.warning("No se pudo guardar token WSAA en Redis: %s", e)
+
+    def _load_token_from_cache(self) -> bool:
+        """
+        Try to restore a previously issued WSAA token from Redis.
+
+        Returns True if a valid (non-expired) token was restored, False otherwise.
+        """
+        if self._rdb is None:
+            return False
+        try:
+            token = self._rdb.get(self._REDIS_TOKEN_KEY)
+            sign  = self._rdb.get(self._REDIS_SIGN_KEY)
+            exp   = self._rdb.get(self._REDIS_EXP_KEY)
+
+            if not token or not sign or not exp:
+                return False
+
+            # Redis returns bytes; decode if needed
+            if isinstance(token, bytes):
+                token = token.decode()
+            if isinstance(sign, bytes):
+                sign = sign.decode()
+            if isinstance(exp, bytes):
+                exp = exp.decode()
+
+            expiracion = datetime.fromisoformat(exp)
+            # Only restore if the token is still valid (with the same 5-min buffer)
+            if datetime.now() >= (expiracion - timedelta(minutes=5)):
+                logger.debug("Token WSAA en Redis ya expiró, ignorando")
+                return False
+
+            self._token = token
+            self._sign  = sign
+            self._token_expiracion = expiracion
+            logger.info(
+                "Token WSAA restaurado desde Redis — válido hasta: %s",
+                expiracion.strftime('%Y-%m-%d %H:%M:%S'),
+            )
+            return True
+
+        except Exception as e:
+            logger.warning("No se pudo restaurar token WSAA desde Redis: %s", e)
+            return False
+
     def _validar_certificados(self):
         """Valida que los archivos de certificado y clave existan"""
         if not os.path.exists(self.cert_path):
@@ -122,6 +197,15 @@ class AFIPClient:
         """
         if not forzar and self._token_valido():
             logger.debug("Token WSAA válido en cache, reutilizando")
+            return {
+                'token': self._token,
+                'sign': self._sign,
+                'expiracion': self._token_expiracion.isoformat()
+            }
+        
+        # Before hitting AFIP, try to restore a previously issued token from Redis.
+        # This avoids re-auth on sidecar restarts and reduces "alreadyAuthenticated" errors (P2-010).
+        if not forzar and self._load_token_from_cache():
             return {
                 'token': self._token,
                 'sign': self._sign,
@@ -179,6 +263,9 @@ class AFIPClient:
             # pyafipws no expone la fecha directamente, asumimos 12h
             self._token_expiracion = datetime.now() + timedelta(hours=12)
             self._ultima_autenticacion = datetime.now().isoformat()
+            
+            # Persist to Redis so the token survives sidecar restarts (P2-010)
+            self._save_token_to_cache()
             
             logger.info(
                 "Autenticación WSAA exitosa — Token válido hasta: %s",

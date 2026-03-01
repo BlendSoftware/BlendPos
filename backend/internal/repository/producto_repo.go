@@ -3,11 +3,13 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"blendpos/internal/dto"
 	"blendpos/internal/model"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -35,7 +37,8 @@ type ProductoRepository interface {
 	UpdateStockTx(tx *gorm.DB, id uuid.UUID, delta int) error
 
 	// UpdatePreciosTx actualiza precio_costo, precio_venta y margen_pct dentro de una tx.
-	UpdatePreciosTx(tx *gorm.DB, id uuid.UUID, nuevoCosto, nuevaVenta, margen interface{}) error
+	// Using decimal.Decimal (not interface{}) enforces type correctness at compile time (P2-004).
+	UpdatePreciosTx(tx *gorm.DB, id uuid.UUID, nuevoCosto, nuevaVenta, margen decimal.Decimal) error
 
 	// AjustarStock incrementa o decrementa stock_actual sin transaccion externa.
 	AjustarStock(ctx context.Context, id uuid.UUID, delta int) error
@@ -47,10 +50,6 @@ type ProductoRepository interface {
 type productoRepo struct{ db *gorm.DB }
 
 func NewProductoRepository(db *gorm.DB) ProductoRepository { return &productoRepo{db: db} }
-
-// ── Implementations are written in Phase 2 ──────────────────────────────────
-// Stub bodies are intentional: they make the scaffold compile-ready while
-// avoiding premature implementation that may change during spec review.
 
 func (r *productoRepo) Create(ctx context.Context, p *model.Producto) error {
 	return r.db.WithContext(ctx).Create(p).Error
@@ -99,10 +98,25 @@ func (r *productoRepo) List(ctx context.Context, filter dto.ProductoFilter) ([]m
 		q = q.Where("nombre ILIKE ?", "%"+filter.Nombre+"%")
 	}
 	if filter.Categoria != "" {
-		q = q.Where("categoria = ?", filter.Categoria)
+		// Try to match via the normalized FK first; fall back to the legacy varchar.
+		// This approach works during the transition period while both columns exist.
+		// After migration 000009 drops the varchar column, remove the fallback clause.
+		q = q.Where(
+			"categoria_id = (SELECT id FROM categorias WHERE lower(nombre) = lower(?) LIMIT 1)"+
+				" OR categoria = ?",
+			filter.Categoria, filter.Categoria,
+		)
 	}
 	if filter.ProveedorID != "" {
 		q = q.Where("proveedor_id = ?", filter.ProveedorID)
+	}
+	// Delta sync: only return products updated after the given timestamp.
+	// The frontend stores the last sync time in IndexedDB and passes it as
+	// updated_after to avoid downloading the full catalog on every POS mount.
+	if filter.UpdatedAfter != "" {
+		if t, err := time.Parse(time.RFC3339, filter.UpdatedAfter); err == nil {
+			q = q.Where("updated_at > ?", t)
+		}
 	}
 
 	if err := q.Count(&total).Error; err != nil {
@@ -166,7 +180,7 @@ func (r *productoRepo) UpdateStockTx(tx *gorm.DB, id uuid.UUID, delta int) error
 	return nil
 }
 
-func (r *productoRepo) UpdatePreciosTx(tx *gorm.DB, id uuid.UUID, nuevoCosto, nuevaVenta, margen interface{}) error {
+func (r *productoRepo) UpdatePreciosTx(tx *gorm.DB, id uuid.UUID, nuevoCosto, nuevaVenta, margen decimal.Decimal) error {
 	return tx.Model(&model.Producto{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"precio_costo": nuevoCosto,
 		"precio_venta": nuevaVenta,

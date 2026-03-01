@@ -1,21 +1,30 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Auth Store — Zustand con persistencia en localStorage.
-// Conecta con POST /v1/auth/login (backend Go).
-// Fallback a usuarios demo si VITE_API_URL no está configurada (dev/offline mode).
+// Auth Store — Zustand con persistencia parcial en localStorage.
+//
+// Los tokens JWT se guardan ÚNICAMENTE en memoria (tokenStore) para reducir
+// la superficie de ataque XSS (P1-003).  Solo el perfil del usuario y el
+// flag isAuthenticated se persisten en localStorage para restaurar la UI
+// tras un hard-refresh (el token se obtiene de nuevo con silent-refresh).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { IUser, Rol } from '../types';
 import { loginApi, refreshApi } from '../services/api/auth';
+import { apiClient } from '../api/client';
+import { tokenStore } from './tokenStore';
 
-// ── Usuarios demo (solo sin VITE_API_URL) ─────────────────────────────────────
+// ── Usuarios demo — SOLO desarrollo (P1-004) ──────────────────────────────────
+// La constante es accesible únicamente cuando el bundler incluye el bloque
+// import.meta.env.DEV === true.  En producción se genera un módulo vacío.
 
-const DEMO_USERS: (IUser & { password: string; username: string })[] = [
-    { id: 'u1', nombre: 'Carlos Administrador', email: 'admin@blendpos.com', rol: 'admin', activo: true, creadoEn: '2025-01-10T10:00:00Z', username: 'admin', password: '12345678' },
-    { id: 'u2', nombre: 'María Supervisora', email: 'super@blendpos.com', rol: 'supervisor', activo: true, creadoEn: '2025-02-01T10:00:00Z', username: 'supervisor', password: '12345678' },
-    { id: 'u3', nombre: 'Juan Cajero', email: 'caja@blendpos.com', rol: 'cajero', activo: true, creadoEn: '2025-03-15T10:00:00Z', username: 'cajero', password: '12345678' },
-];
+const DEMO_USERS: (IUser & { password: string; username: string })[] = import.meta.env.DEV
+    ? [
+          { id: 'u1', nombre: 'Carlos Administrador', email: 'admin@blendpos.com', rol: 'admin', activo: true, creadoEn: '2025-01-10T10:00:00Z', username: 'admin', password: '12345678' },
+          { id: 'u2', nombre: 'María Supervisora', email: 'super@blendpos.com', rol: 'supervisor', activo: true, creadoEn: '2025-02-01T10:00:00Z', username: 'supervisor', password: '12345678' },
+          { id: 'u3', nombre: 'Juan Cajero', email: 'caja@blendpos.com', rol: 'cajero', activo: true, creadoEn: '2025-03-15T10:00:00Z', username: 'cajero', password: '12345678' },
+      ]
+    : [];
 
 // El backend usa 'administrador', el frontend usa 'admin'
 function mapRol(backendRol: string): Rol {
@@ -26,13 +35,13 @@ function mapRol(backendRol: string): Rol {
 
 interface AuthState {
     user: IUser | null;
-    token: string | null;
-    refreshToken: string | null;
     isAuthenticated: boolean;
 
     login: (usernameOrEmail: string, password: string) => Promise<boolean>;
-    logout: () => void;
+    logout: () => Promise<void>;
     refresh: () => Promise<boolean>;
+    /** Called on app mount to silently restore the session via refresh token. */
+    initAuth: () => Promise<void>;
     hasRole: (roles: Rol[]) => boolean;
 }
 
@@ -40,8 +49,6 @@ export const useAuthStore = create<AuthState>()(
     persist(
         (set, get) => ({
             user: null,
-            token: null,
-            refreshToken: null,
             isAuthenticated: false,
 
             login: async (usernameOrEmail, password) => {
@@ -60,14 +67,17 @@ export const useAuthStore = create<AuthState>()(
                             creadoEn: new Date().toISOString(),
                             puntoDeVenta: u.punto_de_venta ?? undefined,
                         };
-                        set({ user, token: resp.access_token, refreshToken: resp.refresh_token, isAuthenticated: true });
+                        // Store tokens in memory only — never in localStorage
+                        tokenStore.setTokens(resp.access_token, resp.refresh_token);
+                        set({ user, isAuthenticated: true });
                         return true;
                     } catch {
                         return false;
                     }
                 }
 
-                // Fallback demo (sin backend)
+                // Fallback demo (sin backend) — dev only
+                if (!import.meta.env.DEV) return false;
                 await new Promise((r) => setTimeout(r, 400));
                 const found = DEMO_USERS.find(
                     (u) => (u.email === usernameOrEmail || u.username === usernameOrEmail) &&
@@ -77,14 +87,27 @@ export const useAuthStore = create<AuthState>()(
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { password: _pw, username: _un, ...user } = found;
                 const fakeToken = btoa(JSON.stringify({ sub: user.id, rol: user.rol, exp: Date.now() + 28800_000 }));
-                set({ user, token: fakeToken, refreshToken: null, isAuthenticated: true });
+                tokenStore.setTokens(fakeToken, '');
+                set({ user, isAuthenticated: true });
                 return true;
             },
 
-            logout: () => set({ user: null, token: null, refreshToken: null, isAuthenticated: false }),
+            logout: async () => {
+                // Attempt server-side revocation (best-effort, don't block UI)
+                try {
+                    const accessToken = tokenStore.getAccessToken();
+                    if (accessToken) {
+                        await apiClient.post('/v1/auth/logout', {});
+                    }
+                } catch {
+                    // Logout is best-effort — clear local state regardless
+                }
+                tokenStore.clearTokens();
+                set({ user: null, isAuthenticated: false });
+            },
 
             refresh: async () => {
-                const { refreshToken } = get();
+                const refreshToken = tokenStore.getRefreshToken();
                 if (!refreshToken) return false;
                 try {
                     const resp = await refreshApi(refreshToken);
@@ -93,11 +116,32 @@ export const useAuthStore = create<AuthState>()(
                         id: u.id, nombre: u.nombre, email: '',
                         rol: mapRol(u.rol), activo: true, creadoEn: new Date().toISOString(),
                     };
-                    set({ user, token: resp.access_token, refreshToken: resp.refresh_token, isAuthenticated: true });
+                    tokenStore.setTokens(resp.access_token, resp.refresh_token);
+                    set({ user, isAuthenticated: true });
                     return true;
                 } catch {
-                    set({ user: null, token: null, refreshToken: null, isAuthenticated: false });
+                    tokenStore.clearTokens();
+                    set({ user: null, isAuthenticated: false });
                     return false;
+                }
+            },
+
+            /**
+             * Called once on app mount (App.tsx useEffect).
+             * If the store says the user was authenticated, try a silent token
+             * refresh so they don't have to log in again after a page reload.
+             */
+            initAuth: async () => {
+                if (!get().isAuthenticated) return;
+                // Token is gone (page reload) — try refresh
+                if (!tokenStore.getAccessToken()) {
+                    const ok = await get().refresh();
+                    if (!ok) {
+                        // Couldn't restore token (no refresh token in memory or API error).
+                        // Clear local auth state so ProtectedRoute redirects to login.
+                        tokenStore.clearTokens();
+                        set({ user: null, isAuthenticated: false });
+                    }
                 }
             },
 
@@ -106,6 +150,13 @@ export const useAuthStore = create<AuthState>()(
                 return user !== null && roles.includes(user.rol);
             },
         }),
-        { name: 'blendpos-auth' }
+        {
+            name: 'blendpos-auth',
+            // Only persist non-sensitive state — tokens stay in memory (P1-003)
+            partialize: (state) => ({
+                user: state.user,
+                isAuthenticated: state.isAuthenticated,
+            }),
+        }
     )
 );

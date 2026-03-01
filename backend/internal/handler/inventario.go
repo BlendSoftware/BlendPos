@@ -8,6 +8,7 @@ import (
 
 	"blendpos/internal/apierror"
 	"blendpos/internal/dto"
+	"blendpos/internal/middleware"
 	"blendpos/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -106,12 +107,22 @@ func (h *FacturacionHandler) ObtenerComprobante(c *gin.Context) {
 
 // DescargarPDF GET /v1/facturacion/pdf/:id
 // Serves the generated PDF receipt as a file download (AC-06.4).
+// Access control: administradores can download any PDF; supervisores are
+// restricted to comprobantes belonging to their own punto_de_venta.
 func (h *FacturacionHandler) DescargarPDF(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, apierror.New("ID inválido"))
 		return
 	}
+
+	// Ownership check — must happen before serving the file.
+	claims := middleware.GetClaims(c)
+	if err := h.svc.VerificarAccesoComprobante(c.Request.Context(), id, claims.Rol, claims.PuntoDeVenta); err != nil {
+		c.JSON(http.StatusForbidden, apierror.New("Acceso denegado"))
+		return
+	}
+
 	pdfPath, err := h.svc.ObtenerPDFPath(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, apierror.New(err.Error()))

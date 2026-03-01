@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"blendpos/internal/dto"
 	"blendpos/internal/model"
@@ -24,12 +25,13 @@ type VentaService interface {
 }
 
 type ventaService struct {
-	repo         repository.VentaRepository
-	inventario   InventarioService
-	caja         CajaService
-	cajaRepo     repository.CajaRepository
-	productoRepo repository.ProductoRepository
-	dispatcher   *worker.Dispatcher
+	repo             repository.VentaRepository
+	inventario        InventarioService
+	caja              CajaService
+	cajaRepo          repository.CajaRepository
+	productoRepo      repository.ProductoRepository
+	comprobanteRepo   repository.ComprobanteRepository
+	dispatcher        *worker.Dispatcher
 }
 
 func NewVentaService(
@@ -39,14 +41,16 @@ func NewVentaService(
 	cajaRepo repository.CajaRepository,
 	productoRepo repository.ProductoRepository,
 	dispatcher *worker.Dispatcher,
+	comprobanteRepo repository.ComprobanteRepository,
 ) VentaService {
 	return &ventaService{
-		repo:         repo,
-		inventario:   inventario,
-		caja:         caja,
-		cajaRepo:     cajaRepo,
-		productoRepo: productoRepo,
-		dispatcher:   dispatcher,
+		repo:           repo,
+		inventario:     inventario,
+		caja:           caja,
+		cajaRepo:       cajaRepo,
+		productoRepo:   productoRepo,
+		comprobanteRepo: comprobanteRepo,
+		dispatcher:     dispatcher,
 	}
 }
 
@@ -127,7 +131,14 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 			}
 			conflictoStock = true
 		}
-		lineSubtotal := p.PrecioVenta.Mul(decimal.NewFromInt(int64(item.Cantidad))).Sub(item.Descuento)
+		// Descuento cap: no puede superar el 50% del valor de la línea (precio × cantidad).
+		// Prevents negative subtotals and guards against client-side manipulation.
+		lineTotal := p.PrecioVenta.Mul(decimal.NewFromInt(int64(item.Cantidad)))
+		maxDescuento := lineTotal.Mul(decimal.NewFromFloat(0.50))
+		if item.Descuento.GreaterThan(maxDescuento) {
+			return nil, fmt.Errorf("descuento para %s excede el máximo permitido (50%% del precio de línea)", p.Nombre)
+		}
+		lineSubtotal := lineTotal.Sub(item.Descuento)
 		subtotal = subtotal.Add(lineSubtotal)
 		descuentoTotal = descuentoTotal.Add(item.Descuento)
 		resolved = append(resolved, resolvedItem{
@@ -265,7 +276,8 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 		return nil, txErr
 	}
 
-	// 6. Async facturacion job (best-effort — fire & forget)
+	// 6. Async facturacion job — error is handled: if Redis is down we create a
+	// pending comprobante directly so that retry_cron picks it up on next cycle.
 	if s.dispatcher != nil {
 		payload := map[string]interface{}{
 			"venta_id": venta.ID.String(),
@@ -273,7 +285,29 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 		if req.ClienteEmail != nil && *req.ClienteEmail != "" {
 			payload["cliente_email"] = *req.ClienteEmail
 		}
-		_ = s.dispatcher.EnqueueFacturacion(ctx, payload)
+		if err := s.dispatcher.EnqueueFacturacion(ctx, payload); err != nil {
+			log.Error().Err(err).Str("venta_id", venta.ID.String()).
+				Msg("CRITICO: fallo al encolar facturacion — creando comprobante pendiente para retry")
+			// Fallback: create the comprobante record directly in estado='pendiente'.
+			// The retry_cron will process it on the next 30-second tick.
+			if s.comprobanteRepo != nil {
+				nextRetry := time.Now().Add(30 * time.Second)
+				comp := &model.Comprobante{
+					VentaID:     venta.ID,
+					Tipo:        "ticket_interno",
+					MontoNeto:   venta.Total,
+					MontoIVA:    decimal.Zero,
+					MontoTotal:  venta.Total,
+					Estado:      "pendiente",
+					RetryCount:  0,
+					NextRetryAt: &nextRetry,
+				}
+				if err2 := s.comprobanteRepo.Create(ctx, comp); err2 != nil {
+					log.Error().Err(err2).Str("venta_id", venta.ID.String()).
+						Msg("CRITICO: no se pudo crear comprobante fallback — revisar manualmente")
+				}
+			}
+		}
 	}
 
 	// Build response
@@ -372,7 +406,13 @@ func (s *ventaService) SyncBatch(ctx context.Context, usuarioID uuid.UUID, req d
 				Str("offline_id", offlineID).
 				Err(regErr).
 				Msg("sync-batch: venta rechazada")
-			results = append(results, dto.VentaResponse{ConflictoStock: true, Estado: "error"})
+			// Echo OfflineID in the error result so the frontend can correlate without
+			// relying on array-index alignment (P2-005).
+			results = append(results, dto.VentaResponse{
+				ConflictoStock: true,
+				Estado:         "error",
+				OfflineID:      ventaReq.OfflineID,
+			})
 			continue
 		}
 		if resp.ConflictoStock {

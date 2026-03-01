@@ -19,8 +19,9 @@ type InventarioService interface {
 	ListarVinculos(ctx context.Context) ([]dto.VinculoResponse, error)
 	DesarmeManual(ctx context.Context, req dto.DesarmeManualRequest) (*dto.DesarmeManualResponse, error)
 	ObtenerAlertas(ctx context.Context) ([]dto.AlertaStockResponse, error)
-	// DescontarStockTx is called within a sale transaction — requires a live *gorm.DB tx
-	DescontarStockTx(ctx context.Context, productoID uuid.UUID, cantidad int, tx interface{}) error
+	// DescontarStockTx is called within a sale transaction — requires a live *gorm.DB tx.
+	// Using *gorm.DB directly (not interface{}) catches type errors at compile time (P2-003).
+	DescontarStockTx(ctx context.Context, productoID uuid.UUID, cantidad int, tx *gorm.DB) error
 	// ListarMovimientos returns stock movement history with optional filters
 	ListarMovimientos(ctx context.Context, filter dto.MovimientoStockFilter) (*dto.MovimientoStockListResponse, error)
 	// RegistrarMovimientoTx records a stock movement inside an existing transaction
@@ -174,28 +175,23 @@ func (s *inventarioService) ObtenerAlertas(ctx context.Context) ([]dto.AlertaSto
 	return alertas, nil
 }
 
-func (s *inventarioService) DescontarStockTx(ctx context.Context, productoID uuid.UUID, cantidad int, tx interface{}) error {
-	gormTx, ok := tx.(*gorm.DB)
-	if !ok {
-		return errors.New("tx debe ser *gorm.DB")
-	}
-
+func (s *inventarioService) DescontarStockTx(ctx context.Context, productoID uuid.UUID, cantidad int, tx *gorm.DB) error {
 	// Read current stock INSIDE the transaction
-	producto, err := s.repo.FindByIDTx(gormTx, productoID)
+	producto, err := s.repo.FindByIDTx(tx, productoID)
 	if err != nil {
 		return fmt.Errorf("producto no encontrado: %w", err)
 	}
 
 	// If sufficient stock, simple decrement
 	if producto.StockActual >= cantidad {
-		return s.repo.UpdateStockTx(gormTx, productoID, -cantidad)
+		return s.repo.UpdateStockTx(tx, productoID, -cantidad)
 	}
 
 	// Insufficient stock — attempt automatic disassembly if a vinculo with desarme_auto exists
 	vinculo, err := s.repo.FindVinculoByHijoID(ctx, productoID)
 	if err != nil {
 		// No auto-desarme link; record conflict but still decrement (may go negative — flagged as conflictoStock)
-		return s.repo.UpdateStockTx(gormTx, productoID, -cantidad)
+		return s.repo.UpdateStockTx(tx, productoID, -cantidad)
 	}
 
 	// Calculate how many parent units to disassemble to cover the deficit
@@ -203,26 +199,26 @@ func (s *inventarioService) DescontarStockTx(ctx context.Context, productoID uui
 	padresNecesarios := (deficit + vinculo.UnidadesPorPadre - 1) / vinculo.UnidadesPorPadre // ceiling div
 
 	// Read parent stock INSIDE the transaction
-	padre, err := s.repo.FindByIDTx(gormTx, vinculo.ProductoPadreID)
+	padre, err := s.repo.FindByIDTx(tx, vinculo.ProductoPadreID)
 	if err != nil {
 		return fmt.Errorf("producto padre no encontrado: %w", err)
 	}
 
 	if padre.StockActual < padresNecesarios {
 		// Not enough parents either — proceed with conflict flag (caller tracks conflictoStock)
-		return s.repo.UpdateStockTx(gormTx, productoID, -cantidad)
+		return s.repo.UpdateStockTx(tx, productoID, -cantidad)
 	}
 
 	// Disassemble: decrement padre, add units to hijo, then decrement hijo
 	unidadesGeneradas := padresNecesarios * vinculo.UnidadesPorPadre
-	if err := s.repo.UpdateStockTx(gormTx, vinculo.ProductoPadreID, -padresNecesarios); err != nil {
+	if err := s.repo.UpdateStockTx(tx, vinculo.ProductoPadreID, -padresNecesarios); err != nil {
 		return err
 	}
-	if err := s.repo.UpdateStockTx(gormTx, productoID, unidadesGeneradas); err != nil {
+	if err := s.repo.UpdateStockTx(tx, productoID, unidadesGeneradas); err != nil {
 		return err
 	}
 	// Now decrement requested quantity
-	return s.repo.UpdateStockTx(gormTx, productoID, -cantidad)
+	return s.repo.UpdateStockTx(tx, productoID, -cantidad)
 }
 
 // RegistrarMovimientoTx records a stock movement inside an existing transaction.

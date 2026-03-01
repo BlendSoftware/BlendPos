@@ -17,7 +17,9 @@ import os
 import sys
 from typing import Dict, Any
 
-from fastapi import FastAPI, HTTPException, Request
+import redis as redis_sync
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
@@ -25,6 +27,25 @@ from pydantic import ValidationError
 # Import local modules
 from schemas import FacturarRequest, FacturarResponse, HealthResponse
 from afip_client import AFIPClient
+
+# ── Authentication (P1-008) ───────────────────────────────────────────────────
+# The sidecar is an internal service and should only be reachable from the Go
+# backend. The INTERNAL_API_TOKEN env var adds a shared-secret layer so that
+# even if the sidecar port is accidentally exposed it cannot be abused.
+
+INTERNAL_API_TOKEN: str = os.getenv("INTERNAL_API_TOKEN", "")
+
+
+async def verify_internal_token(
+    x_internal_token: str = Header(..., alias="X-Internal-Token"),
+) -> None:
+    """
+    FastAPI dependency that enforces X-Internal-Token authentication.
+    If INTERNAL_API_TOKEN is not set (e.g. dev without the env var), the
+    check is skipped so local development is not broken.
+    """
+    if INTERNAL_API_TOKEN and x_internal_token != INTERNAL_API_TOKEN:
+        raise HTTPException(status_code=403, detail="Acceso denegado: token interno inválido")
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 
@@ -87,11 +108,22 @@ async def lifespan(app: FastAPI):
     key_path = os.getenv("AFIP_KEY_PATH", "/certs/afip.key")
     homologacion = os.getenv("AFIP_HOMOLOGACION", "true").lower() == "true"
     cache_dir = os.getenv("AFIP_CACHE_DIR", "/tmp/afip_cache")
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
     # Validar configuración requerida
     if not cuit_emisor:
         logger.error("ERROR: Variable AFIP_CUIT_EMISOR no configurada")
         raise ValueError("AFIP_CUIT_EMISOR es requerido")
+
+    # Conectar a Redis para cache de token WSAA (P2-010)
+    rdb = None
+    try:
+        rdb = redis_sync.from_url(redis_url, decode_responses=False, socket_timeout=3)
+        rdb.ping()
+        logger.info("✓ Conectado a Redis — WSAA token cache habilitado (%s)", redis_url)
+    except Exception as e:
+        logger.warning("⚠ No se pudo conectar a Redis (%s): %s — continuando sin cache persistente", redis_url, e)
+        rdb = None
 
     # Inicializar cliente
     try:
@@ -100,7 +132,8 @@ async def lifespan(app: FastAPI):
             cert_path=cert_path,
             key_path=key_path,
             homologacion=homologacion,
-            cache_dir=cache_dir
+            cache_dir=cache_dir,
+            rdb=rdb,
         )
 
         logger.info("✓ Cliente AFIP inicializado correctamente")
@@ -216,7 +249,7 @@ def health() -> HealthResponse:
     )
 
 
-@app.post("/facturar", response_model=FacturarResponse)
+@app.post("/facturar", response_model=FacturarResponse, dependencies=[Depends(verify_internal_token)])
 def facturar(req: FacturarRequest) -> FacturarResponse:
     """
     Emite una factura electrónica en AFIP via WSFEV1.

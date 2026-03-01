@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"blendpos/internal/config"
@@ -12,12 +13,18 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// revokedKeyPrefix is the Redis key prefix used to mark revoked JWT IDs.
+// Key format: jwt:revoked:<jti>  — TTL matches the token's remaining lifetime.
+const revokedKeyPrefix = "jwt:revoked:"
 
 type AuthService interface {
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
 	Refresh(ctx context.Context, refreshToken string) (*dto.LoginResponse, error)
+	Logout(ctx context.Context, jti string, remaining time.Duration) error
 	CrearUsuario(ctx context.Context, req dto.CrearUsuarioRequest) (*dto.UsuarioResponse, error)
 	ListarUsuarios(ctx context.Context, incluirInactivos bool) ([]dto.UsuarioResponse, error)
 	ActualizarUsuario(ctx context.Context, id uuid.UUID, req dto.ActualizarUsuarioRequest) (*dto.UsuarioResponse, error)
@@ -28,10 +35,11 @@ type AuthService interface {
 type authService struct {
 	repo repository.UsuarioRepository
 	cfg  *config.Config
+	rdb  *redis.Client
 }
 
-func NewAuthService(repo repository.UsuarioRepository, cfg *config.Config) AuthService {
-	return &authService{repo: repo, cfg: cfg}
+func NewAuthService(repo repository.UsuarioRepository, cfg *config.Config, rdb *redis.Client) AuthService {
+	return &authService{repo: repo, cfg: cfg, rdb: rdb}
 }
 
 func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
@@ -82,6 +90,16 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.Lo
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		return nil, errors.New("claims invalidos")
+	}
+	// Verify the refresh token has not been revoked.
+	if jti, ok2 := claims["jti"].(string); ok2 && jti != "" && s.rdb != nil {
+		revoked, err2 := s.rdb.Exists(ctx, fmt.Sprintf("%s%s", revokedKeyPrefix, jti)).Result()
+		if err2 != nil {
+			return nil, fmt.Errorf("error verificando revocacion: %w", err2)
+		}
+		if revoked > 0 {
+			return nil, errors.New("refresh token revocado")
+		}
 	}
 	userIDStr, ok := claims["user_id"].(string)
 	if !ok {
@@ -203,8 +221,23 @@ func (s *authService) ReactivarUsuario(ctx context.Context, id uuid.UUID) error 
 	return s.repo.Reactivar(ctx, id)
 }
 
+// Logout marks a JWT as revoked in Redis for the remainder of its lifetime.
+// jti must be the "jti" claim value extracted from the validated token.
+func (s *authService) Logout(ctx context.Context, jti string, remaining time.Duration) error {
+	if s.rdb == nil {
+		return errors.New("redis no disponible: no se puede revocar el token")
+	}
+	if remaining <= 0 {
+		// Token already expired — nothing to revoke.
+		return nil
+	}
+	key := fmt.Sprintf("%s%s", revokedKeyPrefix, jti)
+	return s.rdb.Set(ctx, key, "1", remaining).Err()
+}
+
 func (s *authService) generateToken(user *model.Usuario, duration time.Duration) (string, error) {
 	claims := jwt.MapClaims{
+		"jti":            uuid.New().String(),
 		"user_id":        user.ID.String(),
 		"username":       user.Username,
 		"rol":            user.Rol,

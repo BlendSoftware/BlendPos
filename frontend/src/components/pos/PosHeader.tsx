@@ -123,10 +123,10 @@ export function PosHeader() {
                     </Button>
                     <Button
                         color="red"
-                        onClick={() => {
+                        onClick={async () => {
                             setLogoutConfirmOpen(false);
                             limpiarCaja();
-                            logout();
+                            await logout();
                             navigate('/login');
                         }}
                     >

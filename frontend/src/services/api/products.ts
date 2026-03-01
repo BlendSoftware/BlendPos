@@ -49,6 +49,12 @@ export interface ProductoFilter {
     proveedor_id?: string;
     /** "true" = activos (default), "false" = inactivos, "all" = todos */
     activo?: 'true' | 'false' | 'all';
+    /**
+     * ISO-8601 timestamp. When provided, only products updated after this
+     * time are returned. Used by the frontend delta-sync to avoid downloading
+     * the full catalog on every POS mount.
+     */
+    updated_after?: string;
     page?: number;
     limit?: number;
 }
@@ -98,6 +104,7 @@ export async function listarProductos(filter: ProductoFilter = {}): Promise<Prod
         categoria: filter.categoria,
         proveedor_id: filter.proveedor_id,
         activo: filter.activo,
+        updated_after: filter.updated_after,
         page: filter.page ?? 1,
         limit: filter.limit ?? 50,
     });

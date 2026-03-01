@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useMemo, useEffect, useCallback, Fragment } from 'react';
 import {
     Stack, Title, Text, Group, Table, Paper, Badge, ActionIcon,
@@ -13,7 +12,7 @@ import { anularVenta, listarVentas, type VentaListItem } from '../../services/ap
 import { getComprobante, descargarPDF } from '../../services/api/facturacion';
 import { thermalPrinter } from '../../services/ThermalPrinterService';
 import { usePrinterStore } from '../../store/usePrinterStore';
-import { formatARS } from '../../api/mockAdmin';
+import { formatARS } from '../../utils/format';
 import type { IVenta } from '../../types';
 
 const METODO_COLOR: Record<string, string> = {
@@ -100,11 +99,11 @@ export function FacturacionPage() {
 
     const [busqueda, setBusqueda] = useState('');
     const [periodo, setPeriodo] = useState<string>('todas');
-    const [filtroMetodo, setFiltroMetodo] = useState<Date | null>(null);
-    const [filtroEstado, setFiltroEstado] = useState<Date | null>(null);
+    const [filtroMetodo, setFiltroMetodo] = useState<string | null>(null);
+    const [filtroEstado, setFiltroEstado] = useState<string | null>(null);
     const [sortBy, setSortBy] = useState<string>('fecha');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-    const [expandedId, setExpandedId] = useState<Date | null>(null);
+    const [expandedId, setExpandedId] = useState<string | null>(null);
     const [anularTarget, setAnularTarget] = useState<IVenta | null>(null);
     const [anuladas, setAnuladas] = useState<Set<string>>(new Set());
 

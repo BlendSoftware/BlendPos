@@ -1,4 +1,4 @@
-package tests
+﻿package tests
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// ── In-memory ProductoRepository stub ────────────────────────────────────────
+// â”€â”€ In-memory ProductoRepository stub â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type stubProductoRepo struct {
 	productos map[uuid.UUID]*model.Producto
@@ -150,26 +150,20 @@ func (r *stubProductoRepo) UpdateStockTx(_ *gorm.DB, id uuid.UUID, delta int) er
 	return nil
 }
 
-func (r *stubProductoRepo) UpdatePreciosTx(_ *gorm.DB, id uuid.UUID, nuevoCosto, nuevaVenta, margen interface{}) error {
+func (r *stubProductoRepo) UpdatePreciosTx(_ *gorm.DB, id uuid.UUID, nuevoCosto, nuevaVenta, margen decimal.Decimal) error {
 	p, ok := r.productos[id]
 	if !ok {
 		return errors.New("record not found")
 	}
-	if c, ok := nuevoCosto.(decimal.Decimal); ok {
-		p.PrecioCosto = c
-	}
-	if v, ok := nuevaVenta.(decimal.Decimal); ok {
-		p.PrecioVenta = v
-	}
-	if m, ok := margen.(decimal.Decimal); ok {
-		p.MargenPct = m
-	}
+	p.PrecioCosto = nuevoCosto
+	p.PrecioVenta = nuevaVenta
+	p.MargenPct = margen
 	return nil
 }
 
 func (r *stubProductoRepo) DB() *gorm.DB {
 	// In-memory stub: return a zero-value DB so Transaction callback can still be invoked
-	// by the service — but for unit tests we skip DesarmeManual's full TX path.
+	// by the service â€” but for unit tests we skip DesarmeManual's full TX path.
 	return nil
 }
 
@@ -185,7 +179,7 @@ func (r *stubProductoRepo) AjustarStock(_ context.Context, id uuid.UUID, delta i
 // Ensure the stub satisfies the interface at compile time.
 var _ repository.ProductoRepository = (*stubProductoRepo)(nil)
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func seedProducto(repo *stubProductoRepo, nombre, barcode string, stock, stockMin int) *model.Producto {
 	p := &model.Producto{
@@ -204,11 +198,11 @@ func seedProducto(repo *stubProductoRepo, nombre, barcode string, stock, stockMi
 	return p
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func TestCrearProducto(t *testing.T) {
 	repo := newStubProductoRepo()
-	svc := service.NewProductoService(repo, nil, nil)
+	svc := service.NewProductoService(repo, nil, nil, nil)
 
 	resp, err := svc.Crear(context.Background(), dto.CrearProductoRequest{
 		CodigoBarras: "7790001111111",
@@ -229,7 +223,7 @@ func TestCrearProducto(t *testing.T) {
 
 func TestBusquedaPorBarcode(t *testing.T) {
 	repo := newStubProductoRepo()
-	svc := service.NewProductoService(repo, nil, nil)
+	svc := service.NewProductoService(repo, nil, nil, nil)
 	seedProducto(repo, "Agua Mineral 500ml", "7790002222222", 100, 10)
 
 	resp, err := svc.ObtenerPorBarcode(context.Background(), "7790002222222")
@@ -240,7 +234,7 @@ func TestBusquedaPorBarcode(t *testing.T) {
 
 func TestBusquedaPorBarcodeNoExiste(t *testing.T) {
 	repo := newStubProductoRepo()
-	svc := service.NewProductoService(repo, nil, nil)
+	svc := service.NewProductoService(repo, nil, nil, nil)
 
 	_, err := svc.ObtenerPorBarcode(context.Background(), "9999999999999")
 	assert.Error(t, err)
@@ -248,7 +242,7 @@ func TestBusquedaPorBarcodeNoExiste(t *testing.T) {
 
 func TestSoftDeleteProducto(t *testing.T) {
 	repo := newStubProductoRepo()
-	svc := service.NewProductoService(repo, nil, nil)
+	svc := service.NewProductoService(repo, nil, nil, nil)
 	p := seedProducto(repo, "Fideos 500g", "7790003333333", 30, 5)
 
 	err := svc.Desactivar(context.Background(), p.ID)
@@ -261,7 +255,7 @@ func TestSoftDeleteProducto(t *testing.T) {
 
 func TestActualizarPrecioInvalidaCache(t *testing.T) {
 	repo := newStubProductoRepo()
-	svc := service.NewProductoService(repo, nil, nil) // nil Redis — invalidation is best-effort
+	svc := service.NewProductoService(repo, nil, nil, nil) // nil Redis â€” invalidation is best-effort
 	p := seedProducto(repo, "Leche 1L", "7790004444444", 20, 3)
 
 	nuevoPrecio := decimal.NewFromFloat(95)
@@ -301,7 +295,7 @@ func TestCrearVinculoMismoPadreHijo(t *testing.T) {
 		ProductoHijoID:   p.ID.String(),
 		UnidadesPorPadre: 3,
 	})
-	assert.ErrorContains(t, err, "no puede ser hijo de sí mismo")
+	assert.ErrorContains(t, err, "no puede ser hijo de sÃ­ mismo")
 }
 
 func TestObtenerAlertasStock(t *testing.T) {
@@ -391,3 +385,4 @@ func TestDesarmeAutomatico(t *testing.T) {
 	assert.Equal(t, 2, repo.productos[padre.ID].StockActual)
 	assert.Equal(t, 6, repo.productos[hijo.ID].StockActual)
 }
+
