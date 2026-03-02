@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { SaleRecord } from './useSaleStore';
 
 // ── State interface ───────────────────────────────────────────────────────────
 
@@ -9,6 +10,10 @@ interface POSUIState {
     isDiscountModalOpen: boolean;
     discountTargetItemId: string | null;
     tipoComprobante: 'ticket' | 'factura_b' | 'factura_a';
+
+    /** Post-sale modal state */
+    isPostSaleModalOpen: boolean;
+    lastSaleRecord: SaleRecord | null;
 
     // Modal actions
     openPaymentModal: () => void;
@@ -22,6 +27,9 @@ interface POSUIState {
     closeDiscountModal: () => void;
     /** Opens the per-item discount modal pre-filled for the given item id. */
     openItemDiscountModal: (itemId: string) => void;
+    /** Opens the post-sale modal showing print/email confirmation */
+    openPostSaleModal: (record: SaleRecord) => void;
+    closePostSaleModal: () => void;
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -33,6 +41,8 @@ export const usePOSUIStore = create<POSUIState>()((set) => ({
     isDiscountModalOpen: false,
     discountTargetItemId: null,
     tipoComprobante: 'ticket' as const,
+    isPostSaleModalOpen: false,
+    lastSaleRecord: null,
 
     openPaymentModal: () => set({ isPaymentModalOpen: true }),
     closePaymentModal: () => set({ isPaymentModalOpen: false }),
@@ -44,4 +54,6 @@ export const usePOSUIStore = create<POSUIState>()((set) => ({
     openDiscountModal: () => set({ isDiscountModalOpen: true, discountTargetItemId: null }),
     closeDiscountModal: () => set({ isDiscountModalOpen: false, discountTargetItemId: null }),
     openItemDiscountModal: (itemId) => set({ isDiscountModalOpen: true, discountTargetItemId: itemId }),
+    openPostSaleModal: (record) => set({ isPostSaleModalOpen: true, lastSaleRecord: record }),
+    closePostSaleModal: () => set({ isPostSaleModalOpen: false, lastSaleRecord: null }),
 }));

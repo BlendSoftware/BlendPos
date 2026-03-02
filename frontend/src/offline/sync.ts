@@ -31,6 +31,7 @@ function toLocalSale(sale: SaleRecord): LocalSale {
         vuelto: sale.vuelto,
         cajero: sale.cajero,
         sesionCajaId: sale.sesionCajaId,
+        clienteEmail: sale.clienteEmail,
         synced: 0,
     };
 }

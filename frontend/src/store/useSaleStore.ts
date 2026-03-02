@@ -14,10 +14,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { thermalPrinter } from '../services/ThermalPrinterService';
 import { enqueueSale, trySyncQueue } from '../offline/sync';
 import { useCajaStore } from './useCajaStore';
-import { usePrinterStore } from './usePrinterStore';
 import { useCartStore, deductLocalStock } from './useCartStore';
 import type { CartItem, MetodoPago, PagoDetalle } from './useCartStore';
 
@@ -41,6 +39,8 @@ export interface SaleRecord {
     cajero: string;
     /** ID de sesión de caja activa al momento de la venta (para sync batch). */
     sesionCajaId?: string;
+    /** Email del cliente para envío de comprobante digital. */
+    clienteEmail?: string;
 }
 
 // ── Lean state — only what belongs here ──────────────────────────────────────
@@ -102,10 +102,10 @@ export const useSaleStore = create<SaleState>()(
                     vuelto: pago.vuelto,
                     cajero,
                     sesionCajaId: sesionId,
+                    clienteEmail: pago.clienteEmail,
                 };
 
-                // 🖨️ Thermal receipt (ESC/POS via Web Serial, console fallback)
-                thermalPrinter.printAll(record, usePrinterStore.getState().config).catch(console.error);
+                // 🖨️ Printing is now handled by PostSaleModal (user-initiated).
 
                 // 💾 Offline-first: persist + enqueue for backend sync
                 enqueueSale(record)

@@ -119,6 +119,7 @@ export async function syncSalesBatch(sales: LocalSale[]): Promise<VentaResponse[
     const ventas: RegistrarVentaRequest[] = sales.map((s) => ({
         sesion_caja_id: s.sesionCajaId ?? '',
         offline_id: s.id,
+        cliente_email: s.clienteEmail || undefined,
         items: s.items.map((item) => ({
             producto_id: item.id,
             cantidad: item.cantidad,

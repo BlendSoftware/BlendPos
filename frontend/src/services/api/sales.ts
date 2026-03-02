@@ -38,12 +38,19 @@ function toRegistrarVentaRequest(sale: LocalSale): Record<string, unknown> {
         pagos = [{ metodo: sale.metodoPago === 'mixto' ? 'efectivo' : sale.metodoPago, monto }];
     }
 
-    return {
+    const payload: Record<string, unknown> = {
         sesion_caja_id: sale.sesionCajaId ?? '',
         items,
         pagos,
         offline_id: sale.id,
     };
+
+    // Include customer email if present (RF-21)
+    if (sale.clienteEmail && sale.clienteEmail.trim() !== '') {
+        payload.cliente_email = sale.clienteEmail.trim();
+    }
+
+    return payload;
 }
 
 /**

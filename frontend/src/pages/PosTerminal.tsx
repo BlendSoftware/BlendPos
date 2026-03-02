@@ -13,6 +13,7 @@ import { ProductSearch } from '../components/pos/ProductSearch';
 import { PriceCheckModal } from '../components/pos/PriceCheckModal';
 import { DiscountModal } from '../components/pos/DiscountModal';
 import { SaleHistoryModal } from '../components/pos/SaleHistoryModal';
+import { PostSaleModal } from '../components/pos/PostSaleModal';
 import { AbrirCajaModal } from '../components/pos/AbrirCajaModal';
 
 import { useCartStore } from '../store/useCartStore';
@@ -372,6 +373,7 @@ export function PosTerminal() {
             <PriceCheckModal />
             <DiscountModal />
             <SaleHistoryModal opened={historyOpen} onClose={() => setHistoryOpen(false)} />
+            <PostSaleModal />
 
             {/* ── Modal apertura de caja ─────────────────────────── */}
             <AbrirCajaModal

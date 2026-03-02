@@ -3,8 +3,8 @@ import {
     Modal, Stack, Text, Group, Button, Divider, Select, NumberInput,
     Badge, Box, Alert, TextInput, Collapse
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
-import { CreditCard, Check, X, Wallet, AlertCircle, CheckCircle, Mail } from 'lucide-react';
+import { CreditCard, Check, X, Wallet, AlertCircle, Mail } from 'lucide-react';
+import { CreditCard, Check, X, Wallet, AlertCircle, Mail } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { useCartStore } from '../../store/useCartStore';
 import type { MetodoPago, PagoDetalle } from '../../store/useCartStore';
@@ -124,13 +124,10 @@ export function PaymentModal() {
             clienteEmail: clienteEmail.trim() || undefined,
         });
         closePaymentModal();
-        notifications.show({
-            title: `Ticket #${record.numeroTicket} registrado`,
-            message: `${formatCurrency(record.totalConDescuento)} — ${record.metodoPago}`,
-            color: 'teal',
-            autoClose: 4000,
-            icon: <CheckCircle size={16} />,
-        });
+
+        // Open the post-sale modal for print option
+        const { openPostSaleModal } = usePOSUIStore.getState();
+        openPostSaleModal(record);
     };
 
     // Confirm with Enter key when modal is open and not on efectivo input
@@ -145,7 +142,7 @@ export function PaymentModal() {
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, canConfirm, metodoPago]);
 
     return (
@@ -277,7 +274,7 @@ export function PaymentModal() {
                                 min={0}
                                 prefix="$ "
                                 thousandSeparator="."
-                                decimalSeparator="," 
+                                decimalSeparator=","
                                 decimalScale={2}
                                 size="md"
                                 data-pos-focusable
@@ -291,7 +288,7 @@ export function PaymentModal() {
                                 min={0}
                                 prefix="$ "
                                 thousandSeparator="."
-                                decimalSeparator="," 
+                                decimalSeparator=","
                                 decimalScale={2}
                                 size="md"
                                 data-pos-focusable
@@ -306,7 +303,7 @@ export function PaymentModal() {
                             min={0}
                             prefix="$ "
                             thousandSeparator="."
-                            decimalSeparator="," 
+                            decimalSeparator=","
                             decimalScale={2}
                             size="md"
                             data-pos-focusable
@@ -321,7 +318,7 @@ export function PaymentModal() {
                                 min={0}
                                 prefix="$ "
                                 thousandSeparator="."
-                                decimalSeparator="," 
+                                decimalSeparator=","
                                 decimalScale={2}
                                 size="md"
                                 leftSection={<Wallet size={16} />}

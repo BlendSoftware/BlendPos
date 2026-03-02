@@ -15,6 +15,8 @@ export interface LocalSale {
     cajero: string;
     /** ID de sesión de caja activa al momento de la venta. */
     sesionCajaId?: string;
+    /** Email del cliente para envío de comprobante digital. */
+    clienteEmail?: string;
     synced: 0 | 1;
 }
 
