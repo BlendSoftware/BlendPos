@@ -4,7 +4,6 @@ import {
     Badge, Box, Alert, TextInput, Collapse
 } from '@mantine/core';
 import { CreditCard, Check, X, Wallet, AlertCircle, Mail } from 'lucide-react';
-import { CreditCard, Check, X, Wallet, AlertCircle, Mail } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { useCartStore } from '../../store/useCartStore';
 import type { MetodoPago, PagoDetalle } from '../../store/useCartStore';
