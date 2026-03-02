@@ -101,13 +101,16 @@ export function DashboardPage() {
     }, []);
 
     const hoyKey = new Date().toLocaleDateString('en-CA');
-    // Merge local + API ventas for today, deduplicate by id.
+    // Merge local + API ventas for today, deduplicate by numeroTicket.
     // API data is the source of truth. Only add local sales not yet reflected in backend
     // to minimize discrepancy between Dashboard and Facturación (which uses backend-only).
     const parseNum = (v: unknown): number => typeof v === 'number' ? v : parseFloat(String(v)) || 0;
-    const apiIds = new Set(apiVentas.map((v) => v.id));
+    const apiTickets = new Set(apiVentas.map((v) => v.numero_ticket));
     // Local sales not yet in backend (pending sync)
-    const localOnly = historial.filter((v) => new Date(v.fecha).toLocaleDateString('en-CA') === hoyKey && !apiIds.has(v.id));
+    const localOnly = historial.filter((v) => {
+        const ticketNum = parseInt(v.numeroTicket, 10);
+        return new Date(v.fecha).toLocaleDateString('en-CA') === hoyKey && !apiTickets.has(ticketNum);
+    });
     const ventasHoy = [
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...apiVentas.map((v) => ({ id: v.id, fecha: v.created_at, total: parseNum(v.total), totalConDescuento: parseNum(v.total), metodoPago: v.pagos[0]?.metodo ?? 'efectivo', items: v.items.map((i) => ({ id: i.producto, nombre: i.producto, cantidad: i.cantidad, subtotal: parseNum(i.subtotal), precio: parseNum(i.precio_unitario), codigoBarras: '', descuento: 0 })), numeroTicket: v.numero_ticket, cajero: '' } as any)),
