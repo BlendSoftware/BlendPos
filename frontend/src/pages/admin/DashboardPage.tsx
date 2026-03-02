@@ -10,6 +10,7 @@ import {
 import { formatARS } from '../../utils/format';
 import styles from './DashboardPage.module.css';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useSaleStore } from '../../store/useSaleStore';
 import { getAlertasStock } from '../../services/api/inventario';
 import type { AlertaStockResponse } from '../../services/api/inventario';
 import { listarVentas, type VentaListItem } from '../../services/api/ventas';
@@ -70,6 +71,8 @@ export function DashboardPage() {
     const [alertas, setAlertas] = useState<AlertaStockResponse[]>([]);
     const [apiVentas, setApiVentas] = useState<VentaListItem[]>([]);
 
+    const historial = useSaleStore((s) => s.historial);
+
     const fetchDashboardData = useCallback(async (showSpinner = false) => {
         if (showSpinner) setRefreshing(true);
         const today = new Date().toLocaleDateString('en-CA');
@@ -80,18 +83,9 @@ export function DashboardPage() {
                 listarVentas({ fecha: today, estado: 'completada', limit: 200 }),
             ]);
             if (alertasRes.status === 'fulfilled') setAlertas(alertasRes.value);
-            if (ventasRes.status === 'fulfilled') {
-                // Replace the entire array to prevent accumulation
-                const newData = ventasRes.value.data;
-                console.log('[Dashboard] Ventas recibidas del backend:', newData.length, newData.map(v => ({ id: v.id, ticket: v.numero_ticket, cajero: v.cajero_nombre })));
-                setApiVentas(newData);
-            }
+            if (ventasRes.status === 'fulfilled') setApiVentas(ventasRes.value.data);
             setLastRefresh(new Date());
         } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    }, []);
             setLoading(false);
             setRefreshing(false);
         }
@@ -106,25 +100,19 @@ export function DashboardPage() {
         return () => clearInterval(interval);
     }, []);
 
-    // Dashboard now uses backend as single source of truth (like FacturaciónPage)
-    // to prevent duplication from local/backend ticket number mismatch.
-    // Deduplicate by ID in case backend returns duplicates.
+    const hoyKey = new Date().toLocaleDateString('en-CA');
+    // Merge local + API ventas for today, deduplicate by id.
+    // API data is the source of truth. Only add local sales not yet reflected in backend
+    // to minimize discrepancy between Dashboard and Facturación (which uses backend-only).
     const parseNum = (v: unknown): number => typeof v === 'number' ? v : parseFloat(String(v)) || 0;
-    const seenIds = new Set<string>();
-    const ventasHoy = apiVentas
-        .filter((v) => {
-            if (seenIds.has(v.id)) {
-                console.warn('[Dashboard] Venta duplicada detectada y filtrada:', v.id, v.numero_ticket);
-                return false;
-            }
-            seenIds.add(v.id);
-            return true;
-        })
+    const apiIds = new Set(apiVentas.map((v) => v.id));
+    // Local sales not yet in backend (pending sync)
+    const localOnly = historial.filter((v) => new Date(v.fecha).toLocaleDateString('en-CA') === hoyKey && !apiIds.has(v.id));
+    const ventasHoy = [
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((v) => ({ id: v.id, fecha: v.created_at, total: parseNum(v.total), totalConDescuento: parseNum(v.total), metodoPago: v.pagos[0]?.metodo ?? 'efectivo', items: v.items.map((i) => ({ id: i.producto, nombre: i.producto, cantidad: i.cantidad, subtotal: parseNum(i.subtotal), precio: parseNum(i.precio_unitario), codigoBarras: '', descuento: 0 })), numeroTicket: String(v.numero_ticket).padStart(6, '0'), cajero: v.cajero_nombre || '' } as any))
-        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-    
-    console.log('[Dashboard] ventasHoy procesadas:', ventasHoy.length, ventasHoy.slice(0, 5).map(v => ({ ticket: v.numeroTicket, cajero: v.cajero, total: v.total })));
+        ...apiVentas.map((v) => ({ id: v.id, fecha: v.created_at, total: parseNum(v.total), totalConDescuento: parseNum(v.total), metodoPago: v.pagos[0]?.metodo ?? 'efectivo', items: v.items.map((i) => ({ id: i.producto, nombre: i.producto, cantidad: i.cantidad, subtotal: parseNum(i.subtotal), precio: parseNum(i.precio_unitario), codigoBarras: '', descuento: 0 })), numeroTicket: v.numero_ticket, cajero: '' } as any)),
+        ...localOnly,
+    ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
     const totalHoy = ventasHoy.reduce((s, v) => s + (v.totalConDescuento ?? v.total), 0);
     const ticketProm = ventasHoy.length ? totalHoy / ventasHoy.length : 0;
