@@ -41,9 +41,16 @@ type UsuarioResponse struct {
 }
 
 type LoginResponse struct {
-	AccessToken  string          `json:"access_token"`
-	RefreshToken string          `json:"refresh_token"`
-	TokenType    string          `json:"token_type"`
-	ExpiresIn    int             `json:"expires_in"` // seconds
-	User         UsuarioResponse `json:"user"`
+	AccessToken        string          `json:"access_token"`
+	RefreshToken       string          `json:"refresh_token"`
+	TokenType          string          `json:"token_type"`
+	ExpiresIn          int             `json:"expires_in"` // seconds
+	User               UsuarioResponse `json:"user"`
+	MustChangePassword bool            `json:"must_change_password"`
+}
+
+// ChangePasswordRequest is used when the user is forced to change their password
+// on first login (SEC-03: must_change_password flag).
+type ChangePasswordRequest struct {
+	NewPassword string `json:"new_password" validate:"required,min=8"`
 }

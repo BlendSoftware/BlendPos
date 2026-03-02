@@ -25,6 +25,7 @@ type AuthService interface {
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
 	Refresh(ctx context.Context, refreshToken string) (*dto.LoginResponse, error)
 	Logout(ctx context.Context, jti string, remaining time.Duration) error
+	ChangePassword(ctx context.Context, userID uuid.UUID, req dto.ChangePasswordRequest) error
 	CrearUsuario(ctx context.Context, req dto.CrearUsuarioRequest) (*dto.UsuarioResponse, error)
 	ListarUsuarios(ctx context.Context, incluirInactivos bool) ([]dto.UsuarioResponse, error)
 	ActualizarUsuario(ctx context.Context, id uuid.UUID, req dto.ActualizarUsuarioRequest) (*dto.UsuarioResponse, error)
@@ -62,10 +63,11 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 	}
 
 	return &dto.LoginResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "bearer",
-		ExpiresIn:    s.cfg.JWTExpirationHours * 3600,
+		AccessToken:        accessToken,
+		RefreshToken:       refreshToken,
+		TokenType:          "bearer",
+		ExpiresIn:          s.cfg.JWTExpirationHours * 3600,
+		MustChangePassword: user.MustChangePassword,
 		User: dto.UsuarioResponse{
 			ID:           user.ID.String(),
 			Username:     user.Username,
@@ -251,6 +253,22 @@ func (s *authService) Logout(ctx context.Context, jti string, remaining time.Dur
 	}
 	key := fmt.Sprintf("%s%s", revokedKeyPrefix, jti)
 	return s.rdb.Set(ctx, key, "1", remaining).Err()
+}
+
+// ChangePassword sets a new password and clears the must_change_password flag.
+// SEC-03: Called when a user with must_change_password=true submits their new password.
+func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, req dto.ChangePasswordRequest) error {
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return errors.New("usuario no encontrado")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), 12)
+	if err != nil {
+		return err
+	}
+	user.PasswordHash = string(hash)
+	user.MustChangePassword = false
+	return s.repo.Update(ctx, user)
 }
 
 func (s *authService) generateToken(user *model.Usuario, duration time.Duration, tokenType string) (string, error) {

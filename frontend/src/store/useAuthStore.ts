@@ -23,10 +23,10 @@ const DEMO_PASS = (import.meta.env.DEV && import.meta.env.VITE_DEMO_PASS as stri
 
 const DEMO_USERS: (IUser & { password: string; username: string })[] = import.meta.env.DEV && DEMO_PASS
     ? [
-          { id: 'u1', nombre: 'Carlos Administrador', email: 'admin@blendpos.com', rol: 'admin', activo: true, creadoEn: '2025-01-10T10:00:00Z', username: 'admin', password: DEMO_PASS },
-          { id: 'u2', nombre: 'María Supervisora', email: 'super@blendpos.com', rol: 'supervisor', activo: true, creadoEn: '2025-02-01T10:00:00Z', username: 'supervisor', password: DEMO_PASS },
-          { id: 'u3', nombre: 'Juan Cajero', email: 'caja@blendpos.com', rol: 'cajero', activo: true, creadoEn: '2025-03-15T10:00:00Z', username: 'cajero', password: DEMO_PASS },
-      ]
+        { id: 'u1', nombre: 'Carlos Administrador', email: 'admin@blendpos.com', rol: 'admin', activo: true, creadoEn: '2025-01-10T10:00:00Z', username: 'admin', password: DEMO_PASS },
+        { id: 'u2', nombre: 'María Supervisora', email: 'super@blendpos.com', rol: 'supervisor', activo: true, creadoEn: '2025-02-01T10:00:00Z', username: 'supervisor', password: DEMO_PASS },
+        { id: 'u3', nombre: 'Juan Cajero', email: 'caja@blendpos.com', rol: 'cajero', activo: true, creadoEn: '2025-03-15T10:00:00Z', username: 'cajero', password: DEMO_PASS },
+    ]
     : [];
 
 // El backend usa 'administrador', el frontend usa 'admin'
@@ -39,6 +39,8 @@ function mapRol(backendRol: string): Rol {
 interface AuthState {
     user: IUser | null;
     isAuthenticated: boolean;
+    /** SEC-03: true when the backend requires a password change on first login */
+    mustChangePassword: boolean;
 
     login: (usernameOrEmail: string, password: string) => Promise<boolean>;
     logout: () => Promise<void>;
@@ -46,6 +48,8 @@ interface AuthState {
     /** Called on app mount to silently restore the session via refresh token. */
     initAuth: () => Promise<void>;
     hasRole: (roles: Rol[]) => boolean;
+    /** SEC-03: Called after user completes forced password change */
+    clearMustChangePassword: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -53,6 +57,7 @@ export const useAuthStore = create<AuthState>()(
         (set, get) => ({
             user: null,
             isAuthenticated: false,
+            mustChangePassword: false,
 
             login: async (usernameOrEmail, password) => {
                 const backendAvailable = !!(import.meta.env.VITE_API_BASE as string | undefined);
@@ -73,7 +78,7 @@ export const useAuthStore = create<AuthState>()(
                         // Store tokens in memory only — never in localStorage
                         tokenStore.setTokens(resp.access_token, resp.refresh_token);
                         scheduleProactiveRefresh(resp.access_token);
-                        set({ user, isAuthenticated: true });
+                        set({ user, isAuthenticated: true, mustChangePassword: resp.must_change_password ?? false });
                         return true;
                     } catch {
                         return false;
@@ -108,7 +113,7 @@ export const useAuthStore = create<AuthState>()(
                 }
                 cancelProactiveRefresh();
                 tokenStore.clearTokens();
-                set({ user: null, isAuthenticated: false });
+                set({ user: null, isAuthenticated: false, mustChangePassword: false });
             },
 
             refresh: async () => {
@@ -156,6 +161,8 @@ export const useAuthStore = create<AuthState>()(
                 const { user } = get();
                 return user !== null && roles.includes(user.rol);
             },
+
+            clearMustChangePassword: () => set({ mustChangePassword: false }),
         }),
         {
             name: 'blendpos-auth',

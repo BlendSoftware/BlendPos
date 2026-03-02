@@ -108,5 +108,29 @@ func (c *Config) validate() error {
 		return fmt.Errorf("FATAL: JWT_SECRET must be at least 32 characters long (got %d). "+
 			"Generate one with: openssl rand -hex 32", len(c.JWTSecret))
 	}
+
+	// ── SEC-04: Block known default JWT secrets in production ─────────
+	isProd := c.Env == "production"
+	if isProd {
+		knownDefaults := []string{
+			"super_secret_key_change_me_in_production_min_32_chars",
+			"dev_secret_change_in_production!_32chars",
+		}
+		for _, d := range knownDefaults {
+			if c.JWTSecret == d {
+				return fmt.Errorf("FATAL: JWT_SECRET is set to a known default value. " +
+					"This is a critical security risk in production. " +
+					"Generate a unique secret with: openssl rand -hex 32")
+			}
+		}
+	}
+
+	// ── SEC-05: Require INTERNAL_API_TOKEN in production ──────────────
+	if isProd && c.InternalAPIToken == "" {
+		return fmt.Errorf("FATAL: INTERNAL_API_TOKEN is required in production. " +
+			"This token authenticates the Go backend → AFIP Sidecar communication. " +
+			"Generate one with: openssl rand -hex 32")
+	}
+
 	return nil
 }

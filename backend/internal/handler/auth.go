@@ -92,6 +92,39 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// ChangePassword godoc
+// @Summary      Cambiar contraseña (obligatorio tras primer login)
+// @Description  SEC-03: Fuerza cambio de contraseña cuando must_change_password=true.
+// @Tags         auth
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        body body dto.ChangePasswordRequest true "Nueva contraseña"
+// @Success      200 {object} map[string]string
+// @Failure      400 {object} apierror.APIError
+// @Router       /v1/auth/change-password [post]
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	claims := middleware.GetClaims(c)
+	if claims == nil {
+		c.JSON(http.StatusUnauthorized, apierror.New("Token invalido"))
+		return
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID de usuario inválido"))
+		return
+	}
+	var req dto.ChangePasswordRequest
+	if !bindAndValidate(c, &req) {
+		return
+	}
+	if err := h.svc.ChangePassword(c.Request.Context(), userID, req); err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Contraseña actualizada correctamente"})
+}
+
 // ── Usuarios Handler ─────────────────────────────────────────────────────────
 
 type UsuariosHandler struct{ svc service.AuthService }

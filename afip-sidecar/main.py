@@ -34,14 +34,23 @@ from afip_client import AFIPClient
 
 INTERNAL_API_TOKEN: str = os.getenv("INTERNAL_API_TOKEN", "")
 
+# SEC-05: In production mode, INTERNAL_API_TOKEN is mandatory.
+# Fail fast at import time so the sidecar never starts unprotected.
+_is_production = os.getenv("AFIP_HOMOLOGACION", "true").lower() != "true"
+if _is_production and not INTERNAL_API_TOKEN:
+    raise RuntimeError(
+        "FATAL: INTERNAL_API_TOKEN is required in production mode "
+        "(AFIP_HOMOLOGACION != 'true'). Generate one with: "
+        "python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+
 
 async def verify_internal_token(
     x_internal_token: str = Header(..., alias="X-Internal-Token"),
 ) -> None:
     """
     FastAPI dependency that enforces X-Internal-Token authentication.
-    If INTERNAL_API_TOKEN is not set (e.g. dev without the env var), the
-    check is skipped so local development is not broken.
+    If INTERNAL_API_TOKEN is not set (dev mode only), the check is skipped.
     """
     if INTERNAL_API_TOKEN and x_internal_token != INTERNAL_API_TOKEN:
         raise HTTPException(status_code=403, detail="Acceso denegado: token interno inválido")

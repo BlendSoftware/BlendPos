@@ -17,7 +17,8 @@ type Usuario struct {
 	Rol          string `gorm:"type:varchar(20);not null"`
 	// PuntoDeVenta restricts a cashier to a specific register; nil = all registers
 	PuntoDeVenta *int
-	Activo       bool `gorm:"not null;default:true"`
+	Activo             bool `gorm:"not null;default:true"`
+	MustChangePassword bool `gorm:"not null;default:false"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

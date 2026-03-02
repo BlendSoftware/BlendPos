@@ -100,7 +100,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      ENV: production
+      APP_ENV: production
       PORT: 8000
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -204,8 +204,51 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # ── OPS-02: PostgreSQL Automated Backup ──────────────────────────────────
+  # Runs pg_dump every 6 hours, retains 7 days of backups.
+  # Backups are stored in the pg_backups volume (map to host for safety).
+  pg-backup:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg_backups:/backups
+      - ./scripts/pg_backup.sh:/scripts/pg_backup.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Run backup once at startup, then install cron and let crond handle the rest
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        chmod +x /scripts/pg_backup.sh
+        echo "0 */6 * * * /scripts/pg_backup.sh >> /proc/1/fd/1 2>&1" | crontab -
+        echo "[pg-backup] Cron instalado: backup cada 6 horas"
+        /scripts/pg_backup.sh
+        crond -f -l 2
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
 volumes:
   pg_data:
   redis_data:
   pdf_storage:
   letsencrypt:
+  pg_backups:
+

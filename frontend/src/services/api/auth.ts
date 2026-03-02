@@ -21,6 +21,7 @@ export interface LoginResponse {
     token_type: string;
     expires_in: number;
     user: UsuarioResponse;
+    must_change_password: boolean;
 }
 
 // ── API Calls ─────────────────────────────────────────────────────────────────
@@ -39,6 +40,14 @@ export async function loginApi(username: string, password: string): Promise<Logi
  */
 export async function refreshApi(refreshToken: string): Promise<LoginResponse> {
     return apiClient.post<LoginResponse>('/v1/auth/refresh', { refresh_token: refreshToken });
+}
+
+/**
+ * POST /v1/auth/change-password
+ * SEC-03: Cambia contraseña obligatoria tras primer login.
+ */
+export async function changePasswordApi(newPassword: string): Promise<void> {
+    await apiClient.post<void>('/v1/auth/change-password', { new_password: newPassword });
 }
 
 /**

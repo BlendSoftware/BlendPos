@@ -105,6 +105,7 @@ func New(d Deps) *gin.Engine {
 
 	// Authenticated logout — requires a valid (non-revoked) token
 	auth.POST("/logout", jwtMW, authH.Logout)
+	auth.POST("/change-password", jwtMW, authH.ChangePassword)
 
 	v1 := r.Group("/v1", jwtMW)
 	v1.Use(middleware.AuditMiddleware(d.AuditSvc))
