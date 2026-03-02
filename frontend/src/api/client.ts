@@ -10,6 +10,14 @@ import { tokenStore } from '../store/tokenStore';
 // VITE_API_BASE debe apuntar al backend Go, SIN path final (ej: http://localhost:8000)
 const BASE_URL = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
 
+// ── Typed network error for offline detection ────────────────────────────────
+export class OfflineError extends Error {
+    constructor() {
+        super('Sin conexión a internet');
+        this.name = 'OfflineError';
+    }
+}
+
 // ── Auto-refresh shared state (B-03) ────────────────────────────────────────
 // Prevents multiple concurrent refresh attempts when several requests
 // receive 401 at the same time.
@@ -122,7 +130,17 @@ async function request<T>(
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const response = await fetch(url, { ...init, headers });
+    // ── Offline-resilient fetch ──────────────────────────────────────────
+    let response: Response;
+    try {
+        response = await fetch(url, { ...init, headers });
+    } catch (err) {
+        // TypeError: Failed to fetch → network is down
+        if (!navigator.onLine || (err instanceof TypeError && /fetch|network/i.test(err.message))) {
+            throw new OfflineError();
+        }
+        throw err;
+    }
 
     if (response.status === 401) {
         // ── B-03: Try silent refresh before giving up ────────────────────

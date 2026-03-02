@@ -19,14 +19,19 @@ export function useSyncStatus() {
 
     // ── Core sync attempt with adaptive backoff ──────────────────────────
     const attemptSync = useCallback(async () => {
-        if (!navigator.onLine) return;
+        if (!navigator.onLine) { setSyncState('idle'); return; }
         setSyncState('syncing');
         try {
             await trySyncQueue();
             // On success → reset interval
             intervalRef.current = BASE_INTERVAL_MS;
             setSyncState('idle');
-        } catch {
+        } catch (err) {
+            // Network errors while offline → don't alarm the user
+            if (!navigator.onLine || (err && (err as Error).name === 'OfflineError')) {
+                setSyncState('idle');
+                return;
+            }
             // On failure → exponential backoff
             intervalRef.current = Math.min(intervalRef.current * 2, MAX_INTERVAL_MS);
             setSyncState('error');
