@@ -2,20 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSyncStats, trySyncQueue } from '../offline/sync';
 import { notifications } from '@mantine/notifications';
 
-const BASE_INTERVAL_MS  = 30_000;   // 30 s initial retry
-const MAX_INTERVAL_MS   = 5 * 60_000; // 5 min max
+const BASE_INTERVAL_MS = 30_000;   // 30 s initial retry
+const MAX_INTERVAL_MS = 5 * 60_000; // 5 min max
 const QUEUE_ALERT_LIMIT = 100;
 
 export type SyncState = 'idle' | 'syncing' | 'error';
 
 export function useSyncStatus() {
-    const [pending, setPending]     = useState(0);
-    const [error, setError]         = useState(0);
+    const [pending, setPending] = useState(0);
+    const [error, setError] = useState(0);
     const [syncState, setSyncState] = useState<SyncState>('idle');
 
-    const intervalRef   = useRef(BASE_INTERVAL_MS);
-    const timerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const alertedRef    = useRef(false); // prevent repeated >100 alerts
+    const intervalRef = useRef(BASE_INTERVAL_MS);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const alertedRef = useRef(false); // prevent repeated >100 alerts
 
     // ── Core sync attempt with adaptive backoff ──────────────────────────
     const attemptSync = useCallback(async () => {
@@ -34,6 +34,7 @@ export function useSyncStatus() {
     }, []);
 
     // ── Scheduled loop ───────────────────────────────────────────────────
+    const scheduleNextRef = useRef<() => void>(() => { });
     const scheduleNext = useCallback(() => {
         if (timerRef.current) clearTimeout(timerRef.current);
         timerRef.current = setTimeout(async () => {
@@ -42,9 +43,10 @@ export function useSyncStatus() {
             const stats = await getSyncStats();
             setPending(stats.pending);
             setError(stats.error);
-            scheduleNext();
+            scheduleNextRef.current();
         }, intervalRef.current);
     }, [attemptSync]);
+    useEffect(() => { scheduleNextRef.current = scheduleNext; }, [scheduleNext]);
 
     useEffect(() => {
         let mounted = true;
@@ -94,6 +96,7 @@ export function useSyncStatus() {
         window.addEventListener('online', onOnline);
 
         // Kick off first sync + schedule loop
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- Async: setState happens after await, not synchronously
         attemptSync().catch(console.warn);
         scheduleNext();
 

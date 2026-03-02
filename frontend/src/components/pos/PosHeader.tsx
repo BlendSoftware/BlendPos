@@ -67,7 +67,7 @@ export function PosHeader() {
         thermalPrinter.autoConnectIfPossible(printerConfig.baudRate)
             .then((ok) => setPrinterConnected(ok))
             .catch(() => setPrinterConnected(false));
-    }, []);
+    }, [printerConfig.baudRate]);
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -240,8 +240,8 @@ export function PosHeader() {
                                 syncState === 'syncing'
                                     ? 'Sincronizando…'
                                     : syncState === 'error'
-                                    ? 'Error de sincronización — reintentando…'
-                                    : `${syncPending} venta${syncPending !== 1 ? 's' : ''} pendiente${syncPending !== 1 ? 's' : ''} de sync`
+                                        ? 'Error de sincronización — reintentando…'
+                                        : `${syncPending} venta${syncPending !== 1 ? 's' : ''} pendiente${syncPending !== 1 ? 's' : ''} de sync`
                             }
                             withArrow
                         >

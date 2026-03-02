@@ -19,15 +19,16 @@ export function AbrirCajaModal({ opened, onSuccess }: Props) {
     const { abrir, restaurar, loading, error } = useCajaStore();
     const { user } = useAuthStore();
 
-    const [puntoDeVenta, setPuntoDeVenta] = useState<number | string>(1);
+    const [puntoDeVenta, setPuntoDeVenta] = useState<number | string>(user?.puntoDeVenta ?? 1);
     const [montoInicial, setMontoInicial] = useState<number | string>(0);
 
-    // Auto-asignar punto de venta del usuario al abrir el modal
+    // Sync punto de venta when modal opens with user's assigned value.
     useEffect(() => {
-        if (user?.puntoDeVenta != null) {
+        if (opened && user?.puntoDeVenta != null) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: syncing prop→state on open
             setPuntoDeVenta(user.puntoDeVenta);
         }
-    }, [user?.puntoDeVenta, opened]);
+    }, [opened, user?.puntoDeVenta]);
 
     const handleSubmit = async () => {
         const pdv = typeof puntoDeVenta === 'number' ? puntoDeVenta : parseInt(puntoDeVenta, 10);
@@ -43,7 +44,7 @@ export function AbrirCajaModal({ opened, onSuccess }: Props) {
             const msg = err instanceof Error ? err.message : '';
             // Si ya existe una caja abierta en ese PDV, recuperar la sesión activa
             if (msg.toLowerCase().includes('ya existe una caja abierta')) {
-                await restaurar().catch(() => {});
+                await restaurar().catch(() => { });
                 // Only close modal if restaurar() actually recovered a session
                 const { sesionId } = useCajaStore.getState();
                 if (sesionId) onSuccess();

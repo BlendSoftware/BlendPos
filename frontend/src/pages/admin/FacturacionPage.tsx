@@ -46,8 +46,8 @@ export function FacturacionPage() {
     const [loadingVentas, setLoadingVentas] = useState(false);
     const [desde, setDesde] = useState<Date | null>(null);
     const [hasta, setHasta] = useState<Date | null>(null);
-    const [ordenarPor, setOrdenarPor] = useState<string>('fecha');
-    const [orden, setOrden] = useState<string>('desc');
+    const ordenarPor = 'fecha';
+    const orden = 'desc';
 
     const toDateStr = (d: Date | null) => d ? d.toISOString().slice(0, 10) : undefined;
 
@@ -60,7 +60,7 @@ export function FacturacionPage() {
                 desde: toDateStr(desde),
                 hasta: toDateStr(hasta),
                 ordenar_por: ordenarPor,
-                orden,
+                orden: orden,
             });
             setApiVentas(resp.data);
         } catch { /* silent */ } finally {
@@ -109,7 +109,7 @@ export function FacturacionPage() {
 
     const filtered = useMemo(() => {
         const q = busqueda.toLowerCase();
-        let result = ventas
+        const result = ventas
             .map((v) => ({ ...v, anulada: v.anulada || anuladas.has(v.id) }))
             .filter(
                 (v) => {
@@ -129,8 +129,8 @@ export function FacturacionPage() {
 
         // Ordenamiento
         result.sort((a, b) => {
-            let valA: any;
-            let valB: any;
+            let valA: string | number;
+            let valB: string | number;
             switch (sortBy) {
                 case 'ticket': valA = a.numeroTicket; valB = b.numeroTicket; break;
                 case 'fecha': valA = new Date(a.fecha).getTime(); valB = new Date(b.fecha).getTime(); break;

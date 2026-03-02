@@ -33,6 +33,9 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
 		c.Header("Access-Control-Expose-Headers", "X-Request-ID")
+		// Cache preflight responses for 2 hours (7200s) to reduce OPTIONS spam
+		// from frontend retry loops. Chrome caps at 2h, Firefox at 24h.
+		c.Header("Access-Control-Max-Age", "7200")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return

@@ -65,9 +65,9 @@ export function UsuariosPage() {
     const form = useForm({
         initialValues: { nombre: '', username: '', email: '', password: '', confirmPassword: '', rol: 'cajero' as Rol, activo: true, puntoDeVenta: '' as string },
         validate: {
-            nombre:   (v) => (v.trim().length >= 3 ? null : 'Mínimo 3 caracteres'),
-            username: (v, _vals) => (!editTarget && !v.trim() ? 'Requerido' : null),
-            password: (v, _vals) => {
+            nombre: (v) => (v.trim().length >= 3 ? null : 'Mínimo 3 caracteres'),
+            username: (v) => (!editTarget && !v.trim() ? 'Requerido' : null),
+            password: (v) => {
                 if (editTarget && !v) return null; // Al editar, password es opcional
                 if (!editTarget && v.length < 8) return 'Mínimo 8 caracteres';
                 if (v.length > 0 && v.length < 8) return 'Mínimo 8 caracteres';
@@ -107,7 +107,7 @@ export function UsuariosPage() {
         try {
             const pdv = values.puntoDeVenta ? parseInt(values.puntoDeVenta) : undefined;
             if (editTarget) {
-                const payload: any = {
+                const payload: Record<string, unknown> = {
                     nombre: values.nombre,
                     rol: mapRolBE(values.rol),
                     punto_de_venta: pdv,
@@ -202,37 +202,37 @@ export function UsuariosPage() {
                                 </Table.Tr>
                             ))
                             : filtered.map((u) => (
-                            <Table.Tr key={u.id} style={{ opacity: u.activo ? 1 : 0.5 }}>
-                                <Table.Td><Text size="sm" fw={500}>{u.nombre}</Text></Table.Td>
-                                <Table.Td><Text size="sm" c="dimmed">{u.email || '—'}</Text></Table.Td>
-                                <Table.Td>
-                                    <Badge color={ROL_COLOR[u.rol]} size="sm" variant="light">{u.rol}</Badge>
-                                </Table.Td>
-                                <Table.Td>
-                                    <Badge color={u.activo ? 'teal' : 'gray'} size="sm" variant="light">
-                                        {u.activo ? 'Activo' : 'Inactivo'}
-                                    </Badge>
-                                </Table.Td>
-                                <Table.Td>
-                                    <Group gap={4}>
-                                        <Tooltip label="Editar" withArrow>
-                                            <ActionIcon variant="subtle" color="blue" onClick={() => openEdit(u)}>
-                                                <Edit size={15} />
-                                            </ActionIcon>
-                                        </Tooltip>
-                                        <Tooltip label={u.activo ? 'Desactivar' : 'Activar'} withArrow>
-                                            <ActionIcon
-                                                variant="subtle"
-                                                color={u.activo ? 'gray' : 'teal'}
-                                                onClick={() => toggleActivo(u.id)}
-                                            >
-                                                {u.activo ? <PowerOff size={15} /> : <Power size={15} />}
-                                            </ActionIcon>
-                                        </Tooltip>
-                                    </Group>
-                                </Table.Td>
-                            </Table.Tr>
-                        ))}
+                                <Table.Tr key={u.id} style={{ opacity: u.activo ? 1 : 0.5 }}>
+                                    <Table.Td><Text size="sm" fw={500}>{u.nombre}</Text></Table.Td>
+                                    <Table.Td><Text size="sm" c="dimmed">{u.email || '—'}</Text></Table.Td>
+                                    <Table.Td>
+                                        <Badge color={ROL_COLOR[u.rol]} size="sm" variant="light">{u.rol}</Badge>
+                                    </Table.Td>
+                                    <Table.Td>
+                                        <Badge color={u.activo ? 'teal' : 'gray'} size="sm" variant="light">
+                                            {u.activo ? 'Activo' : 'Inactivo'}
+                                        </Badge>
+                                    </Table.Td>
+                                    <Table.Td>
+                                        <Group gap={4}>
+                                            <Tooltip label="Editar" withArrow>
+                                                <ActionIcon variant="subtle" color="blue" onClick={() => openEdit(u)}>
+                                                    <Edit size={15} />
+                                                </ActionIcon>
+                                            </Tooltip>
+                                            <Tooltip label={u.activo ? 'Desactivar' : 'Activar'} withArrow>
+                                                <ActionIcon
+                                                    variant="subtle"
+                                                    color={u.activo ? 'gray' : 'teal'}
+                                                    onClick={() => toggleActivo(u.id)}
+                                                >
+                                                    {u.activo ? <PowerOff size={15} /> : <Power size={15} />}
+                                                </ActionIcon>
+                                            </Tooltip>
+                                        </Group>
+                                    </Table.Td>
+                                </Table.Tr>
+                            ))}
                     </Table.Tbody>
                 </Table>
             </Paper>
@@ -264,9 +264,9 @@ export function UsuariosPage() {
                         <Select
                             label="Rol"
                             data={[
-                                { value: 'admin',      label: 'Administrador' },
+                                { value: 'admin', label: 'Administrador' },
                                 { value: 'supervisor', label: 'Supervisor' },
-                                { value: 'cajero',     label: 'Cajero' },
+                                { value: 'cajero', label: 'Cajero' },
                             ]}
                             {...form.getInputProps('rol')}
                         />
