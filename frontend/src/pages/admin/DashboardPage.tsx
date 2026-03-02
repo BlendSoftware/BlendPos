@@ -10,7 +10,6 @@ import {
 import { formatARS } from '../../utils/format';
 import styles from './DashboardPage.module.css';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useSaleStore } from '../../store/useSaleStore';
 import { getAlertasStock } from '../../services/api/inventario';
 import type { AlertaStockResponse } from '../../services/api/inventario';
 import { listarVentas, type VentaListItem } from '../../services/api/ventas';
@@ -71,13 +70,11 @@ export function DashboardPage() {
     const [alertas, setAlertas] = useState<AlertaStockResponse[]>([]);
     const [apiVentas, setApiVentas] = useState<VentaListItem[]>([]);
 
-    const historial = useSaleStore((s) => s.historial);
-
     const fetchDashboardData = useCallback(async (showSpinner = false) => {
         if (showSpinner) setRefreshing(true);
         const today = new Date().toLocaleDateString('en-CA');
         try {
-            await recoverLostSales().then(() => trySyncQueue()).catch(() => {});
+            await recoverLostSales().then(() => trySyncQueue()).catch(() => { });
             const [alertasRes, ventasRes] = await Promise.allSettled([
                 getAlertasStock(),
                 listarVentas({ fecha: today, estado: 'completada', limit: 200 }),
@@ -100,19 +97,26 @@ export function DashboardPage() {
         return () => clearInterval(interval);
     }, []);
 
-    const hoyKey = new Date().toLocaleDateString('en-CA');
-    // Merge local + API ventas for today, deduplicate by id.
-    // API data is the source of truth. Only add local sales not yet reflected in backend
-    // to minimize discrepancy between Dashboard and Facturación (which uses backend-only).
+    // API data is the single source of truth for completed sales.
+    // We no longer merge local `historial` because local IDs (crypto.randomUUID)
+    // differ from backend IDs, making deduplication impossible and causing duplicates.
     const parseNum = (v: unknown): number => typeof v === 'number' ? v : parseFloat(String(v)) || 0;
-    const apiIds = new Set(apiVentas.map((v) => v.id));
-    // Local sales not yet in backend (pending sync)
-    const localOnly = historial.filter((v) => new Date(v.fecha).toLocaleDateString('en-CA') === hoyKey && !apiIds.has(v.id));
-    const ventasHoy = [
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...apiVentas.map((v) => ({ id: v.id, fecha: v.created_at, total: parseNum(v.total), totalConDescuento: parseNum(v.total), metodoPago: v.pagos[0]?.metodo ?? 'efectivo', items: v.items.map((i) => ({ id: i.producto, nombre: i.producto, cantidad: i.cantidad, subtotal: parseNum(i.subtotal), precio: parseNum(i.precio_unitario), codigoBarras: '', descuento: 0 })), numeroTicket: v.numero_ticket, cajero: '' } as any)),
-        ...localOnly,
-    ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    const ventasHoy = apiVentas
+        .map((v) => ({
+            id: v.id,
+            fecha: v.created_at,
+            total: parseNum(v.total),
+            totalConDescuento: parseNum(v.total),
+            metodoPago: v.pagos[0]?.metodo ?? 'efectivo',
+            items: v.items.map((i) => ({
+                id: i.producto, nombre: i.producto, cantidad: i.cantidad,
+                subtotal: parseNum(i.subtotal), precio: parseNum(i.precio_unitario),
+                codigoBarras: '', descuento: 0,
+            })),
+            numeroTicket: v.numero_ticket,
+            cajero: v.cajero_nombre || '',
+        }))
+        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
     const totalHoy = ventasHoy.reduce((s, v) => s + (v.totalConDescuento ?? v.total), 0);
     const ticketProm = ventasHoy.length ? totalHoy / ventasHoy.length : 0;
