@@ -36,37 +36,191 @@ export function PostSaleModal() {
     const handlePrint = () => {
         console.log('[PostSaleModal] Iniciando impresión...', {
             numeroTicket: record.numeroTicket,
-            hasRef: !!ticketRef.current,
         });
         
         setPrinting(true);
         
-        // Dar un pequeño delay para asegurar que el DOM esté listo
-        setTimeout(() => {
-            try {
-                window.print();
-                
-                console.log('[PostSaleModal] Diálogo de impresión abierto');
-                
-                notifications.show({
-                    title: 'Impresión iniciada',
-                    message: `Ticket #${record.numeroTicket}`,
-                    color: 'blue',
-                    icon: <Printer size={14} />,
-                    autoClose: 3000,
-                });
-            } catch (err) {
-                console.error('[PostSaleModal] Error de impresión:', err);
-                notifications.show({
-                    title: 'Error de impresión',
-                    message: 'No se pudo iniciar la impresión.',
-                    color: 'red',
-                    autoClose: 5000,
-                });
-            } finally {
-                setPrinting(false);
+        try {
+            // Obtener el contenido HTML del ticket
+            const ticketElement = ticketRef.current;
+            if (!ticketElement) {
+                throw new Error('No se pudo obtener el contenido del ticket');
             }
-        }, 100);
+
+            // Crear una ventana nueva para imprimir
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            if (!printWindow) {
+                throw new Error('No se pudo abrir la ventana de impresión. Verifica que los popups no estén bloqueados.');
+            }
+
+            // Escribir el HTML con estilos incluidos
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Ticket #${record.numeroTicket}</title>
+                    <style>
+                        * { 
+                            margin: 0; 
+                            padding: 0; 
+                            box-sizing: border-box; 
+                        }
+                        body { 
+                            font-family: 'Courier New', monospace;
+                            padding: 10mm;
+                            background: white;
+                            font-size: 12px;
+                            color: #000;
+                        }
+                        .ticket {
+                            max-width: 80mm;
+                            margin: 0 auto;
+                            padding: 20px;
+                            font-family: 'Courier New', monospace;
+                            font-size: 12px;
+                            color: #000;
+                            background: white;
+                        }
+                        .header {
+                            text-align: center;
+                            margin-bottom: 15px;
+                        }
+                        .storeName {
+                            font-size: 20px;
+                            font-weight: bold;
+                            margin: 0 0 5px 0;
+                        }
+                        .storeSubtitle {
+                            font-size: 11px;
+                            margin: 0;
+                            color: #666;
+                        }
+                        .section {
+                            margin: 10px 0;
+                        }
+                        .row {
+                            display: flex;
+                            justify-content: space-between;
+                            margin: 4px 0;
+                            font-size: 11px;
+                        }
+                        .label {
+                            font-weight: normal;
+                            color: #333;
+                        }
+                        .value {
+                            font-weight: bold;
+                            text-align: right;
+                        }
+                        .totalRow {
+                            font-size: 14px;
+                            font-weight: bold;
+                            margin-top: 8px;
+                            padding-top: 8px;
+                            border-top: 1px solid #000;
+                        }
+                        .totalRow .label,
+                        .totalRow .value {
+                            font-weight: bold;
+                        }
+                        .divider {
+                            border-top: 1px dashed #666;
+                            margin: 10px 0;
+                        }
+                        .itemsTable {
+                            width: 100%;
+                            border-collapse: collapse;
+                            font-size: 10px;
+                            margin: 5px 0;
+                        }
+                        .itemsTable thead th {
+                            border-bottom: 1px solid #000;
+                            padding: 4px 2px;
+                            font-weight: bold;
+                            text-align: left;
+                            font-size: 10px;
+                        }
+                        .itemsTable tbody td {
+                            padding: 3px 2px;
+                            font-size: 10px;
+                        }
+                        .pagosMixtos {
+                            margin-left: 10px;
+                            font-size: 10px;
+                        }
+                        .footer {
+                            text-align: center;
+                            margin-top: 20px;
+                            padding-top: 10px;
+                            border-top: 1px dashed #666;
+                        }
+                        .footer p {
+                            margin: 5px 0;
+                            font-size: 11px;
+                        }
+                        .small {
+                            font-size: 9px !important;
+                            color: #666;
+                        }
+                        @media print {
+                            @page { 
+                                size: 80mm auto;
+                                margin: 5mm;
+                            }
+                            body { 
+                                padding: 0; 
+                                margin: 0;
+                            }
+                            .ticket {
+                                padding: 5mm;
+                            }
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${ticketElement.innerHTML}
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+
+            // Esperar a que se cargue y abrir diálogo de impresión
+            printWindow.onload = () => {
+                printWindow.focus();
+                printWindow.print();
+                // Cerrar la ventana después de imprimir (el usuario puede cancelar)
+                setTimeout(() => {
+                    printWindow.close();
+                }, 100);
+            };
+
+            console.log('[PostSaleModal] Ventana de impresión abierta');
+            
+            notifications.show({
+                title: 'Impresión iniciada',
+                message: `Ticket #${record.numeroTicket}`,
+                color: 'blue',
+                icon: <Printer size={14} />,
+                autoClose: 3000,
+            });
+        } catch (err) {
+            console.error('[PostSaleModal] Error de impresión:', err);
+            
+            const errorMessage = err instanceof Error ? err.message : 'No se pudo iniciar la impresión.';
+            const isPopupBlocked = errorMessage.includes('popup') || errorMessage.includes('ventana');
+            
+            notifications.show({
+                title: 'Error de impresión',
+                message: isPopupBlocked 
+                    ? 'Los popups están bloqueados. Por favor, permite ventanas emergentes para este sitio y vuelve a intentar.'
+                    : errorMessage,
+                color: 'red',
+                autoClose: isPopupBlocked ? 8000 : 5000,
+            });
+        } finally {
+            setPrinting(false);
+        }
     };
 
     const total = record.totalConDescuento || record.total;

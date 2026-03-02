@@ -130,6 +130,20 @@ export function DebugInfoModal({ opened, onClose }: DebugInfoModalProps) {
                     </Text>
                 </Alert>
 
+                <Divider label="Impresión" />
+
+                <Alert icon={<Info size={16} />} color="cyan" variant="light">
+                    <Text size="xs">
+                        <strong>Para imprimir correctamente:</strong>
+                    </Text>
+                    <Text size="xs" component="ol" style={{ paddingLeft: '1.2rem', margin: '8px 0 0 0' }}>
+                        <li>Asegúrate de permitir ventanas emergentes (popups) en tu navegador</li>
+                        <li>El botón "Imprimir" abrirá el diálogo nativo del navegador</li>
+                        <li>Selecciona tu impresora y ajusta las opciones según necesites</li>
+                        <li>Si no se abre el diálogo, verifica que los popups no estén bloqueados</li>
+                    </Text>
+                </Alert>
+
                 <Button
                     variant="subtle"
                     color="gray"
