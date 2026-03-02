@@ -14,54 +14,47 @@ import (
 // create / update all tables, then applies any idempotent SQL patches that GORM
 // cannot express (partial indexes, column additions that AutoMigrate may skip on
 // existing DBs, etc.).
+//
+// Retries up to 10 times with linear backoff (2s, 4s, …, 20s) to tolerate
+// PostgreSQL starting slower than the backend (common in Docker).
 func NewDatabase(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		return nil, err
+	var db *gorm.DB
+	var err error
+
+	const maxRetries = 10
+
+	for i := 0; i < maxRetries; i++ {
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Silent),
+		})
+		if err == nil {
+			sqlDB, sqlErr := db.DB()
+			if sqlErr == nil {
+				if pingErr := sqlDB.Ping(); pingErr == nil {
+					log.Info().Int("attempt", i+1).Msg("database connected")
+					sqlDB.SetMaxOpenConns(25)
+					sqlDB.SetMaxIdleConns(5)
+					sqlDB.SetConnMaxLifetime(5 * time.Minute)
+					sqlDB.SetConnMaxIdleTime(2 * time.Minute)
+
+					if err := applyPreMigrationPatches(db); err != nil {
+						return nil, fmt.Errorf("pre-migration patches: %w", err)
+					}
+					if err := applySchemaPatches(db); err != nil {
+						return nil, fmt.Errorf("schema patches: %w", err)
+					}
+
+					return db, nil
+				}
+			}
+		}
+
+		wait := time.Duration(i+1) * 2 * time.Second
+		log.Warn().Int("attempt", i+1).Dur("retry_in", wait).Err(err).Msg("database not ready, retrying…")
+		time.Sleep(wait)
 	}
 
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, err
-	}
-	sqlDB.SetMaxOpenConns(25)
-	sqlDB.SetMaxIdleConns(5)
-	sqlDB.SetConnMaxLifetime(5 * time.Minute)  // prevent stale connections after PG restarts
-	sqlDB.SetConnMaxIdleTime(2 * time.Minute)  // reclaim idle connections faster under low load
-
-	if err := applyPreMigrationPatches(db); err != nil {
-		return nil, fmt.Errorf("pre-migration patches: %w", err)
-	}
-
-	// ⚠️ GORM AutoMigrate DISABLED: Schema is managed exclusively via SQL migrations
-	// to prevent conflicts and maintain precise control over decimal precision,
-	// constraints, and other DDL operations. See migrations/ directory.
-	// if err := db.AutoMigrate(
-	// 	&model.Producto{},
-	// 	&model.ProductoHijo{},
-	// 	&model.Usuario{},
-	// 	&model.SesionCaja{},
-	// 	&model.MovimientoCaja{},
-	// 	&model.Venta{},
-	// 	&model.VentaItem{},
-	// 	&model.VentaPago{},
-	// 	&model.Comprobante{},
-	// 	&model.Proveedor{},
-	// 	&model.HistorialPrecio{},
-	// 	&model.MovimientoStock{},
-	// 	&model.Categoria{},
-	// 	&model.ContactoProveedor{},
-	// ); err != nil {
-	// 	return nil, fmt.Errorf("AutoMigrate: %w", err)
-	// }
-
-	if err := applySchemaPatches(db); err != nil {
-		return nil, fmt.Errorf("schema patches: %w", err)
-	}
-
-	return db, nil
+	return nil, fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
 }
 
 // applyPreMigrationPatches reconciles DB constraint/index names with what GORM
@@ -237,7 +230,7 @@ END $$`},
 // DO NOTHING semantics so re-running on an already-patched DB is safe.
 func applySchemaPatches(db *gorm.DB) error {
 	patches := []string{
-	// migration 000003: retry columns — ADD COLUMN IF NOT EXISTS is idempotent
+		// migration 000003: retry columns — ADD COLUMN IF NOT EXISTS is idempotent
 		`DO $$ BEGIN
 		  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'comprobantes') THEN
 		    ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS retry_count   INT         NOT NULL DEFAULT 0;

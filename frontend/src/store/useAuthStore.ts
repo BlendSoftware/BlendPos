@@ -11,18 +11,21 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { IUser, Rol } from '../types';
 import { loginApi, refreshApi } from '../services/api/auth';
-import { apiClient } from '../api/client';
+import { apiClient, scheduleProactiveRefresh, cancelProactiveRefresh } from '../api/client';
 import { tokenStore } from './tokenStore';
 
 // ── Usuarios demo — SOLO desarrollo (P1-004) ──────────────────────────────────
 // La constante es accesible únicamente cuando el bundler incluye el bloque
 // import.meta.env.DEV === true.  En producción se genera un módulo vacío.
+// Las credenciales se leen de .env (VITE_DEMO_PASS) — nunca hardcodeadas.
 
-const DEMO_USERS: (IUser & { password: string; username: string })[] = import.meta.env.DEV
+const DEMO_PASS = (import.meta.env.DEV && import.meta.env.VITE_DEMO_PASS as string) || '';
+
+const DEMO_USERS: (IUser & { password: string; username: string })[] = import.meta.env.DEV && DEMO_PASS
     ? [
-          { id: 'u1', nombre: 'Carlos Administrador', email: 'admin@blendpos.com', rol: 'admin', activo: true, creadoEn: '2025-01-10T10:00:00Z', username: 'admin', password: '12345678' },
-          { id: 'u2', nombre: 'María Supervisora', email: 'super@blendpos.com', rol: 'supervisor', activo: true, creadoEn: '2025-02-01T10:00:00Z', username: 'supervisor', password: '12345678' },
-          { id: 'u3', nombre: 'Juan Cajero', email: 'caja@blendpos.com', rol: 'cajero', activo: true, creadoEn: '2025-03-15T10:00:00Z', username: 'cajero', password: '12345678' },
+          { id: 'u1', nombre: 'Carlos Administrador', email: 'admin@blendpos.com', rol: 'admin', activo: true, creadoEn: '2025-01-10T10:00:00Z', username: 'admin', password: DEMO_PASS },
+          { id: 'u2', nombre: 'María Supervisora', email: 'super@blendpos.com', rol: 'supervisor', activo: true, creadoEn: '2025-02-01T10:00:00Z', username: 'supervisor', password: DEMO_PASS },
+          { id: 'u3', nombre: 'Juan Cajero', email: 'caja@blendpos.com', rol: 'cajero', activo: true, creadoEn: '2025-03-15T10:00:00Z', username: 'cajero', password: DEMO_PASS },
       ]
     : [];
 
@@ -69,6 +72,7 @@ export const useAuthStore = create<AuthState>()(
                         };
                         // Store tokens in memory only — never in localStorage
                         tokenStore.setTokens(resp.access_token, resp.refresh_token);
+                        scheduleProactiveRefresh(resp.access_token);
                         set({ user, isAuthenticated: true });
                         return true;
                     } catch {
@@ -102,6 +106,7 @@ export const useAuthStore = create<AuthState>()(
                 } catch {
                     // Logout is best-effort — clear local state regardless
                 }
+                cancelProactiveRefresh();
                 tokenStore.clearTokens();
                 set({ user: null, isAuthenticated: false });
             },
@@ -117,9 +122,11 @@ export const useAuthStore = create<AuthState>()(
                         rol: mapRol(u.rol), activo: true, creadoEn: new Date().toISOString(),
                     };
                     tokenStore.setTokens(resp.access_token, resp.refresh_token);
+                    scheduleProactiveRefresh(resp.access_token);
                     set({ user, isAuthenticated: true });
                     return true;
                 } catch {
+                    cancelProactiveRefresh();
                     tokenStore.clearTokens();
                     set({ user: null, isAuthenticated: false });
                     return false;

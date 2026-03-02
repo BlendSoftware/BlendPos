@@ -128,7 +128,7 @@ func seedUser(t *testing.T, repo *stubUsuarioRepo, username, password, rol strin
 func signToken(t *testing.T, userID, rol string, dur time.Duration) string {
 	t.Helper()
 	claims := jwt.MapClaims{
-		"user_id": userID, "username": "testuser", "rol": rol,
+		"user_id": userID, "username": "testuser", "rol": rol, "type": "access",
 		"exp": time.Now().Add(dur).Unix(), "iat": time.Now().Unix(),
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -155,7 +155,7 @@ func doLoginRequest(t *testing.T, svc service.AuthService, req dto.LoginRequest)
 func ginTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(middleware.JWTAuth(testSecret))
+	r.Use(middleware.JWTAuth(testSecret, nil))
 	r.GET("/protected", func(c *gin.Context) {
 		claims := middleware.GetClaims(c)
 		c.JSON(http.StatusOK, gin.H{"user_id": claims.UserID, "rol": claims.Rol})
@@ -171,7 +171,7 @@ func ginTestRouter() *gin.Engine {
 func TestLogin_Success(t *testing.T) {
 	repo := newStubRepo()
 	seedUser(t, repo, "admin", "password123", "administrador")
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	w := doLoginRequest(t, svc, dto.LoginRequest{Username: "admin", Password: "password123"})
 
@@ -187,7 +187,7 @@ func TestLogin_Success(t *testing.T) {
 func TestLogin_InvalidCredentials(t *testing.T) {
 	repo := newStubRepo()
 	seedUser(t, repo, "cajero1", "correctpass", "cajero")
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	w := doLoginRequest(t, svc, dto.LoginRequest{Username: "cajero1", Password: "wrongpass"})
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -195,7 +195,7 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 
 func TestLogin_UserNotFound(t *testing.T) {
 	repo := newStubRepo()
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	w := doLoginRequest(t, svc, dto.LoginRequest{Username: "noexiste", Password: "anypass123"})
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -204,7 +204,7 @@ func TestLogin_UserNotFound(t *testing.T) {
 func TestLogin_ShortPassword_Rejected(t *testing.T) {
 	// DTO validation: password must be >= 6 chars
 	repo := newStubRepo()
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	w := doLoginRequest(t, svc, dto.LoginRequest{Username: "u", Password: "12"})
 	// 422 Unprocessable Entity from bindAndValidate
@@ -216,7 +216,7 @@ func TestLogin_ShortPassword_Rejected(t *testing.T) {
 func TestRefresh_Success(t *testing.T) {
 	repo := newStubRepo()
 	u := seedUser(t, repo, "super1", "pass1234", "supervisor")
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	loginW := doLoginRequest(t, svc, dto.LoginRequest{Username: "super1", Password: "pass1234"})
 	assert.Equal(t, http.StatusOK, loginW.Code)
@@ -231,7 +231,7 @@ func TestRefresh_Success(t *testing.T) {
 
 func TestRefresh_InvalidToken(t *testing.T) {
 	repo := newStubRepo()
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	_, err := svc.Refresh(context.Background(), "this.is.garbage")
 	assert.Error(t, err)
@@ -240,7 +240,7 @@ func TestRefresh_InvalidToken(t *testing.T) {
 func TestRefresh_ExpiredToken(t *testing.T) {
 	repo := newStubRepo()
 	u := seedUser(t, repo, "cajero2", "pass12345", "cajero")
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	expired := signToken(t, u.ID.String(), "cajero", -1*time.Second)
 	_, err := svc.Refresh(context.Background(), expired)
@@ -305,7 +305,7 @@ func TestRequireRole_CorrectRole(t *testing.T) {
 
 func TestCrearUsuario_Success(t *testing.T) {
 	repo := newStubRepo()
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	resp, err := svc.CrearUsuario(context.Background(), dto.CrearUsuarioRequest{
 		Username: "nuevo", Nombre: "Nuevo User", Password: "securepass",
@@ -320,7 +320,7 @@ func TestListarUsuarios(t *testing.T) {
 	repo := newStubRepo()
 	seedUser(t, repo, "u1", "pass1234", "cajero")
 	seedUser(t, repo, "u2", "pass1234", "supervisor")
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	users, err := svc.ListarUsuarios(context.Background(), false)
 	assert.NoError(t, err)
@@ -330,7 +330,7 @@ func TestListarUsuarios(t *testing.T) {
 func TestDesactivarUsuario(t *testing.T) {
 	repo := newStubRepo()
 	u := seedUser(t, repo, "goodbye", "pass1234", "cajero")
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	err := svc.DesactivarUsuario(context.Background(), u.ID)
 	assert.NoError(t, err)
@@ -344,7 +344,7 @@ func TestDesactivarUsuario(t *testing.T) {
 func TestActualizarUsuario_Nombre(t *testing.T) {
 	repo := newStubRepo()
 	u := seedUser(t, repo, "johndoe", "pass12345", "cajero")
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	resp, err := svc.ActualizarUsuario(context.Background(), u.ID, dto.ActualizarUsuarioRequest{
 		Nombre: "John Updated",
@@ -357,7 +357,7 @@ func TestActualizarUsuario_Nombre(t *testing.T) {
 func TestActualizarUsuario_Rol(t *testing.T) {
 	repo := newStubRepo()
 	u := seedUser(t, repo, "promoted", "pass12345", "cajero")
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	resp, err := svc.ActualizarUsuario(context.Background(), u.ID, dto.ActualizarUsuarioRequest{
 		Rol: "supervisor",
@@ -369,7 +369,7 @@ func TestActualizarUsuario_Rol(t *testing.T) {
 func TestActualizarUsuario_CambiaPassword(t *testing.T) {
 	repo := newStubRepo()
 	u := seedUser(t, repo, "passchange", "oldpassword", "cajero")
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	_, err := svc.ActualizarUsuario(context.Background(), u.ID, dto.ActualizarUsuarioRequest{
 		Password: "newpassword1",
@@ -386,7 +386,7 @@ func TestActualizarUsuario_CambiaPassword(t *testing.T) {
 
 func TestActualizarUsuario_NoExiste(t *testing.T) {
 	repo := newStubRepo()
-	svc := service.NewAuthService(repo, newTestCfg())
+	svc := service.NewAuthService(repo, newTestCfg(), nil)
 
 	_, err := svc.ActualizarUsuario(context.Background(), uuid.New(), dto.ActualizarUsuarioRequest{
 		Nombre: "Ghost",
@@ -396,25 +396,26 @@ func TestActualizarUsuario_NoExiste(t *testing.T) {
 
 // ── Tests: LoginRateLimiter ───────────────────────────────────────────────────
 
-func TestLoginRateLimiter_BlocksAfterTwentyAttempts(t *testing.T) {
+func TestLoginRateLimiter_BlocksAfterFiveAttempts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.POST("/login", middleware.LoginRateLimiter(), func(c *gin.Context) {
+	r.POST("/login", middleware.LoginRateLimiter(nil), func(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, nil) // simulates failed login
 	})
 
-	for i := 1; i <= 20; i++ {
+	// H-02 reduced limit from 20 to 5 per minute.
+	for i := 1; i <= 5; i++ {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodPost, "/login", bytes.NewReader([]byte(`{}`)))
-		req.RemoteAddr = "10.0.0.2:1234" // same IP, unique so window is fresh
+		req.RemoteAddr = "10.0.0.99:1234" // unique IP so window is fresh
 		r.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusUnauthorized, w.Code, "attempt %d should pass the limiter", i)
 	}
 
-	// 21st attempt must be blocked
+	// 6th attempt must be blocked
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/login", bytes.NewReader([]byte(`{}`)))
-	req.RemoteAddr = "10.0.0.2:1234"
+	req.RemoteAddr = "10.0.0.99:1234"
 	r.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusTooManyRequests, w.Code, "21st attempt should be rate-limited")
+	assert.Equal(t, http.StatusTooManyRequests, w.Code, "6th attempt should be rate-limited")
 }

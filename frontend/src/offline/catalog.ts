@@ -119,19 +119,44 @@ export async function findCatalogProductByBarcode(barcode: string): Promise<Loca
     return byScan;
 }
 
-export async function searchCatalogProducts(query: string, limit = 200): Promise<LocalProduct[]> {
+export async function searchCatalogProducts(query: string, limit = 50): Promise<LocalProduct[]> {
     const q = query.trim().toLowerCase();
 
     if (!q) {
-        // Sin query: devolver solo productos con stock > 0
-        const all = await db.products.toArray();
-        return all.filter((p) => p.stock > 0).slice(0, limit);
+        // Sin query: devolver solo productos con stock > 0 (limited)
+        return db.products.filter((p) => p.stock > 0).limit(limit).toArray();
     }
 
-    const all = await db.products.toArray();
-    return all
-        .filter((p) => p.stock > 0 && (p.nombre.toLowerCase().includes(q) || p.codigoBarras.includes(query.trim())))
-        .slice(0, limit);
+    // Barcode exact match via index (fast path)
+    const barcode = query.trim();
+    if (/^\d{4,}$/.test(barcode)) {
+        const exact = await db.products.where('codigoBarras').equals(barcode).first();
+        if (exact && exact.stock > 0) return [exact];
+    }
+
+    // Name search: index-assisted startsWith + fallback contains filter
+    const startsWithResults = await db.products
+        .where('nombre')
+        .startsWithIgnoreCase(q)
+        .filter((p) => p.stock > 0)
+        .limit(limit)
+        .toArray();
+
+    if (startsWithResults.length >= limit) return startsWithResults;
+
+    // Fallback: substring match for names that don't start with query
+    const remaining = limit - startsWithResults.length;
+    const startsWithIds = new Set(startsWithResults.map((p) => p.id));
+    const containsResults = await db.products
+        .filter((p) =>
+            p.stock > 0 &&
+            !startsWithIds.has(p.id) &&
+            (p.nombre.toLowerCase().includes(q) || p.codigoBarras.includes(barcode))
+        )
+        .limit(remaining)
+        .toArray();
+
+    return [...startsWithResults, ...containsResults];
 }
 
 /** Obtiene el stock local actual de un producto en IndexedDB. */

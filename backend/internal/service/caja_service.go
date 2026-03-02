@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"blendpos/internal/dto"
@@ -52,6 +53,12 @@ func (s *cajaService) Abrir(ctx context.Context, usuarioID uuid.UUID, req dto.Ab
 		OpenedAt:     time.Now(),
 	}
 	if err := s.repo.CreateSesion(ctx, sesion); err != nil {
+		// H-01: The partial UNIQUE index uq_caja_abierta_por_punto catches any
+		// race condition where two concurrent requests both pass the guard above.
+		if strings.Contains(err.Error(), "uq_caja_abierta_por_punto") ||
+			strings.Contains(err.Error(), "duplicate key") {
+			return nil, errors.New("Ya existe una caja abierta en este punto de venta")
+		}
 		return nil, err
 	}
 

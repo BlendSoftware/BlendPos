@@ -16,7 +16,6 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { thermalPrinter } from '../services/ThermalPrinterService';
 import { enqueueSale, trySyncQueue } from '../offline/sync';
-import { forceRefreshCatalog } from '../offline/catalog';
 import { useCajaStore } from './useCajaStore';
 import { usePrinterStore } from './usePrinterStore';
 import { useCartStore, deductLocalStock } from './useCartStore';
@@ -113,12 +112,10 @@ export const useSaleStore = create<SaleState>()(
                     .then(() => trySyncQueue())
                     .catch(console.warn);
 
-                // 📦 Deduct local stock immediately
+                // 📦 Deduct local stock immediately (no full catalog refresh needed —
+                // periodic delta sync every 15min handles backend reconciliation)
                 deductLocalStock(cart.map((i) => ({ id: i.id, cantidad: i.cantidad })))
                     .catch(console.warn);
-
-                // Refresh catalog (updates real stock when online)
-                forceRefreshCatalog().catch(console.warn);
 
                 const nextHistorial = [record, ...historial].slice(0, MAX_HISTORIAL);
                 set({ historial: nextHistorial, ticketCounter: nextCounter });

@@ -25,13 +25,13 @@ type VentaService interface {
 }
 
 type ventaService struct {
-	repo             repository.VentaRepository
-	inventario        InventarioService
-	caja              CajaService
-	cajaRepo          repository.CajaRepository
-	productoRepo      repository.ProductoRepository
-	comprobanteRepo   repository.ComprobanteRepository
-	dispatcher        *worker.Dispatcher
+	repo            repository.VentaRepository
+	inventario      InventarioService
+	caja            CajaService
+	cajaRepo        repository.CajaRepository
+	productoRepo    repository.ProductoRepository
+	comprobanteRepo repository.ComprobanteRepository
+	dispatcher      *worker.Dispatcher
 }
 
 func NewVentaService(
@@ -44,13 +44,13 @@ func NewVentaService(
 	comprobanteRepo repository.ComprobanteRepository,
 ) VentaService {
 	return &ventaService{
-		repo:           repo,
-		inventario:     inventario,
-		caja:           caja,
-		cajaRepo:       cajaRepo,
-		productoRepo:   productoRepo,
+		repo:            repo,
+		inventario:      inventario,
+		caja:            caja,
+		cajaRepo:        cajaRepo,
+		productoRepo:    productoRepo,
 		comprobanteRepo: comprobanteRepo,
-		dispatcher:     dispatcher,
+		dispatcher:      dispatcher,
 	}
 }
 
@@ -126,8 +126,18 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 		}
 		if p.StockActual < item.Cantidad {
 			if !fromSync {
-				// Online sales: hard reject — stock insuficiente
-				return nil, fmt.Errorf("stock insuficiente para %s: disponible %d, solicitado %d", p.Nombre, p.StockActual, item.Cantidad)
+				// Online sales: check if auto-desarme can supply the deficit before rejecting.
+				canDesarme := false
+				if vinculo, vErr := s.productoRepo.FindVinculoByHijoID(ctx, pid); vErr == nil && vinculo.DesarmeAuto {
+					deficit := item.Cantidad - p.StockActual
+					padresNecesarios := (deficit + vinculo.UnidadesPorPadre - 1) / vinculo.UnidadesPorPadre
+					if padre, pErr := s.productoRepo.FindByID(ctx, vinculo.ProductoPadreID); pErr == nil {
+						canDesarme = padre.StockActual >= padresNecesarios
+					}
+				}
+				if !canDesarme {
+					return nil, fmt.Errorf("stock insuficiente para %s: disponible %d, solicitado %d", p.Nombre, p.StockActual, item.Cantidad)
+				}
 			}
 			conflictoStock = true
 		}
@@ -168,7 +178,8 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 	txErr := runTx(ctx, s.repo.DB(), func(tx *gorm.DB) error {
 		// Re-validate stock INSIDE the transaction with SELECT ... FOR UPDATE
 		// to prevent race conditions between concurrent POS terminals.
-		if !fromSync {
+		// Guard: skip when tx is nil (unit test mode without real DB).
+		if !fromSync && tx != nil {
 			for _, r := range resolved {
 				var stockActual int
 				row := tx.Raw("SELECT stock_actual FROM productos WHERE id = ? FOR UPDATE", r.productoID).Row()
@@ -332,12 +343,16 @@ func (s *ventaService) AnularVenta(ctx context.Context, id uuid.UUID, motivo str
 	}
 
 	txErr := runTx(ctx, s.repo.DB(), func(tx *gorm.DB) error {
-		// Restore stock for each item and record movimiento
+		// H-06: Restore stock for each item. Read stock INSIDE the transaction
+		// with FOR UPDATE to prevent phantom reads from concurrent operations.
 		for _, item := range venta.Items {
-			prodBefore, _ := s.productoRepo.FindByID(ctx, item.ProductoID)
-			stockAntes := 0
-			if prodBefore != nil {
-				stockAntes = prodBefore.StockActual
+			var stockAntes int
+			// Guard: skip FOR UPDATE when tx is nil (unit test mode without real DB).
+			if tx != nil {
+				row := tx.Raw("SELECT stock_actual FROM productos WHERE id = ? FOR UPDATE", item.ProductoID).Row()
+				if row != nil {
+					_ = row.Scan(&stockAntes)
+				}
 			}
 
 			if err := s.productoRepo.UpdateStockTx(tx, item.ProductoID, item.Cantidad); err != nil {

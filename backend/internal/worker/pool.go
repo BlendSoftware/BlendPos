@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"blendpos/internal/infra"
@@ -70,24 +71,36 @@ type WorkerPoolConfig struct {
 	EmailWorkers       int
 }
 
+// Pool holds references to the running worker goroutines and a WaitGroup
+// so the caller (main.go) can drain in-flight jobs during graceful shutdown.
+type Pool struct {
+	wg sync.WaitGroup
+}
+
+// Wait blocks until all in-flight jobs finish.
+func (p *Pool) Wait() { p.wg.Wait() }
+
 // StartWorkerPool launches dedicated goroutines per queue type.
 // This prevents email floods from starving facturacion workers and vice-versa.
 // handlers may be nil in test environments (jobs will be logged but not processed).
-func StartWorkerPool(ctx context.Context, rdb *redis.Client, handlers *WorkerHandlers, cfg WorkerPoolConfig) {
+// Returns a *Pool whose Wait() blocks until all in-flight jobs finish.
+func StartWorkerPool(ctx context.Context, rdb *redis.Client, handlers *WorkerHandlers, cfg WorkerPoolConfig) *Pool {
+	p := &Pool{}
 	for i := 0; i < cfg.FacturacionWorkers; i++ {
-		go runQueueWorker(ctx, rdb, handlers, QueueFacturacion, i)
+		go runQueueWorker(ctx, rdb, handlers, QueueFacturacion, i, &p.wg)
 	}
 	for i := 0; i < cfg.EmailWorkers; i++ {
-		go runQueueWorker(ctx, rdb, handlers, QueueEmail, i)
+		go runQueueWorker(ctx, rdb, handlers, QueueEmail, i, &p.wg)
 	}
 	log.Info().
 		Int("facturacion_workers", cfg.FacturacionWorkers).
 		Int("email_workers", cfg.EmailWorkers).
 		Msg("worker pool started with separated queues")
+	return p
 }
 
 // runQueueWorker is a dedicated goroutine that consumes jobs from a single queue.
-func runQueueWorker(ctx context.Context, rdb *redis.Client, handlers *WorkerHandlers, queue string, id int) {
+func runQueueWorker(ctx context.Context, rdb *redis.Client, handlers *WorkerHandlers, queue string, id int, wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -102,7 +115,9 @@ func runQueueWorker(ctx context.Context, rdb *redis.Client, handlers *WorkerHand
 			if len(result) < 2 {
 				continue
 			}
+			wg.Add(1)
 			processJob(ctx, handlers, rdb, result[0], result[1])
+			wg.Done()
 		}
 	}
 }

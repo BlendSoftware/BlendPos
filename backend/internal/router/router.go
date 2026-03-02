@@ -10,7 +10,6 @@ import (
 	"blendpos/internal/middleware"
 	"blendpos/internal/repository"
 	"blendpos/internal/service"
-	"blendpos/internal/worker"
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -21,9 +20,37 @@ import (
 	"gorm.io/gorm"
 )
 
-// New wires all dependencies and returns a configured Gin engine.
-// Dependency graph: Handler ← Service ← Repository ← DB/Redis
-func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.CircuitBreaker) *gin.Engine {
+// Deps bundles every dependency the router needs.
+// All repositories, services and infrastructure are created in main.go
+// (the sole composition root) and injected here.
+type Deps struct {
+	Cfg    *config.Config
+	DB     *gorm.DB
+	RDB    *redis.Client
+	AfipCB *infra.CircuitBreaker
+
+	// Services
+	AuthSvc        service.AuthService
+	ProductoSvc    service.ProductoService
+	InventarioSvc  service.InventarioService
+	VentaSvc       service.VentaService
+	CajaSvc        service.CajaService
+	FacturacionSvc service.FacturacionService
+	ProveedorSvc   service.ProveedorService
+	CategoriaSvc   service.CategoriaService
+	AuditSvc       service.AuditService
+
+	// Repos still needed by handlers that bypass the service layer
+	ProductoRepo        repository.ProductoRepository
+	HistorialPrecioRepo repository.HistorialPrecioRepository
+	AuditRepo           repository.AuditRepository
+}
+
+// New wires handlers and registers routes. It does NOT create infrastructure,
+// repositories or services — that is the responsibility of main.go (S-05).
+func New(d Deps) *gin.Engine {
+	cfg := d.Cfg
+
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -31,6 +58,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 	r := gin.New()
 
 	// Global middleware chain (order matters)
+	r.Use(middleware.MaxBodySize(10 << 20))   // 10 MB default body limit (S-07)
 	r.Use(gzip.Gzip(gzip.DefaultCompression)) // 7.5 — compress JSON responses (saves ~70% on product lists)
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger())
@@ -40,73 +68,46 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.GlobalTimeout(30 * time.Second))
 	r.Use(middleware.ErrorHandler())
-	r.Use(middleware.RateLimiter(rdb, 1000, time.Minute)) // 1000 req/min per IP (Redis-backed)
-
-	// ── Infrastructure ───────────────────────────────────────────────────────
-	afipClient := infra.NewAFIPClient(cfg.AFIPSidecarURL, cfg.InternalAPIToken)
-	mailer := infra.NewMailer(cfg)
-
-	// ── Repositories ─────────────────────────────────────────────────────────
-	usuarioRepo := repository.NewUsuarioRepository(db)
-	productoRepo := repository.NewProductoRepository(db)
-	ventaRepo := repository.NewVentaRepository(db)
-	cajaRepo := repository.NewCajaRepository(db)
-	comprobanteRepo := repository.NewComprobanteRepository(db)
-	proveedorRepo := repository.NewProveedorRepository(db)
-	historialPrecioRepo := repository.NewHistorialPrecioRepository(db)
-	movimientoStockRepo := repository.NewMovimientoStockRepository(db)
-	categoriaRepo := repository.NewCategoriaRepository(db)
-
-	// ── Services ─────────────────────────────────────────────────────────────
-	authSvc := service.NewAuthService(usuarioRepo, cfg, rdb)
-	productoSvc := service.NewProductoService(productoRepo, movimientoStockRepo, categoriaRepo, rdb)
-	inventarioSvc := service.NewInventarioService(productoRepo, movimientoStockRepo)
-	cajaSvc := service.NewCajaService(cajaRepo)
-
-	// Worker dispatcher — injected into services that enqueue async jobs
-	dispatcher := worker.NewDispatcher(rdb, afipClient, mailer)
-
-	ventaSvc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, dispatcher, comprobanteRepo)
-	facturacionSvc := service.NewFacturacionService(comprobanteRepo, dispatcher)
-	proveedorSvc := service.NewProveedorService(proveedorRepo, productoRepo)
-	categoriaSvc := service.NewCategoriaService(categoriaRepo)
+	r.Use(middleware.RateLimiter(d.RDB, 1000, time.Minute)) // 1000 req/min per IP (Redis-backed)
 
 	// ── Handlers ─────────────────────────────────────────────────────────────
-	authH := handler.NewAuthHandler(authSvc)
-	productosH := handler.NewProductosHandler(productoSvc)
-	inventarioH := handler.NewInventarioHandler(inventarioSvc)
-	ventasH := handler.NewVentasHandler(ventaSvc)
-	cajaH := handler.NewCajaHandler(cajaSvc)
-	facturacionH := handler.NewFacturacionHandler(facturacionSvc)
-	proveedoresH := handler.NewProveedoresHandler(proveedorSvc)
-	usuariosH := handler.NewUsuariosHandler(authSvc)
-	consultaH := handler.NewConsultaPreciosHandler(productoRepo, rdb)
-	historialPreciosH := handler.NewHistorialPreciosHandler(historialPrecioRepo)
-	categoriasH := handler.NewCategoriasHandler(categoriaSvc)
+	authH := handler.NewAuthHandler(d.AuthSvc)
+	productosH := handler.NewProductosHandler(d.ProductoSvc)
+	inventarioH := handler.NewInventarioHandler(d.InventarioSvc)
+	ventasH := handler.NewVentasHandler(d.VentaSvc)
+	cajaH := handler.NewCajaHandler(d.CajaSvc)
+	facturacionH := handler.NewFacturacionHandler(d.FacturacionSvc, cfg.PDFStoragePath)
+	proveedoresH := handler.NewProveedoresHandler(d.ProveedorSvc)
+	usuariosH := handler.NewUsuariosHandler(d.AuthSvc)
+	consultaH := handler.NewConsultaPreciosHandler(d.ProductoRepo, d.RDB)
+	historialPreciosH := handler.NewHistorialPreciosHandler(d.HistorialPrecioRepo)
+	categoriasH := handler.NewCategoriasHandler(d.CategoriaSvc)
+	auditH := handler.NewAuditHandler(d.AuditRepo)
 
 	// ── Routes ───────────────────────────────────────────────────────────────
 
 	// Public
-	r.GET("/health", handler.Health(db, rdb, afipCB))
+	r.GET("/health", handler.Health(d.DB, d.RDB, d.AfipCB))
 
 	// Auth (public)
 	auth := r.Group("/v1/auth")
 	{
-		auth.POST("/login", middleware.LoginRateLimiter(rdb), authH.Login)
-		auth.POST("/refresh", authH.Refresh)
+		auth.POST("/login", middleware.LoginRateLimiter(d.RDB), authH.Login)
+		auth.POST("/refresh", middleware.RefreshRateLimiter(d.RDB), authH.Refresh)
 	}
 
 	// Price check — no auth required (RF-27)
 	// Dedicated rate limit: 60 req/min per IP to prevent catalog scraping.
-	r.GET("/v1/precio/:barcode", middleware.RateLimiter(rdb, 60, time.Minute), consultaH.GetPrecioPorBarcode)
+	r.GET("/v1/precio/:barcode", middleware.RateLimiter(d.RDB, 60, time.Minute), consultaH.GetPrecioPorBarcode)
 
 	// Protected routes
-	jwtMW := middleware.JWTAuth(cfg.JWTSecret, rdb)
+	jwtMW := middleware.JWTAuth(cfg.JWTSecret, d.RDB)
 
 	// Authenticated logout — requires a valid (non-revoked) token
 	auth.POST("/logout", jwtMW, authH.Logout)
 
 	v1 := r.Group("/v1", jwtMW)
+	v1.Use(middleware.AuditMiddleware(d.AuditSvc))
 	{
 		// Roles: cajero, supervisor, administrador — declared per-endpoint
 		v1.POST("/ventas", middleware.RequireRole("cajero", "supervisor", "administrador"), ventasH.RegistrarVenta)
@@ -187,6 +188,9 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, afipCB *infra.Circu
 			categorias.PUT("/:id", categoriasH.Actualizar)
 			categorias.DELETE("/:id", categoriasH.Desactivar)
 		}
+
+		// Audit log — read-only, admin only (Q-03)
+		v1.GET("/audit", middleware.RequireRole("administrador"), auditH.List)
 	}
 
 	// Swagger UI — only enabled outside production

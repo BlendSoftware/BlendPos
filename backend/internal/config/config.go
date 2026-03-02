@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/spf13/viper"
 )
 
@@ -8,11 +10,11 @@ import (
 // Every field maps 1:1 to a documented env var (see arquitectura.md §11.3).
 type Config struct {
 	// Server
-	Port           int    `mapstructure:"PORT"`
-	Env            string `mapstructure:"APP_ENV"` // development | production
-	WorkerPoolSize      int    `mapstructure:"WORKER_POOL_SIZE"`
-	FacturacionWorkers  int    `mapstructure:"FACTURACION_WORKERS"`
-	EmailWorkers        int    `mapstructure:"EMAIL_WORKERS"`
+	Port               int    `mapstructure:"PORT"`
+	Env                string `mapstructure:"APP_ENV"` // development | production
+	WorkerPoolSize     int    `mapstructure:"WORKER_POOL_SIZE"`
+	FacturacionWorkers int    `mapstructure:"FACTURACION_WORKERS"`
+	EmailWorkers       int    `mapstructure:"EMAIL_WORKERS"`
 
 	// Database
 	DatabaseURL string `mapstructure:"DATABASE_URL"`
@@ -30,8 +32,8 @@ type Config struct {
 	AllowedOrigins string `mapstructure:"ALLOWED_ORIGINS"`
 
 	// AFIP Sidecar
-	AFIPSidecarURL  string `mapstructure:"AFIP_SIDECAR_URL"`
-	AFIPCUITEmisor  string `mapstructure:"AFIP_CUIT_EMISOR"`
+	AFIPSidecarURL string `mapstructure:"AFIP_SIDECAR_URL"`
+	AFIPCUITEmisor string `mapstructure:"AFIP_CUIT_EMISOR"`
 	// InternalAPIToken authenticates Go backend → AFIP Sidecar calls.
 	// Must match INTERNAL_API_TOKEN in the sidecar container.
 	InternalAPIToken string `mapstructure:"INTERNAL_API_TOKEN"`
@@ -48,6 +50,7 @@ type Config struct {
 }
 
 // Load reads configuration from environment variables (and optional .env file).
+// It validates critical security settings and returns an error if they are not met.
 func Load() (*Config, error) {
 	viper.SetConfigName(".env")
 	viper.SetConfigType("env")
@@ -70,6 +73,18 @@ func Load() (*Config, error) {
 	viper.SetDefault("DATABASE_URL", "postgres://blendpos:blendpos@localhost:5432/blendpos?sslmode=disable")
 	viper.SetDefault("REDIS_URL", "redis://localhost:6379/0")
 
+	// Register keys without defaults so AutomaticEnv picks them up during Unmarshal.
+	// viper only checks env vars for keys it already knows about; calling SetDefault("")
+	// or BindEnv is required when no default value exists.
+	_ = viper.BindEnv("JWT_SECRET")
+	_ = viper.BindEnv("DATABASE_URL")
+	_ = viper.BindEnv("REDIS_URL")
+	_ = viper.BindEnv("AFIP_CUIT_EMISOR")
+	_ = viper.BindEnv("INTERNAL_API_TOKEN")
+	_ = viper.BindEnv("SMTP_HOST")
+	_ = viper.BindEnv("SMTP_USER")
+	_ = viper.BindEnv("SMTP_PASSWORD")
+
 	// Optional .env file for local development — does not fail if missing
 	_ = viper.ReadInConfig()
 
@@ -77,5 +92,21 @@ func Load() (*Config, error) {
 	if err := viper.Unmarshal(cfg); err != nil {
 		return nil, err
 	}
+
+	// ── Security validations ─────────────────────────────────────────────
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
+}
+
+// validate checks critical security invariants that must hold before the
+// server is allowed to start.
+func (c *Config) validate() error {
+	if len(c.JWTSecret) < 32 {
+		return fmt.Errorf("FATAL: JWT_SECRET must be at least 32 characters long (got %d). "+
+			"Generate one with: openssl rand -hex 32", len(c.JWTSecret))
+	}
+	return nil
 }

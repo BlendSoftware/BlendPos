@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Center, Loader } from '@mantine/core';
 
 // Error boundary
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { RouteErrorBoundary } from './components/RouteErrorBoundary';
 
 // Auth
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
@@ -11,22 +13,26 @@ import { useAuthStore } from './store/useAuthStore';
 // Layouts
 import { AdminLayout } from './layouts/AdminLayout';
 
-// Páginas públicas / auth
+// Páginas públicas / auth — se cargan siempre, son críticas
 import { LoginPage } from './pages/admin/LoginPage';
 import { ConsultaPreciosPage } from './pages/admin/ConsultaPreciosPage';
 
-// POS Terminal (ya existente)
+// POS Terminal — siempre cargado (ruta principal del cajero)
 import { PosTerminal } from './pages/PosTerminal';
 
-// Admin pages
-import { DashboardPage }        from './pages/admin/DashboardPage';
-import { GestionProductosPage } from './pages/admin/GestionProductosPage';
-import { InventarioPage }        from './pages/admin/InventarioPage';
-import { ProveedoresPage }       from './pages/admin/ProveedoresPage';
-import { FacturacionPage }       from './pages/admin/FacturacionPage';
-import { CierreCajaPage }        from './pages/admin/CierreCajaPage';
-import { UsuariosPage }          from './pages/admin/UsuariosPage';
-import { CategoriasPage }        from './pages/admin/CategoriasPage';
+// Admin pages — lazy loaded (solo se descargan al navegar)
+const DashboardPage        = lazy(() => import('./pages/admin/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const GestionProductosPage = lazy(() => import('./pages/admin/GestionProductosPage').then(m => ({ default: m.GestionProductosPage })));
+const InventarioPage       = lazy(() => import('./pages/admin/InventarioPage').then(m => ({ default: m.InventarioPage })));
+const ProveedoresPage      = lazy(() => import('./pages/admin/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })));
+const FacturacionPage      = lazy(() => import('./pages/admin/FacturacionPage').then(m => ({ default: m.FacturacionPage })));
+const CierreCajaPage       = lazy(() => import('./pages/admin/CierreCajaPage').then(m => ({ default: m.CierreCajaPage })));
+const UsuariosPage         = lazy(() => import('./pages/admin/UsuariosPage').then(m => ({ default: m.UsuariosPage })));
+const CategoriasPage       = lazy(() => import('./pages/admin/CategoriasPage').then(m => ({ default: m.CategoriasPage })));
+
+function LoadingSpinner() {
+    return <Center h="100vh"><Loader size="xl" /></Center>;
+}
 
 function App() {
     // On mount, attempt a silent token refresh so the user stays logged in
@@ -62,20 +68,66 @@ function App() {
                         }
                     >
                         <Route index element={<Navigate to="/admin/dashboard" replace />} />
-                        <Route path="dashboard"   element={<DashboardPage />} />
-                        <Route path="productos"   element={<GestionProductosPage />} />
-                        <Route path="inventario"  element={<InventarioPage />} />
-                        <Route path="proveedores" element={<ProveedoresPage />} />
-                        <Route path="categorias"  element={<CategoriasPage />} />
-                        <Route path="facturacion" element={<FacturacionPage />} />
-                        <Route path="cierre-caja" element={<CierreCajaPage />} />
+                        <Route path="dashboard" element={
+                            <RouteErrorBoundary>
+                                <Suspense fallback={<LoadingSpinner />}>
+                                    <DashboardPage />
+                                </Suspense>
+                            </RouteErrorBoundary>
+                        } />
+                        <Route path="productos" element={
+                            <RouteErrorBoundary>
+                                <Suspense fallback={<LoadingSpinner />}>
+                                    <GestionProductosPage />
+                                </Suspense>
+                            </RouteErrorBoundary>
+                        } />
+                        <Route path="inventario" element={
+                            <RouteErrorBoundary>
+                                <Suspense fallback={<LoadingSpinner />}>
+                                    <InventarioPage />
+                                </Suspense>
+                            </RouteErrorBoundary>
+                        } />
+                        <Route path="proveedores" element={
+                            <RouteErrorBoundary>
+                                <Suspense fallback={<LoadingSpinner />}>
+                                    <ProveedoresPage />
+                                </Suspense>
+                            </RouteErrorBoundary>
+                        } />
+                        <Route path="categorias" element={
+                            <RouteErrorBoundary>
+                                <Suspense fallback={<LoadingSpinner />}>
+                                    <CategoriasPage />
+                                </Suspense>
+                            </RouteErrorBoundary>
+                        } />
+                        <Route path="facturacion" element={
+                            <RouteErrorBoundary>
+                                <Suspense fallback={<LoadingSpinner />}>
+                                    <FacturacionPage />
+                                </Suspense>
+                            </RouteErrorBoundary>
+                        } />
+                        <Route path="cierre-caja" element={
+                            <RouteErrorBoundary>
+                                <Suspense fallback={<LoadingSpinner />}>
+                                    <CierreCajaPage />
+                                </Suspense>
+                            </RouteErrorBoundary>
+                        } />
 
                         {/* Solo admin y supervisor */}
                         <Route
                             path="usuarios"
                             element={
                                 <ProtectedRoute roles={['admin', 'supervisor']}>
-                                    <UsuariosPage />
+                                    <RouteErrorBoundary>
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                            <UsuariosPage />
+                                        </Suspense>
+                                    </RouteErrorBoundary>
                                 </ProtectedRoute>
                             }
                         />

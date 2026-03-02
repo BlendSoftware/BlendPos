@@ -1,4 +1,4 @@
-﻿package tests
+package tests
 
 // facturacion_test.go
 // Tests for Phase 5: facturacion_service, PDF generation, worker retry logic.
@@ -6,7 +6,7 @@
 //   - T-5.1: PDF generado con gofpdf, layout completo (AC-06.3)
 //   - T-5.2: Worker encula POST a AFIP Sidecar con retry, CAE almacenado, venta no bloqueada
 //   - AC-06.4: ObtenerPDFPath retorna ruta del PDF generado
-//   - AC-06.2: AFIP falla → estado "pendiente", observaciones registradas
+//   - AC-06.2: AFIP falla ? estado "pendiente", observaciones registradas
 
 import (
 	"context"
@@ -32,7 +32,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// ── In-memory ComprobanteRepository stub ─────────────────────────────────────
+// -- In-memory ComprobanteRepository stub -------------------------------------
 
 type stubComprobanteRepo struct {
 	comprobantes map[uuid.UUID]*model.Comprobante
@@ -96,7 +96,7 @@ func (r *stubComprobanteRepo) ListPendingRetries(_ context.Context, _ time.Time,
 // compile-time interface check
 var _ repository.ComprobanteRepository = (*stubComprobanteRepo)(nil)
 
-// ── In-memory VentaRepository stub (minimal for facturacion worker) ───────────
+// -- In-memory VentaRepository stub (minimal for facturacion worker) -----------
 
 type stubVentaRepoFacturacion struct {
 	ventas map[uuid.UUID]*model.Venta
@@ -146,7 +146,7 @@ func (r *stubVentaRepoFacturacion) DB() *gorm.DB { return nil }
 // compile-time interface check
 var _ repository.VentaRepository = (*stubVentaRepoFacturacion)(nil)
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// -- helpers -------------------------------------------------------------------
 
 func buildVentaConItems() *model.Venta {
 	producto := &model.Producto{
@@ -188,7 +188,7 @@ func mustJSON(v interface{}) json.RawMessage {
 	return b
 }
 
-// ── FacturacionService tests ──────────────────────────────────────────────────
+// -- FacturacionService tests --------------------------------------------------
 
 func TestObtenerComprobante_Existente(t *testing.T) {
 	repo := newStubComprobanteRepo()
@@ -260,7 +260,7 @@ func TestObtenerPDFPath_NoPDF(t *testing.T) {
 	assert.True(t, strings.Contains(strings.ToLower(err.Error()), "pdf no disponible"))
 }
 
-// ── PDF Generation tests (AC-06.3) ───────────────────────────────────────────
+// -- PDF Generation tests (AC-06.3) -------------------------------------------
 
 func TestGenerateTicketPDF_Exitoso(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -301,7 +301,7 @@ func TestGenerateTicketPDF_ConDescuento(t *testing.T) {
 	assert.NoError(t, statErr)
 }
 
-// ── FacturacionWorker tests (AC-06.2, AC-06.3, RF-19) ────────────────────────
+// -- FacturacionWorker tests (AC-06.2, AC-06.3, RF-19) ------------------------
 
 func TestFacturacionWorker_AFIPFalla_EstadoPendiente(t *testing.T) {
 	// Given: AFIP sidecar unreachable
@@ -313,7 +313,7 @@ func TestFacturacionWorker_AFIPFalla_EstadoPendiente(t *testing.T) {
 	ventaRepo.ventas[venta.ID] = venta
 
 	// Use client pointing to a port nothing listens on
-	afipClient := infra.NewAFIPClient("http://localhost:19999")
+	afipClient := infra.NewAFIPClient("http://localhost:19999", "")
 	cb := infra.NewCircuitBreaker(infra.DefaultCBConfig())
 	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, tmpDir, "")
 
@@ -337,7 +337,7 @@ func TestFacturacionWorker_GeneraPDF_AunSinAFIP(t *testing.T) {
 	venta := buildVentaConItems()
 	ventaRepo.ventas[venta.ID] = venta
 
-	afipClient := infra.NewAFIPClient("http://localhost:19999")
+	afipClient := infra.NewAFIPClient("http://localhost:19999", "")
 	cb := infra.NewCircuitBreaker(infra.DefaultCBConfig())
 	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, tmpDir, "")
 	w.Process(context.Background(), mustJSON(worker.FacturacionJobPayload{VentaID: venta.ID.String()}))
@@ -356,7 +356,7 @@ func TestFacturacionWorker_VentaIDInvalido_NoPanic(t *testing.T) {
 	comprobanteRepo := newStubComprobanteRepo()
 	ventaRepo := newStubVentaRepoFacturacion()
 
-	afipClient := infra.NewAFIPClient("http://localhost:19999")
+	afipClient := infra.NewAFIPClient("http://localhost:19999", "")
 	cb := infra.NewCircuitBreaker(infra.DefaultCBConfig())
 	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, t.TempDir(), "")
 

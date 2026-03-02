@@ -44,6 +44,8 @@ func (h *VentasHandler) RegistrarVenta(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, apierror.New(err2.Error()))
 		return
 	}
+	ventaID, _ := uuid.Parse(resp.ID)
+	middleware.AuditLog(c, "create", "venta", &ventaID, map[string]interface{}{"total": resp.Total, "items": len(req.Items)})
 	c.JSON(http.StatusCreated, resp)
 }
 
@@ -73,6 +75,7 @@ func (h *VentasHandler) AnularVenta(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
 		return
 	}
+	middleware.AuditLog(c, "anular", "venta", &id, map[string]interface{}{"motivo": req.Motivo})
 	c.Status(http.StatusNoContent)
 }
 

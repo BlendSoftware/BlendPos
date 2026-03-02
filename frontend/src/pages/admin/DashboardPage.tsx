@@ -1,15 +1,15 @@
 import {
     SimpleGrid, Paper, Text, Title, Group, Stack, Badge,
-    Skeleton, Table, ThemeIcon, Divider, Center,
+    Skeleton, Table, ThemeIcon, Divider, Center, ActionIcon, Tooltip,
 } from '@mantine/core';
 import { AreaChart, BarChart, DonutChart } from '@mantine/charts';
 import {
     TrendingUp, ShoppingCart, Package, AlertTriangle,
-    CheckCircle, CreditCard, Banknote, QrCode, Landmark,
+    CheckCircle, CreditCard, Banknote, QrCode, Landmark, RefreshCw,
 } from 'lucide-react';
 import { formatARS } from '../../utils/format';
 import styles from './DashboardPage.module.css';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSaleStore } from '../../store/useSaleStore';
 import { getAlertasStock } from '../../services/api/inventario';
 import type { AlertaStockResponse } from '../../services/api/inventario';
@@ -66,27 +66,38 @@ function KpiCard({ label, value, sub, icon, color }: {
 
 export function DashboardPage() {
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
     const [alertas, setAlertas] = useState<AlertaStockResponse[]>([]);
     const [apiVentas, setApiVentas] = useState<VentaListItem[]>([]);
 
     const historial = useSaleStore((s) => s.historial);
 
-    useEffect(() => {
+    const fetchDashboardData = useCallback(async (showSpinner = false) => {
+        if (showSpinner) setRefreshing(true);
         const today = new Date().toLocaleDateString('en-CA');
-        // Recover sales that were silently lost (marked synced but not in backend),
-        // then flush pending offline sales before loading dashboard data.
-        recoverLostSales()
-            .then(() => trySyncQueue())
-            .catch(() => {})
-            .finally(() => {
-            Promise.allSettled([
+        try {
+            await recoverLostSales().then(() => trySyncQueue()).catch(() => {});
+            const [alertasRes, ventasRes] = await Promise.allSettled([
                 getAlertasStock(),
                 listarVentas({ fecha: today, estado: 'completada', limit: 200 }),
-            ]).then(([alertasRes, ventasRes]) => {
-                if (alertasRes.status === 'fulfilled') setAlertas(alertasRes.value);
-                if (ventasRes.status === 'fulfilled') setApiVentas(ventasRes.value.data);
-            }).finally(() => setLoading(false));
-        });
+            ]);
+            if (alertasRes.status === 'fulfilled') setAlertas(alertasRes.value);
+            if (ventasRes.status === 'fulfilled') setApiVentas(ventasRes.value.data);
+            setLastRefresh(new Date());
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
+
+    // Initial load + auto-refresh every 60 seconds
+    const fetchRef = useRef(fetchDashboardData);
+    fetchRef.current = fetchDashboardData;
+    useEffect(() => {
+        fetchRef.current(false);
+        const interval = setInterval(() => fetchRef.current(false), 60_000);
+        return () => clearInterval(interval);
     }, []);
 
     const hoyKey = new Date().toLocaleDateString('en-CA');
@@ -170,14 +181,35 @@ export function DashboardPage() {
     return (
         <Stack gap="xl">
             {/* Header */}
-            <div>
-                <Title order={2} fw={800}>Dashboard</Title>
-                <Text c="dimmed" size="sm">
-                    {new Date().toLocaleDateString('es-AR', {
-                        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-                    })}
-                </Text>
-            </div>
+            <Group justify="space-between" align="flex-end">
+                <div>
+                    <Title order={2} fw={800}>Dashboard</Title>
+                    <Text c="dimmed" size="sm">
+                        {new Date().toLocaleDateString('es-AR', {
+                            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+                        })}
+                    </Text>
+                </div>
+                <Group gap="xs" align="center">
+                    {lastRefresh && (
+                        <Text size="xs" c="dimmed">
+                            Actualizado: {lastRefresh.toLocaleTimeString('es-AR')}
+                        </Text>
+                    )}
+                    <Tooltip label="Actualizar datos">
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="lg"
+                            onClick={() => fetchDashboardData(true)}
+                            loading={refreshing}
+                            aria-label="Actualizar dashboard"
+                        >
+                            <RefreshCw size={18} />
+                        </ActionIcon>
+                    </Tooltip>
+                </Group>
+            </Group>
 
             {/* KPI row */}
             {loading ? (

@@ -30,6 +30,7 @@ import (
 	"blendpos/internal/infra"
 	"blendpos/internal/repository"
 	"blendpos/internal/router"
+	"blendpos/internal/service"
 	"blendpos/internal/worker"
 
 	"github.com/rs/zerolog"
@@ -37,12 +38,30 @@ import (
 )
 
 func main() {
-	// Structured logger — dev: pretty, prod: JSON
+	// ── H-03: Configure logger based on environment ─────────────────────
+	// Preliminary console logger until config is loaded.
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to load config")
+	}
+
+	// Now reconfigure the global logger according to APP_ENV.
+	if cfg.Env == "development" {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		log.Logger = zerolog.New(zerolog.ConsoleWriter{
+			Out:        os.Stderr,
+			TimeFormat: time.Kitchen,
+		}).With().Timestamp().Caller().Logger()
+	} else {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		log.Logger = zerolog.New(os.Stderr).
+			With().
+			Timestamp().
+			Str("service", "blendpos-backend").
+			Str("env", cfg.Env).
+			Logger()
 	}
 
 	db, err := infra.NewDatabase(cfg.DatabaseURL)
@@ -67,8 +86,29 @@ func main() {
 	afipClient := infra.NewAFIPClient(cfg.AFIPSidecarURL, cfg.InternalAPIToken)
 	mailer := infra.NewMailer(cfg)
 	dispatcher := worker.NewDispatcher(rdb, afipClient, mailer)
+
+	// ── Repositories (single instances, shared by workers + HTTP handlers) ──
 	comprobanteRepo := repository.NewComprobanteRepository(db)
 	ventaRepo := repository.NewVentaRepository(db)
+	usuarioRepo := repository.NewUsuarioRepository(db)
+	productoRepo := repository.NewProductoRepository(db)
+	cajaRepo := repository.NewCajaRepository(db)
+	proveedorRepo := repository.NewProveedorRepository(db)
+	historialPrecioRepo := repository.NewHistorialPrecioRepository(db)
+	movimientoStockRepo := repository.NewMovimientoStockRepository(db)
+	categoriaRepo := repository.NewCategoriaRepository(db)
+	auditRepo := repository.NewAuditRepository(db)
+
+	// ── Services ─────────────────────────────────────────────────────────────
+	authSvc := service.NewAuthService(usuarioRepo, cfg, rdb)
+	productoSvc := service.NewProductoService(productoRepo, movimientoStockRepo, categoriaRepo, rdb)
+	inventarioSvc := service.NewInventarioService(productoRepo, movimientoStockRepo)
+	cajaSvc := service.NewCajaService(cajaRepo)
+	ventaSvc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, dispatcher, comprobanteRepo)
+	facturacionSvc := service.NewFacturacionService(comprobanteRepo, dispatcher)
+	proveedorSvc := service.NewProveedorService(proveedorRepo, productoRepo)
+	categoriaSvc := service.NewCategoriaService(categoriaRepo)
+	auditSvc := service.NewAuditService(auditRepo)
 
 	workerHandlers := &worker.WorkerHandlers{
 		Facturacion: worker.NewFacturacionWorker(afipClient, afipCB, comprobanteRepo, ventaRepo, dispatcher, cfg.PDFStoragePath, cfg.AFIPCUITEmisor),
@@ -84,7 +124,7 @@ func main() {
 	if emailWorkers <= 0 {
 		emailWorkers = cfg.WorkerPoolSize
 	}
-	worker.StartWorkerPool(ctx, rdb, workerHandlers, worker.WorkerPoolConfig{
+	workerPool := worker.StartWorkerPool(ctx, rdb, workerHandlers, worker.WorkerPoolConfig{
 		FacturacionWorkers: facWorkers,
 		EmailWorkers:       emailWorkers,
 	})
@@ -98,7 +138,24 @@ func main() {
 		CUITEmisor:      cfg.AFIPCUITEmisor,
 	})
 
-	r := router.New(cfg, db, rdb, afipCB)
+	r := router.New(router.Deps{
+		Cfg:                 cfg,
+		DB:                  db,
+		RDB:                 rdb,
+		AfipCB:              afipCB,
+		AuthSvc:             authSvc,
+		ProductoSvc:         productoSvc,
+		InventarioSvc:       inventarioSvc,
+		VentaSvc:            ventaSvc,
+		CajaSvc:             cajaSvc,
+		FacturacionSvc:      facturacionSvc,
+		ProveedorSvc:        proveedorSvc,
+		CategoriaSvc:        categoriaSvc,
+		AuditSvc:            auditSvc,
+		ProductoRepo:        productoRepo,
+		HistorialPrecioRepo: historialPrecioRepo,
+		AuditRepo:           auditRepo,
+	})
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
@@ -120,11 +177,38 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Info().Msg("shutting down server…")
+	log.Info().Msg("shutting down — draining workers…")
+
+	// 1. Cancel worker context so they stop picking up new jobs.
+	cancel()
+
+	// 2. Wait for in-flight jobs to finish (max 30s).
+	workerDone := make(chan struct{})
+	go func() {
+		workerPool.Wait()
+		close(workerDone)
+	}()
+
+	select {
+	case <-workerDone:
+		log.Info().Msg("all workers finished gracefully")
+	case <-time.After(30 * time.Second):
+		log.Warn().Msg("timeout waiting for workers — forcing shutdown")
+	}
+
+	// 3. Shutdown HTTP server.
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatal().Err(err).Msg("forced shutdown")
 	}
+
+	// 4. Close infrastructure connections.
+	sqlDB, _ := db.DB()
+	if sqlDB != nil {
+		_ = sqlDB.Close()
+	}
+	_ = rdb.Close()
+
 	log.Info().Msg("server exited")
 }

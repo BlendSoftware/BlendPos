@@ -3,6 +3,7 @@ import {
     Stack, Title, Text, Group, Button, TextInput, Select, Badge,
     Table, ActionIcon, Tooltip, Modal, NumberInput, Textarea,
     Switch, Skeleton, Paper, Divider, Alert, UnstyledButton, Checkbox,
+    Pagination,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
@@ -83,6 +84,10 @@ export function GestionProductosPage() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
+
+    // ── Pagination ────────────────────────────────────────────────────────
+    const ROWS_PER_PAGE = 50;
+    const [currentPage, setCurrentPage] = useState(1);
 
     const toggleSelect = (id: string) =>
         setSelectedIds((prev) => {
@@ -176,6 +181,15 @@ export function GestionProductosPage() {
             return 0;
         });
     }, [productos, busqueda, filtroCategoria, filtroEstado, mostrarInactivos, sortBy, sortDir]);
+
+    // Reset page when filters change
+    useEffect(() => { setCurrentPage(1); }, [busqueda, filtroCategoria, filtroEstado, mostrarInactivos, sortBy, sortDir]);
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
+    const paginatedRows = useMemo(
+        () => filtered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE),
+        [filtered, currentPage]
+    );
 
     const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
     const toggleSelectAll = () => {
@@ -470,14 +484,14 @@ export function GestionProductosPage() {
                             </Table.Tr>
                         </Table.Thead>
                         <Table.Tbody>
-                            {filtered.length === 0 ? (
+                            {paginatedRows.length === 0 ? (
                                 <Table.Tr>
                                     <Table.Td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: 'var(--mantine-color-dimmed)' }}>
                                         Sin resultados
                                     </Table.Td>
                                 </Table.Tr>
                             ) : (
-                                filtered.map((p) => (
+                                paginatedRows.map((p) => (
                                     <Table.Tr key={p.id} style={{ opacity: p.activo ? 1 : 0.5 }}>
                                         <Table.Td onClick={(e) => e.stopPropagation()}>
                                             <Checkbox
@@ -563,6 +577,21 @@ export function GestionProductosPage() {
                 )}
             </Paper>
 
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+                <Group justify="space-between">
+                    <Text size="sm" c="dimmed">
+                        {filtered.length} producto{filtered.length !== 1 ? 's' : ''} · Página {currentPage} de {totalPages}
+                    </Text>
+                    <Pagination
+                        value={currentPage}
+                        onChange={setCurrentPage}
+                        total={totalPages}
+                        size="sm"
+                    />
+                </Group>
+            )}
+
             {/* ── Modal Crear / Editar ─────────────────────────────────────── */}
             <Modal
                 opened={modalOpen}
@@ -637,34 +666,6 @@ export function GestionProductosPage() {
                 </form>
             </Modal>
             {/* ── Modal Eliminar en masa ──────────────────────────────────── */}
-            <Modal
-                opened={bulkDeleteOpen}
-                onClose={() => setBulkDeleteOpen(false)}
-                title={<Text fw={700} c="red">Eliminar productos seleccionados</Text>}
-                size="sm"
-                centered
-            >
-                <Stack gap="md">
-                    <Alert color="red" variant="light" icon={<AlertCircle size={16} />}>
-                        Vas a eliminar <strong>{selectedIds.size} producto{selectedIds.size !== 1 ? 's' : ''}</strong>.<br />
-                        Dejarán de aparecer en el catálogo y en el POS.
-                        El historial de ventas se conserva.
-                    </Alert>
-                    <Group justify="flex-end">
-                        <Button variant="subtle" onClick={() => setBulkDeleteOpen(false)}>Cancelar</Button>
-                        <Button
-                            color="red"
-                            leftSection={<Trash2 size={14} />}
-                            loading={deleting}
-                            onClick={handleBulkDelete}
-                        >
-                            Eliminar {selectedIds.size} producto{selectedIds.size !== 1 ? 's' : ''}
-                        </Button>
-                    </Group>
-                </Stack>
-            </Modal>
-
-            {/* ── Modal Eliminar en masa ────────────────────────────────── */}
             <Modal
                 opened={bulkDeleteOpen}
                 onClose={() => setBulkDeleteOpen(false)}

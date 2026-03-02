@@ -199,19 +199,25 @@ export function FacturacionPage() {
         if (!anularTarget) return;
         try {
             await anularVenta(anularTarget.id, 'Anulación manual desde admin');
+            // Only update local state after backend confirms success (B-02)
+            setAnuladas((prev) => new Set([...prev, anularTarget.id]));
+            notifications.show({
+                title: 'Venta anulada',
+                message: `Ticket #${anularTarget.numeroTicket}`,
+                color: 'red',
+                icon: <Ban size={14} />,
+            });
+            // Refresh from backend to get updated estado
+            cargarVentas();
         } catch {
-            // If backend fails (e.g. not connected), still update local state
+            notifications.show({
+                title: 'Error al anular',
+                message: 'No se pudo anular la venta. Verifique la conexión con el servidor.',
+                color: 'orange',
+                icon: <AlertTriangle size={14} />,
+            });
         }
-        setAnuladas((prev) => new Set([...prev, anularTarget.id]));
-        notifications.show({
-            title: 'Venta anulada',
-            message: `Ticket #${anularTarget.numeroTicket}`,
-            color: 'red',
-            icon: <Ban size={14} />,
-        });
         setAnularTarget(null);
-        // Refresh from backend to get updated estado
-        cargarVentas();
     };
 
     const canAnular = hasRole(['admin', 'supervisor']);

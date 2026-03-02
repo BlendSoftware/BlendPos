@@ -40,6 +40,8 @@ func (h *CajaHandler) Abrir(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
 		return
 	}
+	sesionID, _ := uuid.Parse(resp.SesionCajaID)
+	middleware.AuditLog(c, "create", "caja", &sesionID, map[string]interface{}{"punto_de_venta": req.PuntoDeVenta})
 	c.JSON(http.StatusCreated, resp)
 }
 
@@ -69,6 +71,8 @@ func (h *CajaHandler) Arqueo(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
 		return
 	}
+	sesionID, _ := uuid.Parse(resp.SesionCajaID)
+	middleware.AuditLog(c, "update", "caja", &sesionID, map[string]interface{}{"action": "arqueo"})
 	c.JSON(http.StatusOK, resp)
 }
 

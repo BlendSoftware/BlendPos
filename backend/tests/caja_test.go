@@ -138,6 +138,10 @@ func (r *fullCajaRepo) ListSesiones(_ context.Context, page, limit int) ([]model
 	return all[start:end], total, nil
 }
 
+func (r *fullCajaRepo) CountVentasBySesion(_ context.Context, sesionCajaID uuid.UUID) (int64, error) {
+	return 0, nil
+}
+
 var _ repository.CajaRepository = (*fullCajaRepo)(nil)
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

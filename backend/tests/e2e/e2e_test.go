@@ -25,7 +25,10 @@ import (
 
 	"blendpos/internal/config"
 	"blendpos/internal/infra"
+	"blendpos/internal/repository"
 	"blendpos/internal/router"
+	"blendpos/internal/service"
+	"blendpos/internal/worker"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -111,7 +114,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 	cfg := &config.Config{
 		Port:               8000,
 		Env:                "test",
-		JWTSecret:          "test-secret-key",
+		JWTSecret:          "test-secret-key-must-be-at-least-32-chars-long",
 		JWTExpirationHours: 8,
 		JWTRefreshHours:    24,
 		DatabaseURL:        pgURL,
@@ -138,8 +141,48 @@ func setupTestEnv(t *testing.T) *testEnv {
 		ON CONFLICT DO NOTHING`)
 	require.NoError(t, err)
 
+	// Build repositories + services (composition root, mirrors main.go)
+	afipCB := infra.NewCircuitBreaker(infra.DefaultCBConfig())
+	afipClient := infra.NewAFIPClient(cfg.AFIPSidecarURL, cfg.InternalAPIToken)
+	mailer := infra.NewMailer(cfg)
+	dispatcher := worker.NewDispatcher(rdb, afipClient, mailer)
+
+	usuarioRepo := repository.NewUsuarioRepository(db)
+	productoRepo := repository.NewProductoRepository(db)
+	ventaRepo := repository.NewVentaRepository(db)
+	cajaRepo := repository.NewCajaRepository(db)
+	comprobanteRepo := repository.NewComprobanteRepository(db)
+	proveedorRepo := repository.NewProveedorRepository(db)
+	historialPrecioRepo := repository.NewHistorialPrecioRepository(db)
+	movimientoStockRepo := repository.NewMovimientoStockRepository(db)
+	categoriaRepo := repository.NewCategoriaRepository(db)
+
+	authSvc := service.NewAuthService(usuarioRepo, cfg, rdb)
+	productoSvc := service.NewProductoService(productoRepo, movimientoStockRepo, categoriaRepo, rdb)
+	inventarioSvc := service.NewInventarioService(productoRepo, movimientoStockRepo)
+	cajaSvc := service.NewCajaService(cajaRepo)
+	ventaSvc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, dispatcher, comprobanteRepo)
+	facturacionSvc := service.NewFacturacionService(comprobanteRepo, dispatcher)
+	proveedorSvc := service.NewProveedorService(proveedorRepo, productoRepo)
+	categoriaSvc := service.NewCategoriaService(categoriaRepo)
+
 	// Build router
-	r := router.New(cfg, db, rdb)
+	r := router.New(router.Deps{
+		Cfg:                 cfg,
+		DB:                  db,
+		RDB:                 rdb,
+		AfipCB:              afipCB,
+		AuthSvc:             authSvc,
+		ProductoSvc:         productoSvc,
+		InventarioSvc:       inventarioSvc,
+		VentaSvc:            ventaSvc,
+		CajaSvc:             cajaSvc,
+		FacturacionSvc:      facturacionSvc,
+		ProveedorSvc:        proveedorSvc,
+		CategoriaSvc:        categoriaSvc,
+		ProductoRepo:        productoRepo,
+		HistorialPrecioRepo: historialPrecioRepo,
+	})
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 

@@ -52,11 +52,11 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 		return nil, errors.New("credenciales invalidas")
 	}
 
-	accessToken, err := s.generateToken(user, time.Duration(s.cfg.JWTExpirationHours)*time.Hour)
+	accessToken, err := s.generateToken(user, time.Duration(s.cfg.JWTExpirationHours)*time.Hour, "access")
 	if err != nil {
 		return nil, err
 	}
-	refreshToken, err := s.generateToken(user, time.Duration(s.cfg.JWTRefreshHours)*time.Hour)
+	refreshToken, err := s.generateToken(user, time.Duration(s.cfg.JWTRefreshHours)*time.Hour, "refresh")
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +91,17 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.Lo
 	if !ok {
 		return nil, errors.New("claims invalidos")
 	}
+
+	// Verify that this is actually a refresh token, not an access token.
+	tokenType, _ := claims["type"].(string)
+	if tokenType != "refresh" {
+		return nil, errors.New("invalid token type: access tokens cannot be used for refresh")
+	}
+
 	// Verify the refresh token has not been revoked.
-	if jti, ok2 := claims["jti"].(string); ok2 && jti != "" && s.rdb != nil {
-		revoked, err2 := s.rdb.Exists(ctx, fmt.Sprintf("%s%s", revokedKeyPrefix, jti)).Result()
+	oldJTI, _ := claims["jti"].(string)
+	if oldJTI != "" && s.rdb != nil {
+		revoked, err2 := s.rdb.Exists(ctx, fmt.Sprintf("%s%s", revokedKeyPrefix, oldJTI)).Result()
 		if err2 != nil {
 			return nil, fmt.Errorf("error verificando revocacion: %w", err2)
 		}
@@ -115,11 +123,21 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.Lo
 		return nil, errors.New("usuario no encontrado o inactivo")
 	}
 
-	accessToken, err := s.generateToken(user, time.Duration(s.cfg.JWTExpirationHours)*time.Hour)
+	// ── Revoke the old refresh token BEFORE issuing a new pair (S-03) ────────
+	// This ensures single-use refresh tokens: each token can only be exchanged once.
+	if oldJTI != "" && s.rdb != nil {
+		remainingTTL := time.Duration(s.cfg.JWTRefreshHours) * time.Hour
+		revokeKey := fmt.Sprintf("%s%s", revokedKeyPrefix, oldJTI)
+		if err := s.rdb.Set(ctx, revokeKey, "1", remainingTTL).Err(); err != nil {
+			return nil, fmt.Errorf("error revocando token anterior: %w", err)
+		}
+	}
+
+	accessToken, err := s.generateToken(user, time.Duration(s.cfg.JWTExpirationHours)*time.Hour, "access")
 	if err != nil {
 		return nil, err
 	}
-	newRefresh, err := s.generateToken(user, time.Duration(s.cfg.JWTRefreshHours)*time.Hour)
+	newRefresh, err := s.generateToken(user, time.Duration(s.cfg.JWTRefreshHours)*time.Hour, "refresh")
 	if err != nil {
 		return nil, err
 	}
@@ -235,13 +253,14 @@ func (s *authService) Logout(ctx context.Context, jti string, remaining time.Dur
 	return s.rdb.Set(ctx, key, "1", remaining).Err()
 }
 
-func (s *authService) generateToken(user *model.Usuario, duration time.Duration) (string, error) {
+func (s *authService) generateToken(user *model.Usuario, duration time.Duration, tokenType string) (string, error) {
 	claims := jwt.MapClaims{
 		"jti":            uuid.New().String(),
 		"user_id":        user.ID.String(),
 		"username":       user.Username,
 		"rol":            user.Rol,
 		"punto_de_venta": user.PuntoDeVenta,
+		"type":           tokenType, // "access" or "refresh"
 		"exp":            time.Now().Add(duration).Unix(),
 		"iat":            time.Now().Unix(),
 	}

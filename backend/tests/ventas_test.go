@@ -165,6 +165,10 @@ func (r *stubCajaRepo) ListSesiones(_ context.Context, _, _ int) ([]model.Sesion
 	return nil, 0, nil
 }
 
+func (r *stubCajaRepo) CountVentasBySesion(_ context.Context, _ uuid.UUID) (int64, error) {
+	return 0, nil
+}
+
 var _ repository.CajaRepository = (*stubCajaRepo)(nil)
 
 // ── VentaService factory for tests ───────────────────────────────────────────
@@ -179,7 +183,7 @@ func buildVentaSvc(sesionAbierta bool) (service.VentaService, *stubVentaRepo, *s
 	cajaSvc := &stubCajaService{sesionAbierta: sesionAbierta}
 	inventarioSvc := service.NewInventarioService(productoRepo, nil)
 
-	svc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, nil)
+	svc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, nil, nil)
 	return svc, ventaRepo, productoRepo, cajaRepo
 }
 
@@ -218,24 +222,20 @@ func TestRegistrarVenta_PagoInsuficiente(t *testing.T) {
 }
 
 func TestRegistrarVenta_StockInsuficiente(t *testing.T) {
-	svc, ventaRepo, productoRepo, _ := buildVentaSvc(true)
+	// After H-01 hardening, online sales (non-sync) are hard-rejected
+	// when stock is insufficient. ConflictoStock only applies to offline sync.
+	svc, _, productoRepo, _ := buildVentaSvc(true)
 	p := seedProducto(productoRepo, "Vino 750ml", "3030303030303", 2, 0) // only 2 in stock
 	p.PrecioVenta = decimal.NewFromFloat(500)
 
-	resp, err := svc.RegistrarVenta(context.Background(), uuid.New(), dto.RegistrarVentaRequest{
+	_, err := svc.RegistrarVenta(context.Background(), uuid.New(), dto.RegistrarVentaRequest{
 		SesionCajaID: uuid.New().String(),
 		Items: []dto.ItemVentaRequest{
 			{ProductoID: p.ID.String(), Cantidad: 5}, // request 5, only 2 available
 		},
 		Pagos: []dto.PagoRequest{{Metodo: "efectivo", Monto: decimal.NewFromFloat(3000)}},
 	})
-	// Should succeed with conflicto_stock = true
-	require.NoError(t, err)
-	assert.True(t, resp.ConflictoStock)
-	// Venta should be stored
-	stored, err := ventaRepo.FindByID(context.Background(), uuid.MustParse(resp.ID))
-	require.NoError(t, err)
-	assert.True(t, stored.ConflictoStock)
+	assert.ErrorContains(t, err, "stock insuficiente")
 }
 
 func TestRegistrarVenta_PagoMixto(t *testing.T) {
@@ -342,7 +342,7 @@ func TestRegistrarVenta_ConDesarme(t *testing.T) {
 
 	inventarioSvc := service.NewInventarioService(productoRepo, nil)
 	cajaSvc := &stubCajaService{sesionAbierta: true}
-	svc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, nil)
+	svc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, nil, nil)
 
 	// Sell 4 latas (hijo stock = 0, needs auto-desarme of 1 pack → 6 units)
 	resp, err := svc.RegistrarVenta(context.Background(), uuid.New(), dto.RegistrarVentaRequest{

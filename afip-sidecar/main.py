@@ -21,7 +21,6 @@ import redis as redis_sync
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
 # Import local modules
@@ -186,14 +185,9 @@ app = FastAPI(
     redoc_url="/redoc" if os.getenv("AFIP_HOMOLOGACION", "true").lower() == "true" else None
 )
 
-# CORS para requests del backend Go (aunque es red interna)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # En producción restringir al host del backend
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# H-04: CORS middleware removed — this is an internal service that only receives
+# requests from the Go backend via Docker internal network. No browser ever
+# calls this service directly, so CORS is unnecessary and was a security risk.
 
 
 # ── Exception handlers ────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import (
 
 	"blendpos/internal/apierror"
 	"blendpos/internal/dto"
+	"blendpos/internal/middleware"
 	"blendpos/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -27,6 +28,8 @@ func (h *ProductosHandler) Crear(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
 		return
 	}
+	id, _ := uuid.Parse(resp.ID)
+	middleware.AuditLog(c, "create", "producto", &id, map[string]interface{}{"nombre": req.Nombre})
 	c.JSON(http.StatusCreated, resp)
 }
 
@@ -73,6 +76,7 @@ func (h *ProductosHandler) Actualizar(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
 		return
 	}
+	middleware.AuditLog(c, "update", "producto", &id, req)
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -86,6 +90,7 @@ func (h *ProductosHandler) Desactivar(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
 		return
 	}
+	middleware.AuditLog(c, "delete", "producto", &id, nil)
 	c.Status(http.StatusNoContent)
 }
 

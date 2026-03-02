@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -13,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 )
 
 type InventarioHandler struct{ svc service.InventarioService }
@@ -85,10 +88,13 @@ func (h *InventarioHandler) ListarMovimientos(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-type FacturacionHandler struct{ svc service.FacturacionService }
+type FacturacionHandler struct {
+	svc         service.FacturacionService
+	pdfBasePath string // base directory for PDF storage — path traversal guard
+}
 
-func NewFacturacionHandler(svc service.FacturacionService) *FacturacionHandler {
-	return &FacturacionHandler{svc: svc}
+func NewFacturacionHandler(svc service.FacturacionService, pdfBasePath string) *FacturacionHandler {
+	return &FacturacionHandler{svc: svc, pdfBasePath: pdfBasePath}
 }
 
 func (h *FacturacionHandler) ObtenerComprobante(c *gin.Context) {
@@ -128,10 +134,44 @@ func (h *FacturacionHandler) DescargarPDF(c *gin.Context) {
 		c.JSON(http.StatusNotFound, apierror.New(err.Error()))
 		return
 	}
+
+	// ── Path traversal guard (S-04) ────────────────────────────────────────
+	// Resolve absolute paths to eliminate ".." segments and symlinks, then
+	// verify the result is still inside the configured PDF storage directory.
+	if err := validatePDFPath(h.pdfBasePath, pdfPath); err != nil {
+		log.Warn().Err(err).Str("pdfPath", pdfPath).Msg("path traversal attempt blocked")
+		c.JSON(http.StatusForbidden, apierror.New("Access denied"))
+		return
+	}
+
+	// Ensure file exists on disk before attempting to serve.
+	if _, err := os.Stat(pdfPath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, apierror.New("PDF file not found on disk"))
+		return
+	}
+
 	fileName := filepath.Base(pdfPath)
 	c.Header("Content-Disposition", "attachment; filename=\""+fileName+"\"")
 	c.Header("Content-Type", "application/pdf")
 	c.File(pdfPath)
+}
+
+// validatePDFPath ensures the resolved pdfPath is inside basePath, preventing
+// path traversal attacks (e.g., ../../../../etc/passwd stored in DB).
+func validatePDFPath(basePath, pdfPath string) error {
+	absBase, err := filepath.Abs(basePath)
+	if err != nil {
+		return fmt.Errorf("cannot resolve base path: %w", err)
+	}
+	absPath, err := filepath.Abs(pdfPath)
+	if err != nil {
+		return fmt.Errorf("cannot resolve pdf path: %w", err)
+	}
+	// Ensure the resolved path starts with the base directory + separator
+	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) {
+		return fmt.Errorf("path traversal detected: %s is outside %s", absPath, absBase)
+	}
+	return nil
 }
 
 // AnularComprobante DELETE /v1/facturacion/:id

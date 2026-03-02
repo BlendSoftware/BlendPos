@@ -24,6 +24,7 @@ type JWTClaims struct {
 	Username     string `json:"username"`
 	Rol          string `json:"rol"`
 	PuntoDeVenta *int   `json:"punto_de_venta"`
+	Type         string `json:"type"` // "access" or "refresh"
 	jwt.RegisteredClaims
 }
 
@@ -49,6 +50,12 @@ func JWTAuth(secret string, rdb *redis.Client) gin.HandlerFunc {
 
 		if err != nil || !token.Valid {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, apierror.New("Token invalido o expirado"))
+			return
+		}
+
+		// Reject refresh tokens used as access tokens.
+		if claims.Type != "access" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, apierror.New("Invalid token type: refresh tokens cannot be used for API access"))
 			return
 		}
 

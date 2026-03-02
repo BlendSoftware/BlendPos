@@ -93,18 +93,32 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 		return
 	}
 
-	// 2. Create Comprobante with status "pendiente"
-	comp := &model.Comprobante{
-		VentaID:    ventaID,
-		Tipo:       "ticket_interno",
-		MontoNeto:  venta.Total,
-		MontoIVA:   decimal.Zero,
-		MontoTotal: venta.Total,
-		Estado:     "pendiente",
-	}
-	if err := w.comprobanteRepo.Create(ctx, comp); err != nil {
-		log.Error().Err(err).Str("venta_id", payload.VentaID).Msg("facturacion_worker: failed to create comprobante")
-		return
+	// 2. Idempotency check (B-01): if a comprobante already exists for this
+	// venta, reuse it instead of creating a duplicate.
+	comp, findErr := w.comprobanteRepo.FindByVentaID(ctx, ventaID)
+	if findErr == nil && comp != nil {
+		// Comprobante already exists.
+		if comp.CAE != nil && *comp.CAE != "" {
+			// Already has a CAE — previous job succeeded, this retry is a duplicate.
+			log.Info().Str("venta_id", payload.VentaID).Msg("facturacion_worker: comprobante already has CAE, skipping")
+			return
+		}
+		// Exists but without CAE — reuse this record for retry.
+		log.Info().Str("venta_id", payload.VentaID).Msg("facturacion_worker: retrying existing comprobante without CAE")
+	} else {
+		// No comprobante exists — create one with estado "pendiente"
+		comp = &model.Comprobante{
+			VentaID:    ventaID,
+			Tipo:       "ticket_interno",
+			MontoNeto:  venta.Total,
+			MontoIVA:   decimal.Zero,
+			MontoTotal: venta.Total,
+			Estado:     "pendiente",
+		}
+		if err := w.comprobanteRepo.Create(ctx, comp); err != nil {
+			log.Error().Err(err).Str("venta_id", payload.VentaID).Msg("facturacion_worker: failed to create comprobante")
+			return
+		}
 	}
 
 	// 3. AFIP call through Circuit Breaker

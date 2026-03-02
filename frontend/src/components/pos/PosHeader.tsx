@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, memo } from 'react';
 import { Group, Text, Badge, Flex, Tooltip, ActionIcon, Modal, Button, useMantineColorScheme } from '@mantine/core';
 import { Wifi, WifiOff, User, Printer, PanelLeftOpen, Settings, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -12,24 +12,9 @@ import { PrinterSettingsModal } from './PrinterSettingsModal';
 import { ThemeToggle } from '../ThemeToggle';
 import styles from './PosHeader.module.css';
 
-const ROL_COLOR: Record<string, string> = {
-    admin: 'red',
-    supervisor: 'yellow',
-    cajero: 'teal',
-};
-
-export function PosHeader() {
+// ── Isolated Clock — only this component re-renders every second ─────────────
+const Clock = memo(function Clock() {
     const [time, setTime] = useState(new Date());
-    const [isOnline, setIsOnline] = useState(navigator.onLine);
-    const [printerConnected, setPrinterConnected] = useState(thermalPrinter.isConnected);
-    const [settingsOpen, setSettingsOpen] = useState(false);
-    const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
-    const { pending: syncPending, error: syncError } = useSyncStatus();
-
-    const { user, hasRole, logout } = useAuthStore();
-    const { config: printerConfig } = usePrinterStore();
-    const { limpiar: limpiarCaja } = useCajaStore();
-    const navigate = useNavigate();
     const { colorScheme } = useMantineColorScheme();
     const isDark = colorScheme === 'dark';
 
@@ -37,6 +22,45 @@ export function PosHeader() {
         const interval = setInterval(() => setTime(new Date()), 1000);
         return () => clearInterval(interval);
     }, []);
+
+    const formattedTime = time.toLocaleTimeString('es-AR', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    });
+    const formattedDate = time.toLocaleDateString('es-AR', {
+        weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric',
+    });
+
+    return (
+        <div className={styles.clock}>
+            <Text size="lg" fw={700} c={isDark ? 'white' : 'dark.7'} ff="monospace">
+                {formattedTime}
+            </Text>
+            <Text size="xs" c="dimmed" ta="right">
+                {formattedDate}
+            </Text>
+        </div>
+    );
+});
+
+const ROL_COLOR: Record<string, string> = {
+    admin: 'red',
+    supervisor: 'yellow',
+    cajero: 'teal',
+};
+
+export function PosHeader() {
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [printerConnected, setPrinterConnected] = useState(thermalPrinter.isConnected);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+    const { pending: syncPending, error: syncError, syncState } = useSyncStatus();
+
+    const { user, hasRole, logout } = useAuthStore();
+    const { config: printerConfig } = usePrinterStore();
+    const { limpiar: limpiarCaja } = useCajaStore();
+    const navigate = useNavigate();
+    const { colorScheme } = useMantineColorScheme();
+    const isDark = colorScheme === 'dark';
 
     useEffect(() => {
         // Auto-reconexión a puertos ya autorizados (no requiere click)
@@ -87,20 +111,6 @@ export function PosHeader() {
             }
         }
     };
-
-    const formattedTime = time.toLocaleTimeString('es-AR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    });
-
-    const formattedDate = time.toLocaleDateString('es-AR', {
-        weekday: 'short',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-    });
 
     return (
         <header className={styles.header}>
@@ -224,19 +234,30 @@ export function PosHeader() {
                         </ActionIcon>
                     </Tooltip>
 
-                    {(syncPending > 0 || syncError > 0) && (
-                        <Badge
-                            color={syncError > 0 ? 'red' : 'yellow'}
-                            size="lg"
-                            variant="light"
+                    {syncPending > 0 || syncError > 0 ? (
+                        <Tooltip
+                            label={
+                                syncState === 'syncing'
+                                    ? 'Sincronizando…'
+                                    : syncState === 'error'
+                                    ? 'Error de sincronización — reintentando…'
+                                    : `${syncPending} venta${syncPending !== 1 ? 's' : ''} pendiente${syncPending !== 1 ? 's' : ''} de sync`
+                            }
+                            withArrow
                         >
-                            <Group gap={6}>
-                                <span>Sync</span>
-                                <span>{syncPending}</span>
-                                {syncError > 0 && <span>/ {syncError} err</span>}
-                            </Group>
-                        </Badge>
-                    )}
+                            <Badge
+                                color={syncError > 0 || syncState === 'error' ? 'red' : 'yellow'}
+                                size="lg"
+                                variant="light"
+                            >
+                                <Group gap={6}>
+                                    <span>{syncState === 'syncing' ? '⟳ Sync' : 'Sync'}</span>
+                                    <span>{syncPending}</span>
+                                    {syncError > 0 && <span>/ {syncError} err</span>}
+                                </Group>
+                            </Badge>
+                        </Tooltip>
+                    ) : null}
 
                     <Badge
                         color={isOnline ? 'green' : 'red'}
@@ -248,14 +269,7 @@ export function PosHeader() {
                             <span>{isOnline ? 'Conectado' : 'Sin conexión'}</span>
                         </Group>
                     </Badge>
-                    <div className={styles.clock}>
-                        <Text size="lg" fw={700} c={isDark ? 'white' : 'dark.7'} ff="monospace">
-                            {formattedTime}
-                        </Text>
-                        <Text size="xs" c="dimmed" ta="right">
-                            {formattedDate}
-                        </Text>
-                    </div>
+                    <Clock />
                 </Group>
             </Flex>
         </header>

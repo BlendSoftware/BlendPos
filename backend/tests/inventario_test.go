@@ -295,7 +295,7 @@ func TestCrearVinculoMismoPadreHijo(t *testing.T) {
 		ProductoHijoID:   p.ID.String(),
 		UnidadesPorPadre: 3,
 	})
-	assert.ErrorContains(t, err, "no puede ser hijo de sÃ­ mismo")
+	assert.ErrorContains(t, err, "no puede ser hijo de s")
 }
 
 func TestObtenerAlertasStock(t *testing.T) {
@@ -385,4 +385,3 @@ func TestDesarmeAutomatico(t *testing.T) {
 	assert.Equal(t, 2, repo.productos[padre.ID].StockActual)
 	assert.Equal(t, 6, repo.productos[hijo.ID].StockActual)
 }
-
