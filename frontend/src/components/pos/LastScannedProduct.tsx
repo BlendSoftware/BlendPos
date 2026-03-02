@@ -1,6 +1,6 @@
 import { Box, Text, Stack, Group } from '@mantine/core';
 import { ScanBarcode, PackageCheck } from 'lucide-react';
-import { useSaleStore } from '../../store/useSaleStore';
+import { useCartStore } from '../../store/useCartStore';
 import styles from './LastScannedProduct.module.css';
 
 function formatCurrency(value: number): string {
@@ -12,7 +12,7 @@ function formatCurrency(value: number): string {
 }
 
 export function LastScannedProduct() {
-    const lastAdded = useSaleStore((s) => s.lastAdded);
+    const lastAdded = useCartStore((s) => s.lastAdded);
 
     if (!lastAdded) {
         return (

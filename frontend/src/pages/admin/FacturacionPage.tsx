@@ -121,7 +121,7 @@ export function FacturacionPage() {
                         v.cajeroNombre.toLowerCase().includes(q) ||
                         v.id.toLowerCase().includes(q);
                     const matchMetodo = !filtroMetodo || v.metodoPago === filtroMetodo || v.pagos?.some((p) => p.metodo === filtroMetodo)
-                        || (filtroMetodo === 'qr' && ((v.metodoPago as string) === 'transferencia' || v.pagos?.some((p) => p.metodo === 'transferencia')));
+                        || (filtroMetodo === 'qr' && ((v.metodoPago as string) === 'transferencia' || v.pagos?.some((p) => (p.metodo as string) === 'transferencia')));
                     const matchEstado = !filtroEstado || (filtroEstado === 'anulada' ? v.anulada : !v.anulada);
                     return matchPeriodo && matchBusqueda && matchMetodo && matchEstado;
                 }
@@ -273,17 +273,15 @@ export function FacturacionPage() {
                         <DateInput
                             placeholder="Desde"
                             value={desde}
-                            onChange={(v) => setDesde(v)}
+                            onChange={(v) => setDesde(v ? new Date(v) : null)}
                             clearable
-                            valueFormat="DD/MM/YYYY"
                             style={{ width: 140 }}
                         />
                         <DateInput
                             placeholder="Hasta"
                             value={hasta}
-                            onChange={(v) => setHasta(v)}
+                            onChange={(v) => setHasta(v ? new Date(v) : null)}
                             clearable
-                            valueFormat="DD/MM/YYYY"
                             style={{ width: 140 }}
                         />
                     </>

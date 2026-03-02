@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal, Text, Stack, Group, Button, UnstyledButton, Badge } from '@mantine/core';
 import { Receipt, FileText, Building2 } from 'lucide-react';
-import { useSaleStore } from '../../store/useSaleStore';
+import { usePOSUIStore } from '../../store/usePOSUIStore';
 
 type TipoComprobante = 'ticket' | 'factura_b' | 'factura_a';
 
@@ -45,7 +45,7 @@ export function ComprobanteModal() {
     const {
         isComprobanteModalOpen, closeComprobanteModal,
         setTipoComprobante, openPaymentModal,
-    } = useSaleStore();
+    } = usePOSUIStore();
 
     const handleSelect = (tipo: TipoComprobante) => {
         setTipoComprobante(tipo);
