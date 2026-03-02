@@ -1,13 +1,12 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
     Modal, Stack, Text, Group, Button, Divider, Badge, ThemeIcon, Box,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { CheckCircle, Printer, X, Mail, Receipt } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
-import { usePrinterStore } from '../../store/usePrinterStore';
-import { thermalPrinter } from '../../services/ThermalPrinterService';
 import { formatARS } from '../../utils/format';
+import { PrintableTicket } from './PrintableTicket';
 
 const METODO_LABEL: Record<string, string> = {
     efectivo: '💵 Efectivo',
@@ -23,16 +22,17 @@ export function PostSaleModal() {
     const record = usePOSUIStore((s) => s.lastSaleRecord);
     const close = usePOSUIStore((s) => s.closePostSaleModal);
     const [printing, setPrinting] = useState(false);
+    const ticketRef = useRef<HTMLDivElement>(null);
 
     if (!record) return null;
 
-    const handlePrint = async () => {
+    const handlePrint = () => {
         setPrinting(true);
         try {
-            const cfg = usePrinterStore.getState().config;
-            await thermalPrinter.printAll(record, cfg);
+            // Usar el diálogo de impresión del navegador
+            window.print();
             notifications.show({
-                title: 'Impresión enviada',
+                title: 'Impresión iniciada',
                 message: `Ticket #${record.numeroTicket}`,
                 color: 'blue',
                 icon: <Printer size={14} />,
@@ -42,7 +42,7 @@ export function PostSaleModal() {
             console.error('Print error:', err);
             notifications.show({
                 title: 'Error de impresión',
-                message: 'No se pudo imprimir. Verifique la conexión de la impresora.',
+                message: 'No se pudo iniciar la impresión.',
                 color: 'red',
                 autoClose: 5000,
             });
@@ -187,6 +187,11 @@ export function PostSaleModal() {
                     </Button>
                 </Stack>
             </Stack>
+
+            {/* Ticket oculto para impresión - solo visible al imprimir */}
+            <div style={{ display: 'none' }} className="print-only">
+                <PrintableTicket ref={ticketRef} record={record} />
+            </div>
         </Modal>
     );
 }

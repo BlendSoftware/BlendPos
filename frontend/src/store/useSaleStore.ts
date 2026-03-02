@@ -18,6 +18,7 @@ import { enqueueSale, trySyncQueue } from '../offline/sync';
 import { useCajaStore } from './useCajaStore';
 import { useCartStore, deductLocalStock } from './useCartStore';
 import type { CartItem, MetodoPago, PagoDetalle } from './useCartStore';
+import { getLastTicketNumber } from '../services/api/ventas';
 
 // ── Re-export shared types for backward compatibility ─────────────────────────
 export type { CartItem, MetodoPago, PagoDetalle } from './useCartStore';
@@ -59,6 +60,8 @@ interface SaleState {
         clienteEmail?: string;
     }) => SaleRecord;
     setCajero: (nombre: string) => void;
+    /** Sync ticket counter with backend's last ticket number */
+    syncTicketCounter: () => Promise<void>;
 }
 
 const MAX_HISTORIAL = 200;
@@ -123,6 +126,15 @@ export const useSaleStore = create<SaleState>()(
                 return record;
             },
             setCajero: (nombre) => set({ cajero: nombre }),
+            syncTicketCounter: async () => {
+                try {
+                    const lastTicketNumber = await getLastTicketNumber();
+                    set({ ticketCounter: lastTicketNumber });
+                    console.log(`Ticket counter synced with backend: ${lastTicketNumber}`);
+                } catch (error) {
+                    console.warn('Failed to sync ticket counter:', error);
+                }
+            },
         }),
         {
             name: 'blendpos-sale',

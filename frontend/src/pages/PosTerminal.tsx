@@ -63,6 +63,7 @@ export function PosTerminal() {
     } = usePOSUIStore();
 
     const setCajero = useSaleStore((s) => s.setCajero);
+    const syncTicketCounter = useSaleStore((s) => s.syncTicketCounter);
     const { user } = useAuthStore();
     const { sesionId, restaurar } = useCajaStore();
     const [isInitializing, setIsInitializing] = useState(true);
@@ -72,6 +73,12 @@ export function PosTerminal() {
         restaurar()
             .catch(() => { })
             .finally(() => setIsInitializing(false));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Sincronizar el contador de tickets con el backend al iniciar
+    useEffect(() => {
+        syncTicketCounter().catch(console.warn);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

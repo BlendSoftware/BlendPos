@@ -59,3 +59,34 @@ body,
 .pos-no-select {
   user-select: none;
 }
+
+/* ═══════════════════════════════════════════════════
+   Print Styles
+   ═══════════════════════════════════════════════════ */
+
+/* Ocultar todo por defecto en impresión */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  /* Mostrar solo el contenido para imprimir */
+  .print-only,
+  .print-only * {
+    visibility: visible;
+  }
+
+  .print-only {
+    position: fixed;
+    left: 0;
+    top: 0;
+    display: block !important;
+  }
+
+  /* Ocultar modales y overlays durante la impresión */
+  .mantine-Modal-root,
+  .mantine-Overlay-root,
+  .mantine-Modal-content {
+    display: none !important;
+  }
+}

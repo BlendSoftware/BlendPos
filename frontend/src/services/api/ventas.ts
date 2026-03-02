@@ -150,3 +150,27 @@ export async function listarVentas(filter: VentaFilter = {}): Promise<VentaListR
         limit: filter.limit ?? 50,
     });
 }
+
+/**
+ * Obtiene el último número de ticket del backend para sincronizar el contador local.
+ * Consulta las últimas 10 ventas ordenadas por numero_ticket descendente.
+ */
+export async function getLastTicketNumber(): Promise<number> {
+    try {
+        const response = await listarVentas({
+            ordenar_por: 'numero_ticket',
+            orden: 'desc',
+            limit: 1,
+            estado: 'all',
+        });
+        
+        if (response.data.length > 0) {
+            return response.data[0].numero_ticket;
+        }
+        
+        return 0;
+    } catch (error) {
+        console.warn('Failed to get last ticket number from backend:', error);
+        return 0;
+    }
+}
