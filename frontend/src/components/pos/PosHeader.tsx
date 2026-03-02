@@ -1,6 +1,6 @@
 import { useEffect, useState, memo } from 'react';
 import { Group, Text, Badge, Flex, Tooltip, ActionIcon, Modal, Button, useMantineColorScheme } from '@mantine/core';
-import { Wifi, WifiOff, User, Printer, PanelLeftOpen, Settings, LogOut } from 'lucide-react';
+import { Wifi, WifiOff, User, Printer, PanelLeftOpen, Settings, LogOut, Bug } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -9,6 +9,7 @@ import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { usePrinterStore } from '../../store/usePrinterStore';
 import { useCajaStore } from '../../store/useCajaStore';
 import { PrinterSettingsModal } from './PrinterSettingsModal';
+import { DebugInfoModal } from './DebugInfoModal';
 import { ThemeToggle } from '../ThemeToggle';
 import styles from './PosHeader.module.css';
 
@@ -52,6 +53,7 @@ export function PosHeader() {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [printerConnected, setPrinterConnected] = useState(thermalPrinter.isConnected);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [debugOpen, setDebugOpen] = useState(false);
     const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
     const { pending: syncPending, error: syncError, syncState } = useSyncStatus();
 
@@ -115,6 +117,7 @@ export function PosHeader() {
     return (
         <header className={styles.header}>
             <PrinterSettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} />
+            <DebugInfoModal opened={debugOpen} onClose={() => setDebugOpen(false)} />
 
             {/* Logout confirmation modal */}
             <Modal
@@ -203,6 +206,20 @@ export function PosHeader() {
                             <Settings size={16} />
                         </ActionIcon>
                     </Tooltip>
+
+                    {/* Debug info button - Admin/Supervisor only */}
+                    {hasRole(['admin', 'supervisor']) && (
+                        <Tooltip label="Debug & Diagnóstico" withArrow>
+                            <ActionIcon
+                                variant="subtle"
+                                color="violet"
+                                size="md"
+                                onClick={() => setDebugOpen(true)}
+                            >
+                                <Bug size={16} />
+                            </ActionIcon>
+                        </Tooltip>
+                    )}
 
                     {/* Admin panel link (only for admin/supervisor) */}
                     {hasRole(['admin', 'supervisor']) && (

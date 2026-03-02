@@ -1,9 +1,9 @@
 import { useState, useRef } from 'react';
 import {
-    Modal, Stack, Text, Group, Button, Divider, Badge, ThemeIcon, Box,
+    Modal, Stack, Text, Group, Button, Divider, Badge, ThemeIcon, Box, Alert,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { CheckCircle, Printer, X, Mail, Receipt } from 'lucide-react';
+import { CheckCircle, Printer, X, Mail, Receipt, AlertCircle, Info } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { formatARS } from '../../utils/format';
 import { PrintableTicket } from './PrintableTicket';
@@ -26,29 +26,47 @@ export function PostSaleModal() {
 
     if (!record) return null;
 
+    console.log('[PostSaleModal] Rendered with record:', {
+        numeroTicket: record.numeroTicket,
+        total: record.total,
+        clienteEmail: record.clienteEmail,
+        metodoPago: record.metodoPago,
+    });
+
     const handlePrint = () => {
+        console.log('[PostSaleModal] Iniciando impresión...', {
+            numeroTicket: record.numeroTicket,
+            hasRef: !!ticketRef.current,
+        });
+        
         setPrinting(true);
-        try {
-            // Usar el diálogo de impresión del navegador
-            window.print();
-            notifications.show({
-                title: 'Impresión iniciada',
-                message: `Ticket #${record.numeroTicket}`,
-                color: 'blue',
-                icon: <Printer size={14} />,
-                autoClose: 3000,
-            });
-        } catch (err) {
-            console.error('Print error:', err);
-            notifications.show({
-                title: 'Error de impresión',
-                message: 'No se pudo iniciar la impresión.',
-                color: 'red',
-                autoClose: 5000,
-            });
-        } finally {
-            setPrinting(false);
-        }
+        
+        // Dar un pequeño delay para asegurar que el DOM esté listo
+        setTimeout(() => {
+            try {
+                window.print();
+                
+                console.log('[PostSaleModal] Diálogo de impresión abierto');
+                
+                notifications.show({
+                    title: 'Impresión iniciada',
+                    message: `Ticket #${record.numeroTicket}`,
+                    color: 'blue',
+                    icon: <Printer size={14} />,
+                    autoClose: 3000,
+                });
+            } catch (err) {
+                console.error('[PostSaleModal] Error de impresión:', err);
+                notifications.show({
+                    title: 'Error de impresión',
+                    message: 'No se pudo iniciar la impresión.',
+                    color: 'red',
+                    autoClose: 5000,
+                });
+            } finally {
+                setPrinting(false);
+            }
+        }, 100);
     };
 
     const total = record.totalConDescuento || record.total;
@@ -134,14 +152,19 @@ export function PostSaleModal() {
                 {record.clienteEmail && (
                     <>
                         <Divider />
-                        <Group gap="xs">
-                            <ThemeIcon color="blue" variant="light" size="sm" radius="xl">
-                                <Mail size={12} />
-                            </ThemeIcon>
-                            <Text size="xs" c="dimmed">
-                                El comprobante se enviará a <strong>{record.clienteEmail}</strong>
+                        <Alert 
+                            icon={<Info size={16} />} 
+                            color="blue"
+                            variant="light"
+                            title="Email pendiente"
+                        >
+                            <Text size="xs">
+                                El comprobante se enviará a <strong>{record.clienteEmail}</strong> cuando
+                                la venta se sincronice con el servidor.<br/><br/>
+                                <strong>Nota:</strong> El servidor debe tener configurado SMTP para enviar emails.
+                                Si no recibes el email, contacta al administrador para verificar la configuración.
                             </Text>
-                        </Group>
+                        </Alert>
                     </>
                 )}
 
@@ -188,8 +211,16 @@ export function PostSaleModal() {
                 </Stack>
             </Stack>
 
-            {/* Ticket oculto para impresión - solo visible al imprimir */}
-            <div style={{ display: 'none' }} className="print-only">
+            {/* Ticket para impresión - renderizado pero oculto visualmente */}
+            <div 
+                style={{ 
+                    position: 'fixed',
+                    left: '-9999px',
+                    width: '80mm',
+                    background: 'white'
+                }} 
+                className="printable-content"
+            >
                 <PrintableTicket ref={ticketRef} record={record} />
             </div>
         </Modal>
