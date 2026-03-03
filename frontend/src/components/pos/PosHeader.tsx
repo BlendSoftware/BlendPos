@@ -55,7 +55,7 @@ export function PosHeader() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [debugOpen, setDebugOpen] = useState(false);
     const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
-    const { pending: syncPending, error: syncError, syncState } = useSyncStatus();
+    const { pending: syncPending, syncState } = useSyncStatus();
 
     const { user, hasRole, logout } = useAuthStore();
     const { config: printerConfig } = usePrinterStore();
@@ -251,26 +251,23 @@ export function PosHeader() {
                         </ActionIcon>
                     </Tooltip>
 
-                    {syncPending > 0 || syncError > 0 ? (
+                    {syncPending > 0 ? (
                         <Tooltip
                             label={
                                 syncState === 'syncing'
-                                    ? 'Sincronizando…'
-                                    : syncState === 'error'
-                                        ? 'Error de sincronización — reintentando…'
-                                        : `${syncPending} venta${syncPending !== 1 ? 's' : ''} pendiente${syncPending !== 1 ? 's' : ''} de sync`
+                                    ? 'Sincronizando con el servidor…'
+                                    : `${syncPending} venta${syncPending !== 1 ? 's' : ''} pendiente${syncPending !== 1 ? 's' : ''} de sincronizar`
                             }
                             withArrow
                         >
                             <Badge
-                                color={syncError > 0 || syncState === 'error' ? 'red' : 'yellow'}
+                                color="yellow"
                                 size="lg"
                                 variant="light"
                             >
                                 <Group gap={6}>
                                     <span>{syncState === 'syncing' ? '⟳ Sync' : 'Sync'}</span>
                                     <span>{syncPending}</span>
-                                    {syncError > 0 && <span>/ {syncError} err</span>}
                                 </Group>
                             </Badge>
                         </Tooltip>

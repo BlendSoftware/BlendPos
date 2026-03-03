@@ -81,19 +81,6 @@ export function AbrirCajaModal({ opened, onSuccess }: Props) {
                 )}
 
                 <NumberInput
-                    label="Punto de Venta"
-                    description={user?.puntoDeVenta != null ? "Asignado automáticamente" : "Número de terminal (1, 2, 3…)"}
-                    placeholder="1"
-                    min={1}
-                    max={99}
-                    value={puntoDeVenta}
-                    onChange={setPuntoDeVenta}
-                    allowDecimal={false}
-                    allowNegative={false}
-                    disabled={user?.puntoDeVenta != null}
-                />
-
-                <NumberInput
                     label="Monto Inicial en Efectivo ($)"
                     description="Dinero con el que inicia la caja"
                     placeholder="0.00"
@@ -112,7 +99,6 @@ export function AbrirCajaModal({ opened, onSuccess }: Props) {
                     size="md"
                     onClick={handleSubmit}
                     loading={loading}
-                    disabled={!puntoDeVenta || Number(puntoDeVenta) < 1}
                 >
                     Abrir Caja
                 </Button>

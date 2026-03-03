@@ -330,16 +330,16 @@ export function CierreCajaPage() {
                                         </Table.Td>
                                     </Table.Tr>
                                 ) : historial.map((h) => {
-                                    const esperadoEfectivo = h.monto_esperado?.efectivo ?? 0;
-                                    const declaradoEfectivo = h.monto_declarado?.efectivo ?? 0;
+                                    const esperadoEfectivo = Number(h.monto_esperado?.efectivo ?? 0);
+                                    const declaradoEfectivo = Number(h.monto_declarado?.efectivo ?? 0);
                                     const diferencia = declaradoEfectivo - esperadoEfectivo;
-                                    const tarjeta = (h.monto_esperado?.debito ?? 0) + (h.monto_esperado?.credito ?? 0);
-                                    const qr = h.monto_esperado?.qr ?? 0;
-                                    const totalVentas = h.monto_esperado?.total ?? 0;
+                                    const tarjeta = Number(h.monto_esperado?.debito ?? 0) + Number(h.monto_esperado?.credito ?? 0);
+                                    const qr = Number(h.monto_esperado?.qr ?? 0);
+                                    const totalVentas = Number(h.monto_esperado?.total ?? 0);
                                     return (
                                         <Table.Tr key={h.sesion_caja_id}>
-                                            <Table.Td>{h.closed_at ? new Date(h.closed_at).toLocaleDateString('es-AR') : '-'}</Table.Td>
-                                            <Table.Td>{h.usuario}</Table.Td>
+                                            <Table.Td>{h.closed_at ? new Date(h.closed_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</Table.Td>
+                                            <Table.Td>{h.usuario ?? '-'}</Table.Td>
                                             <Table.Td ta="right">{formatARS(declaradoEfectivo)}</Table.Td>
                                             <Table.Td ta="right">{formatARS(esperadoEfectivo)}</Table.Td>
                                             <Table.Td ta="right">
@@ -350,7 +350,7 @@ export function CierreCajaPage() {
                                             <Table.Td ta="right">{formatARS(tarjeta)}</Table.Td>
                                             <Table.Td ta="right">{formatARS(qr)}</Table.Td>
                                             <Table.Td ta="right">{formatARS(totalVentas)}</Table.Td>
-                                            <Table.Td>{h.usuario}</Table.Td>
+                                            <Table.Td>{h.usuario ?? '-'}</Table.Td>
                                         </Table.Tr>
                                     );
                                 })}

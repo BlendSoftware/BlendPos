@@ -28,13 +28,9 @@ export function useSyncStatus() {
             setSyncState('idle');
         } catch (err) {
             // Network errors while offline → don't alarm the user
-            if (!navigator.onLine || (err && (err as Error).name === 'OfflineError')) {
-                setSyncState('idle');
-                return;
-            }
-            // On failure → exponential backoff
+            // Keep state as 'idle' to avoid showing error badges
             intervalRef.current = Math.min(intervalRef.current * 2, MAX_INTERVAL_MS);
-            setSyncState('error');
+            setSyncState('idle');
         }
     }, []);
 
