@@ -17,9 +17,15 @@ type SesionCaja struct {
 	// MontoEsperado is computed on close: SUM(movimientos) + MontoInicial
 	MontoEsperado  *decimal.Decimal `gorm:"type:decimal(15,2)"`
 	MontoDeclarado *decimal.Decimal `gorm:"type:decimal(15,2)"`
-	Desvio         *decimal.Decimal `gorm:"type:decimal(15,2)"`
-	DesvioPct      *decimal.Decimal `gorm:"type:decimal(5,2)"`
-	Estado         string           `gorm:"type:varchar(20);not null;default:'abierta'"`
+	// Detailed cash count breakdown by payment method
+	MontoDeclaradoEfectivo      *decimal.Decimal `gorm:"type:decimal(15,2)"`
+	MontoDeclaradoDebito        *decimal.Decimal `gorm:"type:decimal(15,2)"`
+	MontoDeclaradoCredito       *decimal.Decimal `gorm:"type:decimal(15,2)"`
+	MontoDeclaradoTransferencia *decimal.Decimal `gorm:"type:decimal(15,2)"`
+	MontoDeclaradoQR            *decimal.Decimal `gorm:"type:decimal(15,2)"`
+	Desvio                      *decimal.Decimal `gorm:"type:decimal(15,2)"`
+	DesvioPct                   *decimal.Decimal `gorm:"type:decimal(5,2)"`
+	Estado                      string           `gorm:"type:varchar(20);not null;default:'abierta'"`
 	// ClasificacionDesvio: "normal" | "advertencia" | "critico"
 	ClasificacionDesvio *string `gorm:"type:varchar(20)"`
 	Observaciones       *string
@@ -27,6 +33,7 @@ type SesionCaja struct {
 	ClosedAt            *time.Time
 
 	Movimientos []MovimientoCaja `gorm:"foreignKey:SesionCajaID"`
+	Usuario     Usuario          `gorm:"foreignKey:UsuarioID;references:ID"`
 }
 
 // MovimientoCaja is an immutable event in the cash register ledger.

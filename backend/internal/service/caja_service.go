@@ -62,6 +62,12 @@ func (s *cajaService) Abrir(ctx context.Context, usuarioID uuid.UUID, req dto.Ab
 		return nil, err
 	}
 
+	// Reload session with Usuario preloaded to build the complete response
+	sesion, err := s.repo.FindSesionByID(ctx, sesion.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	return s.buildReporte(ctx, sesion)
 }
 
@@ -162,11 +168,17 @@ func (s *cajaService) Arqueo(ctx context.Context, req dto.ArqueoRequest, usuario
 		return nil, errors.New("desvío crítico: se requieren observaciones del supervisor")
 	}
 
-	// Persist closing data
+	// Persist closing data (total + breakdown)
 	montoEsperado := esperado.Total
 	montoDeclarado := declarado.Total
 	sesion.MontoEsperado = &montoEsperado
 	sesion.MontoDeclarado = &montoDeclarado
+	// Store the detailed breakdown by payment method
+	sesion.MontoDeclaradoEfectivo = &declarado.Efectivo
+	sesion.MontoDeclaradoDebito = &declarado.Debito
+	sesion.MontoDeclaradoCredito = &declarado.Credito
+	sesion.MontoDeclaradoTransferencia = &declarado.Transferencia
+	sesion.MontoDeclaradoQR = &declarado.QR
 	sesion.Desvio = &desvioMonto
 	sesion.DesvioPct = &desvioPct
 	sesion.Estado = "cerrada"
@@ -254,6 +266,14 @@ func (s *cajaService) Historial(ctx context.Context, page, limit int) ([]dto.Rep
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// getDecimalOrZero returns the dereferenced value or decimal.Zero if nil.
+func getDecimalOrZero(d *decimal.Decimal) decimal.Decimal {
+	if d == nil {
+		return decimal.Zero
+	}
+	return *d
+}
+
 // clasificarDesvio returns "normal" | "advertencia" | "critico"
 // normal: |desvio| <= 1%, advertencia: <= 5%, critico: > 5%
 func clasificarDesvio(pct decimal.Decimal) string {
@@ -288,6 +308,7 @@ func (s *cajaService) buildReporte(ctx context.Context, sesion *model.SesionCaja
 	reporte := &dto.ReporteCajaResponse{
 		SesionCajaID:  sesion.ID.String(),
 		PuntoDeVenta:  sesion.PuntoDeVenta,
+		Usuario:       sesion.Usuario.Nombre, // Include user name from preloaded relation
 		MontoInicial:  sesion.MontoInicial,
 		MontoEsperado: esperado,
 		Estado:        sesion.Estado,
@@ -302,7 +323,14 @@ func (s *cajaService) buildReporte(ctx context.Context, sesion *model.SesionCaja
 	}
 
 	if sesion.MontoDeclarado != nil {
-		montoDeclarado := dto.MontosPorMetodo{Total: *sesion.MontoDeclarado}
+		montoDeclarado := dto.MontosPorMetodo{
+			Total:         *sesion.MontoDeclarado,
+			Efectivo:      getDecimalOrZero(sesion.MontoDeclaradoEfectivo),
+			Debito:        getDecimalOrZero(sesion.MontoDeclaradoDebito),
+			Credito:       getDecimalOrZero(sesion.MontoDeclaradoCredito),
+			Transferencia: getDecimalOrZero(sesion.MontoDeclaradoTransferencia),
+			QR:            getDecimalOrZero(sesion.MontoDeclaradoQR),
+		}
 		reporte.MontoDeclarado = &montoDeclarado
 	}
 

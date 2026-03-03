@@ -34,13 +34,13 @@ func (r *cajaRepo) CreateSesion(ctx context.Context, s *model.SesionCaja) error 
 
 func (r *cajaRepo) FindSesionAbiertaPorPDV(ctx context.Context, puntoDeVenta int) (*model.SesionCaja, error) {
 	var s model.SesionCaja
-	err := r.db.WithContext(ctx).Where("punto_de_venta = ? AND estado = 'abierta'", puntoDeVenta).First(&s).Error
+	err := r.db.WithContext(ctx).Preload("Usuario").Where("punto_de_venta = ? AND estado = 'abierta'", puntoDeVenta).First(&s).Error
 	return &s, err
 }
 
 func (r *cajaRepo) FindSesionByID(ctx context.Context, id uuid.UUID) (*model.SesionCaja, error) {
 	var s model.SesionCaja
-	err := r.db.WithContext(ctx).Preload("Movimientos").First(&s, id).Error
+	err := r.db.WithContext(ctx).Preload("Movimientos").Preload("Usuario").First(&s, id).Error
 	return &s, err
 }
 
@@ -95,7 +95,7 @@ func (r *cajaRepo) SumMovimientosByMetodo(ctx context.Context, sesionCajaID uuid
 
 func (r *cajaRepo) FindSesionAbiertaPorUsuario(ctx context.Context, usuarioID uuid.UUID) (*model.SesionCaja, error) {
 	var s model.SesionCaja
-	err := r.db.WithContext(ctx).Where("usuario_id = ? AND estado = 'abierta'", usuarioID).First(&s).Error
+	err := r.db.WithContext(ctx).Preload("Usuario").Where("usuario_id = ? AND estado = 'abierta'", usuarioID).First(&s).Error
 	return &s, err
 }
 
@@ -107,6 +107,7 @@ func (r *cajaRepo) ListSesiones(ctx context.Context, page, limit int) ([]model.S
 		return nil, 0, err
 	}
 	err := r.db.WithContext(ctx).
+		Preload("Usuario").
 		Order("opened_at DESC").
 		Offset(offset).Limit(limit).
 		Find(&sesiones).Error
