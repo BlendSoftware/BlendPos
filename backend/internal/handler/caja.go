@@ -122,7 +122,7 @@ func (h *CajaHandler) RegistrarMovimiento(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// GetActiva returns the currently open cash session for the authenticated user.
+// GetActiva returns the currently open cash session for the authenticated user/PDV.
 func (h *CajaHandler) GetActiva(c *gin.Context) {
 	claims := middleware.GetClaims(c)
 	usuarioID, err := uuid.Parse(claims.UserID)
@@ -130,7 +130,7 @@ func (h *CajaHandler) GetActiva(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, apierror.New("ID de usuario inválido"))
 		return
 	}
-	resp, err := h.svc.GetActiva(c.Request.Context(), usuarioID)
+	resp, err := h.svc.GetActiva(c.Request.Context(), usuarioID, claims.PuntoDeVenta)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, apierror.New(err.Error()))
 		return

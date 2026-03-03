@@ -166,6 +166,30 @@ export const useCajaStore = create<CajaState>()(
             restaurar: async () => {
                 if (!navigator.onLine) return;
                 try {
+                    // Si ya tenemos una sesión guardada, verificarla directamente.
+                    // Esto evita que usuarios sin punto_de_venta en el JWT pierdan
+                    // la sesión al navegar entre vistas.
+                    const { sesionId: storedId } = get();
+                    if (storedId) {
+                        try {
+                            const reporte = await getReporteCaja(storedId);
+                            if (reporte && reporte.estado === 'abierta') {
+                                set({
+                                    sesionId: reporte.sesion_caja_id,
+                                    puntoDeVenta: reporte.punto_de_venta,
+                                    estado: 'abierta',
+                                    montoInicial: reporte.monto_inicial,
+                                    abiertaEn: reporte.opened_at,
+                                    usuarioNombre: reporte.usuario,
+                                    error: null,
+                                });
+                                return;
+                            }
+                        } catch {
+                            // La sesión guardada ya no existe en el backend; continuar con getCajaActiva
+                        }
+                    }
+
                     const reporte = await getCajaActiva();
                     if (reporte) {
                         set({

@@ -6,9 +6,9 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { Scissors, AlertTriangle, ArrowUp, PackagePlus, Plus, Link2 } from 'lucide-react';
+import { Scissors, AlertTriangle, ArrowUp, PackagePlus, Plus, Link2, Pencil, Trash2 } from 'lucide-react';
 import { listarProductos, ajustarStock } from '../../services/api/products';
-import { getAlertasStock, ejecutarDesarme as apiEjecutarDesarme, listarVinculos, crearVinculo, listarMovimientos, type AlertaStockResponse, type VinculoResponse } from '../../services/api/inventario';
+import { getAlertasStock, ejecutarDesarme as apiEjecutarDesarme, listarVinculos, crearVinculo, actualizarVinculo, eliminarVinculo, listarMovimientos, type AlertaStockResponse, type VinculoResponse } from '../../services/api/inventario';
 import type { IProducto, IMovimientoStock } from '../../types';
 
 // -- Types --
@@ -91,6 +91,16 @@ export function InventarioPage() {
     const [vinculoModalOpen, setVinculoModalOpen] = useState(false);
     const [savingVinculo, setSavingVinculo] = useState(false);
 
+    // Modal editar vínculo
+    const [editVinculoModalOpen, setEditVinculoModalOpen] = useState(false);
+    const [editingVinculo, setEditingVinculo] = useState<VinculoResponse | null>(null);
+    const [savingEditVinculo, setSavingEditVinculo] = useState(false);
+
+    // Modal eliminar vínculo
+    const [deleteVinculo, setDeleteVinculo] = useState<VinculoResponse | null>(null);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [deletingVinculo, setDeletingVinculo] = useState(false);
+
     const vinculoForm = useForm({
         initialValues: {
             producto_padre_id: '',
@@ -102,6 +112,16 @@ export function InventarioPage() {
             producto_padre_id: (v) => (v ? null : 'Requerido'),
             producto_hijo_id: (v, vals) =>
                 !v ? 'Requerido' : v === vals.producto_padre_id ? 'Padre e hijo no pueden ser el mismo' : null,
+            unidades_por_padre: (v) => (v >= 1 ? null : 'Mínimo 1'),
+        },
+    });
+
+    const editVinculoForm = useForm({
+        initialValues: {
+            unidades_por_padre: 12,
+            desarme_auto: true,
+        },
+        validate: {
             unidades_por_padre: (v) => (v >= 1 ? null : 'Mínimo 1'),
         },
     });
@@ -180,6 +200,50 @@ export function InventarioPage() {
             setSavingVinculo(false);
         }
     });
+
+    const openEditVinculo = (v: VinculoResponse) => {
+        setEditingVinculo(v);
+        editVinculoForm.setValues({ unidades_por_padre: v.unidades_por_padre, desarme_auto: v.desarme_auto });
+        setEditVinculoModalOpen(true);
+    };
+
+    const handleEditarVinculo = editVinculoForm.onSubmit(async (values) => {
+        if (!editingVinculo) return;
+        setSavingEditVinculo(true);
+        try {
+            await actualizarVinculo(editingVinculo.id, {
+                unidades_por_padre: values.unidades_por_padre,
+                desarme_auto: values.desarme_auto,
+            });
+            notifications.show({ title: 'Vínculo actualizado', message: 'Los cambios fueron guardados.', color: 'teal' });
+            setEditVinculoModalOpen(false);
+            await fetchData();
+        } catch (err) {
+            notifications.show({ title: 'Error', message: err instanceof Error ? err.message : 'Error', color: 'red' });
+        } finally {
+            setSavingEditVinculo(false);
+        }
+    });
+
+    const openDeleteVinculo = (v: VinculoResponse) => {
+        setDeleteVinculo(v);
+        setDeleteConfirmOpen(true);
+    };
+
+    const handleEliminarVinculo = async () => {
+        if (!deleteVinculo) return;
+        setDeletingVinculo(true);
+        try {
+            await eliminarVinculo(deleteVinculo.id);
+            notifications.show({ title: 'Vínculo eliminado', message: `Relación "${deleteVinculo.nombre_padre} → ${deleteVinculo.nombre_hijo}" eliminada.`, color: 'orange' });
+            setDeleteConfirmOpen(false);
+            await fetchData();
+        } catch (err) {
+            notifications.show({ title: 'Error', message: err instanceof Error ? err.message : 'Error', color: 'red' });
+        } finally {
+            setDeletingVinculo(false);
+        }
+    };
 
     const handleAjuste = ajusteForm.onSubmit(async (values) => {
         const producto = productos.find((p) => p.id === values.productoId);
@@ -355,14 +419,30 @@ export function InventarioPage() {
                                                         </Badge>
                                                     </Table.Td>
                                                     <Table.Td>
-                                                        <Button
-                                                            size="xs" variant="light" color="violet"
-                                                            leftSection={<Scissors size={12} />}
-                                                            onClick={() => openDesarme(v)}
-                                                            disabled={padre?.stock === 0}
-                                                        >
-                                                            Desarmar 1
-                                                        </Button>
+                                                        <Group gap={4} wrap="nowrap">
+                                                            <Button
+                                                                size="xs" variant="light" color="violet"
+                                                                leftSection={<Scissors size={12} />}
+                                                                onClick={() => openDesarme(v)}
+                                                                disabled={padre?.stock === 0}
+                                                            >
+                                                                Desarmar 1
+                                                            </Button>
+                                                            <Button
+                                                                size="xs" variant="light" color="blue"
+                                                                leftSection={<Pencil size={12} />}
+                                                                onClick={() => openEditVinculo(v)}
+                                                            >
+                                                                Editar
+                                                            </Button>
+                                                            <Button
+                                                                size="xs" variant="light" color="red"
+                                                                leftSection={<Trash2 size={12} />}
+                                                                onClick={() => openDeleteVinculo(v)}
+                                                            >
+                                                                Eliminar
+                                                            </Button>
+                                                        </Group>
                                                     </Table.Td>
                                                 </Table.Tr>
                                             );
@@ -572,6 +652,67 @@ export function InventarioPage() {
                         </Group>
                     </Stack>
                 </form>
+            </Modal>
+
+            {/* Modal Editar Vínculo */}
+            <Modal
+                opened={editVinculoModalOpen}
+                onClose={() => setEditVinculoModalOpen(false)}
+                title={<Group gap="xs"><Pencil size={16} /><Text fw={700}>Editar vínculo</Text></Group>}
+                size="sm"
+                centered
+            >
+                {editingVinculo && (
+                    <form onSubmit={handleEditarVinculo}>
+                        <Stack gap="md">
+                            <Text size="sm" c="dimmed">
+                                <strong>{editingVinculo.nombre_padre}</strong> → <strong>{editingVinculo.nombre_hijo}</strong>
+                            </Text>
+                            <NumberInput
+                                label="Unidades por padre"
+                                description="Cuántas unidades hijo se obtienen al desarmar 1 padre"
+                                min={1}
+                                {...editVinculoForm.getInputProps('unidades_por_padre')}
+                            />
+                            <Switch
+                                label="Desarme automático en venta"
+                                description="Si el hijo no tiene stock, se desarma automáticamente 1 padre"
+                                {...editVinculoForm.getInputProps('desarme_auto', { type: 'checkbox' })}
+                            />
+                            <Group justify="flex-end">
+                                <Button variant="subtle" onClick={() => setEditVinculoModalOpen(false)}>Cancelar</Button>
+                                <Button type="submit" leftSection={<Pencil size={14} />} loading={savingEditVinculo} color="blue">
+                                    Guardar cambios
+                                </Button>
+                            </Group>
+                        </Stack>
+                    </form>
+                )}
+            </Modal>
+
+            {/* Modal Confirmar Eliminación */}
+            <Modal
+                opened={deleteConfirmOpen}
+                onClose={() => setDeleteConfirmOpen(false)}
+                title={<Text fw={700} c="red">Eliminar vínculo</Text>}
+                size="sm"
+                centered
+            >
+                {deleteVinculo && (
+                    <Stack gap="md">
+                        <Alert color="red" variant="light">
+                            ¿Eliminar la relación <strong>&quot;{deleteVinculo.nombre_padre}&quot;</strong> →{' '}
+                            <strong>&quot;{deleteVinculo.nombre_hijo}&quot;</strong>?
+                            Esta acción no se puede deshacer.
+                        </Alert>
+                        <Group justify="flex-end">
+                            <Button variant="subtle" onClick={() => setDeleteConfirmOpen(false)}>Cancelar</Button>
+                            <Button color="red" leftSection={<Trash2 size={14} />} loading={deletingVinculo} onClick={handleEliminarVinculo}>
+                                Eliminar
+                            </Button>
+                        </Group>
+                    </Stack>
+                )}
             </Modal>
         </Stack>
     );

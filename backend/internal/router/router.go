@@ -134,6 +134,8 @@ func New(d Deps) *gin.Engine {
 		{
 			inv.POST("/vinculos", inventarioH.CrearVinculo)
 			inv.GET("/vinculos", inventarioH.ListarVinculos)
+			inv.PUT("/vinculos/:id", inventarioH.ActualizarVinculo)
+			inv.DELETE("/vinculos/:id", inventarioH.EliminarVinculo)
 			inv.POST("/desarme", inventarioH.DesarmeManual)
 			inv.GET("/alertas", inventarioH.ObtenerAlertas)
 			inv.GET("/movimientos", inventarioH.ListarMovimientos)

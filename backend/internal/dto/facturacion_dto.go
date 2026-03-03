@@ -8,7 +8,12 @@ type CrearVinculoRequest struct {
 	ProductoPadreID  string `json:"producto_padre_id"  validate:"required,uuid"`
 	ProductoHijoID   string `json:"producto_hijo_id"   validate:"required,uuid"`
 	UnidadesPorPadre int    `json:"unidades_por_padre" validate:"required,min=1"`
-	DesarmeAuto      bool   `json:"desarme_automatico"`
+	DesarmeAuto      bool   `json:"desarme_auto"`
+}
+
+type ActualizarVinculoRequest struct {
+	UnidadesPorPadre int  `json:"unidades_por_padre" validate:"required,min=1"`
+	DesarmeAuto      bool `json:"desarme_auto"`
 }
 
 type DesarmeManualRequest struct {
@@ -25,7 +30,7 @@ type VinculoResponse struct {
 	ProductoHijoID   string `json:"producto_hijo_id"`
 	NombreHijo       string `json:"nombre_hijo"`
 	UnidadesPorPadre int    `json:"unidades_por_padre"`
-	DesarmeAuto      bool   `json:"desarme_automatico"`
+	DesarmeAuto      bool   `json:"desarme_auto"`
 }
 
 type AlertaStockResponse struct {

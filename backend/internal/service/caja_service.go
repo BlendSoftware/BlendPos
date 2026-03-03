@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 type CajaService interface {
@@ -22,8 +23,9 @@ type CajaService interface {
 	ObtenerReporte(ctx context.Context, sesionID uuid.UUID) (*dto.ReporteCajaResponse, error)
 	// FindSesionAbierta is called by VentaService to validate an open session
 	FindSesionAbierta(ctx context.Context, sesionID uuid.UUID) error
-	// GetActiva returns the active session for a given user, or nil if none.
-	GetActiva(ctx context.Context, usuarioID uuid.UUID) (*dto.ReporteCajaResponse, error)
+	// GetActiva returns the active session for the given user/PDV, or nil if none.
+	// puntoDeVenta: if non-nil, any open session on that PDV is returned (ignoring user_id).
+	GetActiva(ctx context.Context, usuarioID uuid.UUID, puntoDeVenta *int) (*dto.ReporteCajaResponse, error)
 	// Historial returns a paginated list of past sessions (any state).
 	Historial(ctx context.Context, page, limit int) ([]dto.ReporteCajaResponse, error)
 }
@@ -40,9 +42,11 @@ func NewCajaService(repo repository.CajaRepository) CajaService {
 // AC-04.1 / AC-04.2
 
 func (s *cajaService) Abrir(ctx context.Context, usuarioID uuid.UUID, req dto.AbrirCajaRequest) (*dto.ReporteCajaResponse, error) {
-	// Guard: no duplicate open session per punto_de_venta
+	// Idempotent guard: if the PDV already has an open session, return it.
+	// This allows multiple users/logins to "join" the active session on a physical
+	// register without getting a 400 error, keeping the modal from getting stuck.
 	if existing, err := s.repo.FindSesionAbiertaPorPDV(ctx, req.PuntoDeVenta); err == nil && existing != nil {
-		return nil, errors.New("Ya existe una caja abierta en este punto de venta")
+		return s.buildReporte(ctx, existing)
 	}
 
 	sesion := &model.SesionCaja{
@@ -229,12 +233,27 @@ func (s *cajaService) FindSesionAbierta(ctx context.Context, sesionID uuid.UUID)
 }
 
 // ── GetActiva ─────────────────────────────────────────────────────────────────
-// Returns the active (open) session for the given user, or nil if none exists.
+// Returns the active (open) session for the given user or PDV, or nil if none.
+// If puntoDeVenta is non-nil, any open session on that register is returned
+// (regardless of which user opened it). Falls back to a user_id lookup.
 
-func (s *cajaService) GetActiva(ctx context.Context, usuarioID uuid.UUID) (*dto.ReporteCajaResponse, error) {
+func (s *cajaService) GetActiva(ctx context.Context, usuarioID uuid.UUID, puntoDeVenta *int) (*dto.ReporteCajaResponse, error) {
+	// If the user is associated with a specific register, look for any open
+	// session on that register — not just sessions they personally opened.
+	if puntoDeVenta != nil {
+		sesion, err := s.repo.FindSesionAbiertaPorPDV(ctx, *puntoDeVenta)
+		if err == nil && sesion != nil {
+			return s.buildReporte(ctx, sesion)
+		}
+	}
+	// Fallback: find a session that this user personally opened
+	// (handles admins/supervisors with no fixed register).
 	sesion, err := s.repo.FindSesionAbiertaPorUsuario(ctx, usuarioID)
 	if err != nil {
-		return nil, nil // no open session is not an error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil // genuinely no open session
+		}
+		return nil, err // real DB error – propagate so caller gets 500
 	}
 	return s.buildReporte(ctx, sesion)
 }

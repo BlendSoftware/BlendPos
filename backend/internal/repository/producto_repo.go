@@ -33,6 +33,8 @@ type ProductoRepository interface {
 	FindVinculoByHijoIDTx(tx *gorm.DB, hijoID uuid.UUID) (*model.ProductoHijo, error)
 	FindVinculoByID(ctx context.Context, id uuid.UUID) (*model.ProductoHijo, error)
 	ListVinculos(ctx context.Context) ([]model.ProductoHijo, error)
+	DeleteVinculo(ctx context.Context, id uuid.UUID) error
+	UpdateVinculo(ctx context.Context, id uuid.UUID, unidades int, desarmeAuto bool) error
 
 	// Used inside transactions — callers must pass the tx instance
 	UpdateStockTx(tx *gorm.DB, id uuid.UUID, delta int) error
@@ -67,7 +69,6 @@ func (r *productoRepo) FindByIDTx(tx *gorm.DB, id uuid.UUID) (*model.Producto, e
 	err := tx.First(&p, id).Error
 	return &p, err
 }
-
 
 func (r *productoRepo) FindByBarcode(ctx context.Context, barcode string) (*model.Producto, error) {
 	var p model.Producto
@@ -174,6 +175,15 @@ func (r *productoRepo) ListVinculos(ctx context.Context) ([]model.ProductoHijo, 
 	var vinculos []model.ProductoHijo
 	err := r.db.WithContext(ctx).Preload("Padre").Preload("Hijo").Find(&vinculos).Error
 	return vinculos, err
+}
+
+func (r *productoRepo) DeleteVinculo(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Delete(&model.ProductoHijo{}, id).Error
+}
+
+func (r *productoRepo) UpdateVinculo(ctx context.Context, id uuid.UUID, unidades int, desarmeAuto bool) error {
+	return r.db.WithContext(ctx).Model(&model.ProductoHijo{}).Where("id = ?", id).
+		Updates(map[string]interface{}{"unidades_por_padre": unidades, "desarme_auto": desarmeAuto}).Error
 }
 
 func (r *productoRepo) UpdateStockTx(tx *gorm.DB, id uuid.UUID, delta int) error {

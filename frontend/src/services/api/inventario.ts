@@ -45,6 +45,11 @@ export interface CrearVinculoRequest {
     desarme_auto: boolean;
 }
 
+export interface ActualizarVinculoRequest {
+    unidades_por_padre: number;
+    desarme_auto: boolean;
+}
+
 export interface DesarmeManualRequest {
     vinculo_id: string;
     cantidad_padres: number;
@@ -64,6 +69,20 @@ export async function listarVinculos(): Promise<VinculoResponse[]> {
  */
 export async function crearVinculo(data: CrearVinculoRequest): Promise<VinculoResponse> {
     return apiClient.post<VinculoResponse>('/v1/inventario/vinculos', data);
+}
+
+/**
+ * PUT /v1/inventario/vinculos/:id  (administrador, supervisor)
+ */
+export async function actualizarVinculo(id: string, data: ActualizarVinculoRequest): Promise<VinculoResponse> {
+    return apiClient.put<VinculoResponse>(`/v1/inventario/vinculos/${id}`, data);
+}
+
+/**
+ * DELETE /v1/inventario/vinculos/:id  (administrador, supervisor)
+ */
+export async function eliminarVinculo(id: string): Promise<void> {
+    return apiClient.delete<void>(`/v1/inventario/vinculos/${id}`);
 }
 
 /**

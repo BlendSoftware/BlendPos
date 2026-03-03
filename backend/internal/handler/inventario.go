@@ -46,6 +46,37 @@ func (h *InventarioHandler) ListarVinculos(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (h *InventarioHandler) EliminarVinculo(c *gin.Context) {
+	id := c.Param("id")
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("id inválido"))
+		return
+	}
+	if err := h.svc.EliminarVinculo(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusNotFound, apierror.New(err.Error()))
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *InventarioHandler) ActualizarVinculo(c *gin.Context) {
+	id := c.Param("id")
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("id inválido"))
+		return
+	}
+	var req dto.ActualizarVinculoRequest
+	if !bindAndValidate(c, &req) {
+		return
+	}
+	resp, err := h.svc.ActualizarVinculo(c.Request.Context(), id, req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 func (h *InventarioHandler) DesarmeManual(c *gin.Context) {
 	var req dto.DesarmeManualRequest
 	if !bindAndValidate(c, &req) {

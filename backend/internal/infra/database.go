@@ -247,6 +247,15 @@ func applySchemaPatches(db *gorm.DB) error {
 		        WHERE estado = 'pendiente' AND next_retry_at IS NOT NULL;
 		  END IF;
 		END $$`,
+		// sesion_cajas: payment-method breakdown columns (migrations 000014 / H-03).
+		`ALTER TABLE sesion_cajas
+		  ADD COLUMN IF NOT EXISTS monto_declarado_efectivo       DECIMAL(15,2),
+		  ADD COLUMN IF NOT EXISTS monto_declarado_debito         DECIMAL(15,2),
+		  ADD COLUMN IF NOT EXISTS monto_declarado_credito        DECIMAL(15,2),
+		  ADD COLUMN IF NOT EXISTS monto_declarado_transferencia  DECIMAL(15,2),
+		  ADD COLUMN IF NOT EXISTS monto_declarado_qr             DECIMAL(15,2)`,
+		// migration 000013: must_change_password flag for SEC-03
+		`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE`,
 		// migration 000002: historial_precios index (safe to re-create)
 		`DO $$ BEGIN
 		  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'historial_precios')

@@ -141,6 +141,24 @@ func (r *stubProductoRepo) ListVinculos(_ context.Context) ([]model.ProductoHijo
 	return result, nil
 }
 
+func (r *stubProductoRepo) DeleteVinculo(_ context.Context, id uuid.UUID) error {
+	if _, ok := r.vinculos[id]; !ok {
+		return errors.New("vinculo not found")
+	}
+	delete(r.vinculos, id)
+	return nil
+}
+
+func (r *stubProductoRepo) UpdateVinculo(_ context.Context, id uuid.UUID, unidades int, desarmeAuto bool) error {
+	v, ok := r.vinculos[id]
+	if !ok {
+		return errors.New("vinculo not found")
+	}
+	v.UnidadesPorPadre = unidades
+	v.DesarmeAuto = desarmeAuto
+	return nil
+}
+
 func (r *stubProductoRepo) UpdateStockTx(_ *gorm.DB, id uuid.UUID, delta int) error {
 	p, ok := r.productos[id]
 	if !ok {
