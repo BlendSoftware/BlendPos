@@ -156,6 +156,13 @@ func (r *productoRepo) FindVinculoByHijoID(ctx context.Context, hijoID uuid.UUID
 	return &v, err
 }
 
+// FindVinculoByHijoIDTx finds an auto-disassembly link INSIDE a transaction.
+func (r *productoRepo) FindVinculoByHijoIDTx(tx *gorm.DB, hijoID uuid.UUID) (*model.ProductoHijo, error) {
+	var v model.ProductoHijo
+	err := tx.Where("producto_hijo_id = ? AND desarme_auto = true", hijoID).First(&v).Error
+	return &v, err
+}
+
 func (r *productoRepo) FindVinculoByID(ctx context.Context, id uuid.UUID) (*model.ProductoHijo, error) {
 	var v model.ProductoHijo
 	err := r.db.WithContext(ctx).First(&v, id).Error

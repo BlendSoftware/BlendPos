@@ -87,7 +87,7 @@ func New(d Deps) *gin.Engine {
 	// ── Routes ───────────────────────────────────────────────────────────────
 
 	// Public
-	r.GET("/health", handler.Health(d.DB, d.RDB, d.AfipCB))
+	r.GET("/health", handler.Health(d.DB, d.RDB, d.AfipCB, cfg))
 
 	// Auth (public)
 	auth := r.Group("/v1/auth")

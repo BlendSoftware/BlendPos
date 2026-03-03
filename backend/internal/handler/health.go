@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"blendpos/internal/config"
 	"blendpos/internal/infra"
 
 	"github.com/gin-gonic/gin"
@@ -13,9 +14,9 @@ import (
 )
 
 // Health returns a JSON health check response.
-// Checks DB, Redis connectivity, and AFIP circuit breaker state.
+// Checks DB, Redis connectivity, AFIP circuit breaker state, and SMTP config.
 // Never exposes credentials or internals.
-func Health(db *gorm.DB, rdb *redis.Client, afipCB *infra.CircuitBreaker) gin.HandlerFunc {
+func Health(db *gorm.DB, rdb *redis.Client, afipCB *infra.CircuitBreaker, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 		defer cancel()
@@ -47,6 +48,7 @@ func Health(db *gorm.DB, rdb *redis.Client, afipCB *infra.CircuitBreaker) gin.Ha
 			"db":      dbStatus,
 			"redis":   redisStatus,
 			"afip_cb": cbState,
+			"smtp":    cfg.IsSMTPConfigured(),
 		})
 	}
 }

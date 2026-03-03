@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
     Modal, Stack, Text, Group, Button, Divider, Badge, ThemeIcon, Box, Alert,
 } from '@mantine/core';
@@ -17,12 +17,32 @@ const METODO_LABEL: Record<string, string> = {
     transferencia: '📱 Transferencia',
 };
 
+const BASE_URL = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
+
 export function PostSaleModal() {
     const isOpen = usePOSUIStore((s) => s.isPostSaleModalOpen);
     const record = usePOSUIStore((s) => s.lastSaleRecord);
     const close = usePOSUIStore((s) => s.closePostSaleModal);
     const [printing, setPrinting] = useState(false);
+    const [smtpConfigured, setSMTPConfigured] = useState<boolean | null>(null);
     const ticketRef = useRef<HTMLDivElement>(null);
+
+    // Check SMTP configuration on mount
+    useEffect(() => {
+        const checkSMTP = async () => {
+            try {
+                const res = await fetch(`${BASE_URL}/health`);
+                if (res.ok) {
+                    const data = await res.json() as { smtp?: boolean };
+                    setSMTPConfigured(data.smtp ?? false);
+                }
+            } catch {
+                // Silently fail — assume SMTP not configured if health check fails
+                setSMTPConfigured(false);
+            }
+        };
+        checkSMTP();
+    }, []);
 
     if (!record) return null;
 
@@ -308,15 +328,23 @@ export function PostSaleModal() {
                         <Divider />
                         <Alert 
                             icon={<Info size={16} />} 
-                            color="blue"
+                            color={smtpConfigured ? "blue" : "orange"}
                             variant="light"
-                            title="Email pendiente"
+                            title={smtpConfigured ? "Email pendiente" : "Configuración SMTP requerida"}
                         >
                             <Text size="xs">
-                                El comprobante se enviará a <strong>{record.clienteEmail}</strong> cuando
-                                la venta se sincronice con el servidor.<br/><br/>
-                                <strong>Nota:</strong> El servidor debe tener configurado SMTP para enviar emails.
-                                Si no recibes el email, contacta al administrador para verificar la configuración.
+                                {smtpConfigured ? (
+                                    <>
+                                        El comprobante se enviará a <strong>{record.clienteEmail}</strong> cuando
+                                        la venta se sincronice con el servidor.
+                                    </>
+                                ) : (
+                                    <>
+                                        <strong>Nota:</strong> El servidor no tiene configurado SMTP para enviar emails.
+                                        El comprobante no se enviará a <strong>{record.clienteEmail}</strong>.
+                                        Contactá al administrador para configurar las credenciales de email.
+                                    </>
+                                )}
                             </Text>
                         </Alert>
                     </>

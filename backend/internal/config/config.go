@@ -134,3 +134,8 @@ func (c *Config) validate() error {
 
 	return nil
 }
+
+// IsSMTPConfigured returns true if all required SMTP settings are present.
+func (c *Config) IsSMTPConfigured() bool {
+	return c.SMTPHost != "" && c.SMTPPort > 0 && c.SMTPUser != "" && c.SMTPPassword != ""
+}

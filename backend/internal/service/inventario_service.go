@@ -188,9 +188,14 @@ func (s *inventarioService) DescontarStockTx(ctx context.Context, productoID uui
 	}
 
 	// Insufficient stock — attempt automatic disassembly if a vinculo with desarme_auto exists
-	vinculo, err := s.repo.FindVinculoByHijoID(ctx, productoID)
+	vinculo, err := s.repo.FindVinculoByHijoIDTx(tx, productoID)
 	if err != nil {
 		// No auto-desarme link; record conflict but still decrement (may go negative — flagged as conflictoStock)
+		return s.repo.UpdateStockTx(tx, productoID, -cantidad)
+	}
+
+	// Verify desarme_auto flag (double-check even though query filters it)
+	if !vinculo.DesarmeAuto {
 		return s.repo.UpdateStockTx(tx, productoID, -cantidad)
 	}
 
