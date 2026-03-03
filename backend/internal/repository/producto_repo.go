@@ -30,6 +30,7 @@ type ProductoRepository interface {
 	// Hierarchy
 	CreateVinculo(ctx context.Context, v *model.ProductoHijo) error
 	FindVinculoByHijoID(ctx context.Context, hijoID uuid.UUID) (*model.ProductoHijo, error)
+	FindVinculoByHijoIDTx(tx *gorm.DB, hijoID uuid.UUID) (*model.ProductoHijo, error)
 	FindVinculoByID(ctx context.Context, id uuid.UUID) (*model.ProductoHijo, error)
 	ListVinculos(ctx context.Context) ([]model.ProductoHijo, error)
 
