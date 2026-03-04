@@ -60,6 +60,13 @@ type RegistrarVentaRequest struct {
 	OfflineID *string `json:"offline_id"    validate:"omitempty,uuid"`
 	// ClienteEmail: optional — when present, the facturacion worker mails the PDF receipt.
 	ClienteEmail *string `json:"cliente_email" validate:"omitempty,email"`
+	// Fiscal comprobante fields — optional; defaults to ticket_interno when omitted.
+	// TipoComprobante: "ticket_interno" | "factura_a" | "factura_b" | "factura_c"
+	TipoComprobante *string `json:"tipo_comprobante"  validate:"omitempty,oneof=ticket_interno factura_a factura_b factura_c"`
+	// TipoDocReceptor: 96=DNI, 80=CUIT, 99=ConsumidorFinal
+	TipoDocReceptor *int `json:"tipo_doc_receptor" validate:"omitempty"`
+	// NroDocReceptor: CUIT/DNI del receptor, "0" si ConsumidorFinal
+	NroDocReceptor *string `json:"nro_doc_receptor"  validate:"omitempty"`
 }
 
 type AnularVentaRequest struct {
@@ -92,7 +99,7 @@ type VentaResponse struct {
 	Estado         string              `json:"estado"`
 	// OfflineID echoes the offline_id from the request so clients can correlate
 	// batch results without relying on fragile array-index matching (P2-005).
-	OfflineID      *string             `json:"offline_id,omitempty"`
-	ConflictoStock bool                `json:"conflicto_stock"`
-	CreatedAt      string              `json:"created_at"`
+	OfflineID      *string `json:"offline_id,omitempty"`
+	ConflictoStock bool    `json:"conflicto_stock"`
+	CreatedAt      string  `json:"created_at"`
 }

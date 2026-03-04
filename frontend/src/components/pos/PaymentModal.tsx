@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     Modal, Stack, Text, Group, Button, Divider, Select, NumberInput,
-    Badge, Box, Alert, TextInput, Collapse
+    Badge, Box, Alert, TextInput, Collapse, SegmentedControl
 } from '@mantine/core';
 import { CreditCard, Check, X, Wallet, AlertCircle, Mail } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
@@ -34,8 +34,11 @@ export function PaymentModal() {
     const [mixtoQr, setMixtoQr] = useState<number | string>('');
     const [mixtoTransferencia, setMixtoTransferencia] = useState<number | string>('');
     const [clienteEmail, setClienteEmail] = useState('');
+    const [tipoComprobante, setTipoComprobante] = useState<'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c'>('ticket_interno');
+    const [cuitReceptor, setCuitReceptor] = useState('');
 
     const isEmailValid = clienteEmail === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clienteEmail);
+    const isCuitValid = tipoComprobante !== 'factura_a' || /^\d{11}$/.test(cuitReceptor);
 
     const toNumber = (val: number | string): number =>
         (typeof val === 'string' ? parseFloat(val) || 0 : val) || 0;
@@ -85,6 +88,8 @@ export function PaymentModal() {
             setMixtoQr('');
             setMixtoTransferencia('');
             setClienteEmail('');
+            setTipoComprobante('ticket_interno');
+            setCuitReceptor('');
         }
     }, [isOpen]);
 
@@ -125,6 +130,8 @@ export function PaymentModal() {
             efectivoRecibido: efectivoRecibidoToSave,
             vuelto: vueltoCalc,
             clienteEmail: clienteEmail.trim() || undefined,
+            tipoComprobante,
+            cuitReceptor: cuitReceptor.trim() || undefined,
         });
         closePaymentModal();
 
@@ -201,6 +208,37 @@ export function PaymentModal() {
                         </Text>
                     </Group>
                 </div>
+
+                {/* Tipo de comprobante */}
+                <Stack gap={4}>
+                    <Text size="sm" fw={500}>Tipo de comprobante</Text>
+                    <SegmentedControl
+                        fullWidth
+                        value={tipoComprobante}
+                        onChange={(v) => setTipoComprobante(v as typeof tipoComprobante)}
+                        data={[
+                            { value: 'ticket_interno', label: 'Ticket' },
+                            { value: 'factura_c', label: 'Factura C' },
+                            { value: 'factura_b', label: 'Factura B' },
+                            { value: 'factura_a', label: 'Factura A' },
+                        ]}
+                        size="sm"
+                    />
+                </Stack>
+
+                {/* CUIT/DNI del receptor — solo para Factura A */}
+                <Collapse in={tipoComprobante === 'factura_a'}>
+                    <TextInput
+                        label="CUIT del receptor"
+                        description="11 dígitos sin guiones (requerido para Factura A)"
+                        placeholder="20123456789"
+                        value={cuitReceptor}
+                        onChange={(e) => setCuitReceptor(e.currentTarget.value.replace(/\D/g, '').slice(0, 11))}
+                        error={cuitReceptor && !isCuitValid ? 'El CUIT debe tener 11 dígitos' : undefined}
+                        size="sm"
+                        required={tipoComprobante === 'factura_a'}
+                    />
+                </Collapse>
 
                 {/* Método de pago */}
                 <Select
@@ -404,7 +442,7 @@ export function PaymentModal() {
                         size="lg"
                         leftSection={<Check size={18} />}
                         onClick={handleConfirmPayment}
-                        disabled={!canConfirm || !isEmailValid}
+                        disabled={!canConfirm || !isEmailValid || !isCuitValid}
                     >
                         Confirmar Pago
                     </Button>

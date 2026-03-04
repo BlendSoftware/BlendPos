@@ -33,7 +33,7 @@ export interface SaleRecord {
     metodoPago: MetodoPago;
     /** Desglose de pagos cuando aplica (ej: mixto). */
     pagos?: PagoDetalle[];
-    /** En efectivo, cuánto entregó el cliente (para vuelto). */
+    /** En efectivo, cuánto entrego el cliente (para vuelto). */
     efectivoRecibido?: number;
     /** Vuelto calculado (solo sobre efectivo). */
     vuelto?: number;
@@ -42,6 +42,10 @@ export interface SaleRecord {
     sesionCajaId?: string;
     /** Email del cliente para envío de comprobante digital. */
     clienteEmail?: string;
+    /** Tipo de comprobante fiscal solicitado. Defaults to 'ticket_interno'. */
+    tipoComprobante: 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c';
+    /** CUIT del receptor (requerido para factura_a). */
+    cuitReceptor?: string;
 }
 
 // ── Lean state — only what belongs here ──────────────────────────────────────
@@ -58,6 +62,10 @@ interface SaleState {
         vuelto?: number;
         /** Optional customer email — backend will mail the PDF receipt. */
         clienteEmail?: string;
+        /** Fiscal receipt type. Defaults to 'ticket_interno'. */
+        tipoComprobante?: 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c';
+        /** CUIT del receptor (required for factura_a). */
+        cuitReceptor?: string;
     }) => SaleRecord;
     setCajero: (nombre: string) => void;
     /** Sync ticket counter with backend's last ticket number */
@@ -106,6 +114,8 @@ export const useSaleStore = create<SaleState>()(
                     cajero,
                     sesionCajaId: sesionId,
                     clienteEmail: pago.clienteEmail,
+                    tipoComprobante: pago.tipoComprobante ?? 'ticket_interno',
+                    cuitReceptor: pago.cuitReceptor,
                 };
 
                 // 🖨️ Printing is now handled by PostSaleModal (user-initiated).

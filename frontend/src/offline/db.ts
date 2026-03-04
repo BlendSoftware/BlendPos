@@ -17,6 +17,10 @@ export interface LocalSale {
     sesionCajaId?: string;
     /** Email del cliente para envío de comprobante digital. */
     clienteEmail?: string;
+    /** Tipo de comprobante fiscal. Defaults to 'ticket_interno'. */
+    tipoComprobante?: 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c';
+    /** CUIT del receptor (requerido para factura_a). */
+    cuitReceptor?: string;
     synced: 0 | 1;
 }
 

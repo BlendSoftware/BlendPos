@@ -51,6 +51,17 @@ function toRegistrarVentaRequest(sale: LocalSale): Record<string, unknown> {
         payload.cliente_email = sale.clienteEmail.trim();
     }
 
+    // Include fiscal comprobante fields if present
+    const tipoComp = sale.tipoComprobante ?? 'ticket_interno';
+    payload.tipo_comprobante = tipoComp;
+    if (tipoComp === 'factura_a' && sale.cuitReceptor) {
+        payload.tipo_doc_receptor = 80; // CUIT
+        payload.nro_doc_receptor = sale.cuitReceptor;
+    } else if (tipoComp !== 'ticket_interno') {
+        payload.tipo_doc_receptor = 99; // ConsumidorFinal
+        payload.nro_doc_receptor = '0';
+    }
+
     return payload;
 }
 

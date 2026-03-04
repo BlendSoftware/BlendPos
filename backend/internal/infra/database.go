@@ -289,6 +289,10 @@ func applySchemaPatches(db *gorm.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_compras_proveedor     ON compras(proveedor_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_compras_fecha          ON compras(fecha_compra DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_compra_items_compra    ON compra_items(compra_id)`,
+		// migration 000018: cantidad_requerida for promotional quantity combos
+		`ALTER TABLE promociones ADD COLUMN IF NOT EXISTS cantidad_requerida INTEGER NOT NULL DEFAULT 1`,
+		// migration 000019: tipo_comprobante on ventas (fiscal receipt type selected at POS)
+		`ALTER TABLE ventas ADD COLUMN IF NOT EXISTS tipo_comprobante VARCHAR(30) NOT NULL DEFAULT 'ticket_interno'`,
 		// migration 000002: historial_precios index (safe to re-create)
 		`DO $$ BEGIN
 		  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'historial_precios')

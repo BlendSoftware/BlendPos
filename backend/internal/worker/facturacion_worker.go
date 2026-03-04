@@ -9,6 +9,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"blendpos/internal/infra"
@@ -28,6 +31,12 @@ const MaxComprobanteRetries = 10
 type FacturacionJobPayload struct {
 	VentaID      string  `json:"venta_id"`
 	ClienteEmail *string `json:"cliente_email,omitempty"`
+	// TipoComprobante: "ticket_interno" | "factura_a" | "factura_b" | "factura_c"
+	TipoComprobante string `json:"tipo_comprobante"`
+	// TipoDocReceptor: 96=DNI, 80=CUIT, 99=ConsumidorFinal
+	TipoDocReceptor *int `json:"tipo_doc_receptor,omitempty"`
+	// NroDocReceptor: CUIT/DNI del receptor, empty = default to "0"
+	NroDocReceptor *string `json:"nro_doc_receptor,omitempty"`
 }
 
 // FacturacionWorker processes fiscal billing jobs from QueueFacturacion.
@@ -107,9 +116,13 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 		log.Info().Str("venta_id", payload.VentaID).Msg("facturacion_worker: retrying existing comprobante without CAE")
 	} else {
 		// No comprobante exists — create one with estado "pendiente"
+		tipoComp := payload.TipoComprobante
+		if tipoComp == "" {
+			tipoComp = "ticket_interno"
+		}
 		comp = &model.Comprobante{
 			VentaID:    ventaID,
-			Tipo:       "ticket_interno",
+			Tipo:       tipoComp,
 			MontoNeto:  venta.Total,
 			MontoIVA:   decimal.Zero,
 			MontoTotal: venta.Total,
@@ -121,8 +134,21 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 		}
 	}
 
+	// 3. For ticket_interno: mark as emitido immediately (no AFIP call needed)
+	if comp.Tipo == "ticket_interno" {
+		comp.Estado = "emitido"
+		if err := w.comprobanteRepo.Update(ctx, comp); err != nil {
+			log.Error().Err(err).Str("venta_id", payload.VentaID).Msg("facturacion_worker: failed to mark ticket_interno as emitido")
+		}
+		// Still generate PDF + email for internal tickets
+		pdfPath := w.generatePDF(ctx, venta, comp, payload.VentaID)
+		if payload.ClienteEmail != nil && *payload.ClienteEmail != "" && pdfPath != "" {
+			w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath)
+		}
+		return
+	}
 	// 3. AFIP call through Circuit Breaker
-	afipPayload := w.buildAFIPPayload(venta, payload.VentaID)
+	afipPayload := w.buildAFIPPayload(venta, &payload)
 	afipResp, afipErr := w.callAFIPWithCB(ctx, afipPayload)
 
 	// 4. Update Comprobante based on AFIP result
@@ -153,19 +179,48 @@ func (w *FacturacionWorker) callAFIPWithCB(ctx context.Context, payload infra.AF
 	return afipResp, err
 }
 
-func (w *FacturacionWorker) buildAFIPPayload(venta *model.Venta, ventaID string) infra.AFIPPayload {
+func (w *FacturacionWorker) buildAFIPPayload(venta *model.Venta, payload *FacturacionJobPayload) infra.AFIPPayload {
+	// Read PuntoDeVenta from env (AFIP_PUNTO_VENTA), default 1
+	puntoDeVenta := 1
+	if envPDV := os.Getenv("AFIP_PUNTO_VENTA"); envPDV != "" {
+		if v, err := strconv.Atoi(envPDV); err == nil && v > 0 {
+			puntoDeVenta = v
+		}
+	}
+
+	// Map tipo string → AFIP numeric type
+	tipoComprobante := 11 // Default: Factura C
+	switch payload.TipoComprobante {
+	case "factura_a":
+		tipoComprobante = 1
+	case "factura_b":
+		tipoComprobante = 6
+	case "factura_c":
+		tipoComprobante = 11
+	}
+
+	// Doc receptor
+	tipoDocReceptor := 99 // ConsumidorFinal
+	if payload.TipoDocReceptor != nil {
+		tipoDocReceptor = *payload.TipoDocReceptor
+	}
+	nroDocReceptor := "0"
+	if payload.NroDocReceptor != nil && *payload.NroDocReceptor != "" {
+		nroDocReceptor = *payload.NroDocReceptor
+	}
+
 	return infra.AFIPPayload{
 		CUITEmisor:      w.cuitEmisor,
-		PuntoDeVenta:    1,
-		TipoComprobante: 11, // Factura C — consumidor final
-		TipoDocReceptor: 99, // 99 = Consumidor Final
-		NroDocReceptor:  "0",
+		PuntoDeVenta:    puntoDeVenta,
+		TipoComprobante: tipoComprobante,
+		TipoDocReceptor: tipoDocReceptor,
+		NroDocReceptor:  nroDocReceptor,
 		Concepto:        1, // Productos
 		ImporteNeto:     venta.Total.StringFixed(2),
 		ImporteExento:   decimal.Zero.StringFixed(2),
 		ImporteIVA:      decimal.Zero.StringFixed(2),
 		ImporteTotal:    venta.Total.StringFixed(2),
-		VentaID:         ventaID,
+		VentaID:         payload.VentaID,
 	}
 }
 
@@ -200,7 +255,14 @@ func (w *FacturacionWorker) handleAFIPResult(ctx context.Context, comp *model.Co
 		log.Info().Str("cae", cae).Str("venta_id", ventaID).Msg("facturacion_worker: CAE obtained successfully")
 	} else if afipResp != nil {
 		comp.Estado = "rechazado"
+		var obsLines []string
+		for _, o := range afipResp.Observaciones {
+			obsLines = append(obsLines, fmt.Sprintf("[%d] %s", o.Codigo, o.Mensaje))
+		}
 		obs := fmt.Sprintf("AFIP rechazó el comprobante: resultado=%s", afipResp.Resultado)
+		if len(obsLines) > 0 {
+			obs += " — " + strings.Join(obsLines, "; ")
+		}
 		comp.Observaciones = &obs
 		if err := w.comprobanteRepo.Update(ctx, comp); err != nil {
 			log.Error().Err(err).Str("comprobante_id", comp.ID.String()).Msg("facturacion_worker: failed to persist comprobante after AFIP rejection")

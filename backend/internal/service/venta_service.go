@@ -173,6 +173,12 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 	}
 	vuelto := totalPagos.Sub(total)
 
+	// Resolve tipo_comprobante (defaults to "ticket_interno")
+	tipoComp := "ticket_interno"
+	if req.TipoComprobante != nil && *req.TipoComprobante != "" {
+		tipoComp = *req.TipoComprobante
+	}
+
 	// 5. ACID transaction with row-level stock lock
 	var venta model.Venta
 	txErr := runTx(ctx, s.repo.DB(), func(tx *gorm.DB) error {
@@ -202,15 +208,16 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 
 		// Build venta model
 		venta = model.Venta{
-			NumeroTicket:   ticketNum,
-			SesionCajaID:   sesionID,
-			UsuarioID:      usuarioID,
-			Subtotal:       subtotal,
-			DescuentoTotal: descuentoTotal,
-			Total:          total,
-			Estado:         "completada",
-			OfflineID:      req.OfflineID,
-			ConflictoStock: conflictoStock,
+			NumeroTicket:    ticketNum,
+			SesionCajaID:    sesionID,
+			UsuarioID:       usuarioID,
+			Subtotal:        subtotal,
+			DescuentoTotal:  descuentoTotal,
+			Total:           total,
+			Estado:          "completada",
+			TipoComprobante: tipoComp,
+			OfflineID:       req.OfflineID,
+			ConflictoStock:  conflictoStock,
 		}
 
 		// Build items
@@ -290,13 +297,14 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 	// 6. Async facturacion job — error is handled: if Redis is down we create a
 	// pending comprobante directly so that retry_cron picks it up on next cycle.
 	if s.dispatcher != nil {
-		payload := map[string]interface{}{
-			"venta_id": venta.ID.String(),
+		fiscalPayload := worker.FacturacionJobPayload{
+			VentaID:         venta.ID.String(),
+			TipoComprobante: tipoComp,
+			ClienteEmail:    req.ClienteEmail,
+			TipoDocReceptor: req.TipoDocReceptor,
+			NroDocReceptor:  req.NroDocReceptor,
 		}
-		if req.ClienteEmail != nil && *req.ClienteEmail != "" {
-			payload["cliente_email"] = *req.ClienteEmail
-		}
-		if err := s.dispatcher.EnqueueFacturacion(ctx, payload); err != nil {
+		if err := s.dispatcher.EnqueueFacturacion(ctx, fiscalPayload); err != nil {
 			log.Error().Err(err).Str("venta_id", venta.ID.String()).
 				Msg("CRITICO: fallo al encolar facturacion — creando comprobante pendiente para retry")
 			// Fallback: create the comprobante record directly in estado='pendiente'.
@@ -305,7 +313,7 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 				nextRetry := time.Now().Add(30 * time.Second)
 				comp := &model.Comprobante{
 					VentaID:     venta.ID,
-					Tipo:        "ticket_interno",
+					Tipo:        tipoComp,
 					MontoNeto:   venta.Total,
 					MontoIVA:    decimal.Zero,
 					MontoTotal:  venta.Total,

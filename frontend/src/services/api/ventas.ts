@@ -91,6 +91,12 @@ export interface RegistrarVentaRequest {
     offline_id?: string;
     /** Optional — when provided the backend emails the PDF receipt to this address. */
     cliente_email?: string;
+    /** Fiscal receipt type. Defaults to 'ticket_interno' when omitted. */
+    tipo_comprobante?: 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c';
+    /** 96=DNI, 80=CUIT, 99=ConsumidorFinal */
+    tipo_doc_receptor?: number;
+    /** CUIT/DNI del receptor. "0" for ConsumidorFinal */
+    nro_doc_receptor?: string;
 }
 
 // ── API Calls ─────────────────────────────────────────────────────────────────
