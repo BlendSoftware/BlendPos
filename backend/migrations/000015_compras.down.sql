@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS compra_items;
+DROP TABLE IF EXISTS compras;

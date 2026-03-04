@@ -38,6 +38,12 @@ interface CartState {
     removeItem: (id: string) => void;
     updateQuantity: (id: string, cantidad: number) => void;
     setItemDiscount: (id: string, descuento: number) => void;
+    /**
+     * Batch-updates promotion discounts for all cart items.
+     * Receives a map of { productId → discountPct } — items not present in the
+     * map are reset to 0. Only triggers a re-render if something actually changed.
+     */
+    setPromoDiscounts: (map: Record<string, number>) => void;
     setGlobalDiscount: (descuento: number) => void;
     clearCart: () => void;
 
@@ -204,6 +210,28 @@ export const useCartStore = create<CartState>()((set, get) => ({
                 ? { ...c, descuento, subtotal: c.cantidad * c.precio * (1 - descuento / 100) }
                 : c
         );
+        const total = computeTotal(updatedCart);
+        set({
+            cart: updatedCart,
+            total,
+            totalConDescuento: computeTotalConDescuento(total, descuentoGlobal),
+        });
+    },
+
+    setPromoDiscounts: (map) => {
+        const { cart, descuentoGlobal } = get();
+        let changed = false;
+        const updatedCart = cart.map((c) => {
+            const newDescuento = map[c.id] ?? 0;
+            if (c.descuento === newDescuento) return c;
+            changed = true;
+            return {
+                ...c,
+                descuento: newDescuento,
+                subtotal: c.cantidad * c.precio * (1 - newDescuento / 100),
+            };
+        });
+        if (!changed) return; // avoid unnecessary re-render
         const total = computeTotal(updatedCart);
         set({
             cart: updatedCart,

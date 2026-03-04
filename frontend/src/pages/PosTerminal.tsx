@@ -21,6 +21,7 @@ import { usePOSUIStore } from '../store/usePOSUIStore';
 import { useSaleStore } from '../store/useSaleStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCajaStore } from '../store/useCajaStore';
+import { usePromocionesStore } from '../store/usePromocionesStore';
 import { usePosFocus } from '../hooks/usePosFocus';
 import { findCatalogProductByBarcode, searchCatalogProducts, seedCatalogFromMocksIfEmpty, forceRefreshCatalog } from '../offline/catalog';
 import { getPrecioPorBarcode } from '../services/api/products';
@@ -44,6 +45,7 @@ export function PosTerminal() {
         removeSelectedItem,
         selectedRowIndex,
         updateQuantity,
+        setPromoDiscounts,
     } = useCartStore();
 
     const {
@@ -66,6 +68,7 @@ export function PosTerminal() {
     const syncTicketCounter = useSaleStore((s) => s.syncTicketCounter);
     const { user } = useAuthStore();
     const { sesionId, restaurar } = useCajaStore();
+    const { fetchActivePromociones, promociones, computePromoDescuentos } = usePromocionesStore();
     const [isInitializing, setIsInitializing] = useState(true);
 
     // Al montar, sincronizar sesión de caja con el backend (limpia localStorage obsoleto)
@@ -94,14 +97,31 @@ export function PosTerminal() {
     // Sincronizar catálogo desde el backend en cada apertura del POS.
     // Usa forceRefreshCatalog para garantizar que nuevos productos del admin
     // sean siempre visibles sin importar el estado del IndexedDB local.
+    // También precargamos las promociones activas para aplicarlas al agregar productos.
     useEffect(() => {
         forceRefreshCatalog().catch(() => seedCatalogFromMocksIfEmpty().catch(console.warn));
+        fetchActivePromociones();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Sync the cashier name from the auth store into the sale store
     useEffect(() => {
         if (user?.nombre) setCajero(user.nombre);
     }, [user?.nombre, setCajero]);
+
+    // ── Combo / quantity promotion detection ────────────────────────────
+    // Re-runs when the cart's product composition or quantities change, or when
+    // the promotions list is refreshed (e.g. on POS mount).
+    const cartKey = cart.map((c) => `${c.id}:${c.cantidad}`).sort().join(',');
+    useEffect(() => {
+        const cartProductIds = cart.map((c) => c.id);
+        const priceMap: Record<string, number> = {};
+        const quantityMap: Record<string, number> = {};
+        cart.forEach((c) => { priceMap[c.id] = c.precio; quantityMap[c.id] = c.cantidad; });
+        const discountMap = computePromoDescuentos(cartProductIds, priceMap, quantityMap);
+        setPromoDiscounts(discountMap);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cartKey, promociones]);
 
     const anyModalOpen = isPaymentModalOpen || isComprobanteModalOpen || isPriceCheckModalOpen || isDiscountModalOpen || historyOpen;
 

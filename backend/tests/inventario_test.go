@@ -125,6 +125,15 @@ func (r *stubProductoRepo) FindVinculoByHijoID(_ context.Context, hijoID uuid.UU
 	return nil, errors.New("vinculo not found")
 }
 
+func (r *stubProductoRepo) FindVinculoByHijoIDTx(_ *gorm.DB, hijoID uuid.UUID) (*model.ProductoHijo, error) {
+	for _, v := range r.vinculos {
+		if v.ProductoHijoID == hijoID && v.DesarmeAuto {
+			return v, nil
+		}
+	}
+	return nil, errors.New("vinculo not found")
+}
+
 func (r *stubProductoRepo) FindVinculoByID(_ context.Context, id uuid.UUID) (*model.ProductoHijo, error) {
 	v, ok := r.vinculos[id]
 	if !ok {

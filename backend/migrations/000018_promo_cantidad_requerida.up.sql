@@ -1,0 +1,2 @@
+ALTER TABLE promociones
+    ADD COLUMN IF NOT EXISTS cantidad_requerida INTEGER NOT NULL DEFAULT 1;

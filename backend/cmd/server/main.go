@@ -98,6 +98,8 @@ func main() {
 	movimientoStockRepo := repository.NewMovimientoStockRepository(db)
 	categoriaRepo := repository.NewCategoriaRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
+	compraRepo := repository.NewCompraRepository(db)
+	promocionRepo := repository.NewPromocionRepository(db)
 
 	// ── Services ─────────────────────────────────────────────────────────────
 	authSvc := service.NewAuthService(usuarioRepo, cfg, rdb)
@@ -109,6 +111,8 @@ func main() {
 	proveedorSvc := service.NewProveedorService(proveedorRepo, productoRepo)
 	categoriaSvc := service.NewCategoriaService(categoriaRepo)
 	auditSvc := service.NewAuditService(auditRepo)
+	compraSvc := service.NewCompraService(compraRepo)
+	promocionSvc := service.NewPromocionService(promocionRepo)
 
 	workerHandlers := &worker.WorkerHandlers{
 		Facturacion: worker.NewFacturacionWorker(afipClient, afipCB, comprobanteRepo, ventaRepo, dispatcher, cfg.PDFStoragePath, cfg.AFIPCUITEmisor),
@@ -152,6 +156,8 @@ func main() {
 		ProveedorSvc:        proveedorSvc,
 		CategoriaSvc:        categoriaSvc,
 		AuditSvc:            auditSvc,
+		CompraSvc:           compraSvc,
+		PromocionSvc:        promocionSvc,
 		ProductoRepo:        productoRepo,
 		HistorialPrecioRepo: historialPrecioRepo,
 		AuditRepo:           auditRepo,

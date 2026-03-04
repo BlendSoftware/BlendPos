@@ -1,13 +1,15 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     Stack, Title, Text, Group, Button, TextInput, Select, Badge,
     Table, ActionIcon, Tooltip, Modal, NumberInput, Textarea,
     Switch, Skeleton, Paper, Divider, Alert, UnstyledButton, Checkbox,
-    Pagination,
+    Pagination, Tabs,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { Plus, Search, Edit, PowerOff, Power, X, AlertCircle, PackagePlus, ChevronUp, ChevronDown, ChevronsUpDown, Trash2 } from 'lucide-react';
+import { Plus, Search, Edit, PowerOff, Power, X, AlertCircle, PackagePlus, ChevronUp, ChevronDown, ChevronsUpDown, Trash2, Tag, Package } from 'lucide-react';
+import { PromocionesTab } from './PromocionesTab';
 import { formatARS } from '../../utils/format';
 import {
     listarProductos, crearProducto, actualizarProducto, desactivarProducto, reactivarProducto, ajustarStock,
@@ -65,6 +67,9 @@ const EMPTY_FORM: FormValues = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function GestionProductosPage() {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const activeTab = searchParams.get('tab') === 'promociones' ? 'promociones' : 'productos';
+
     const [productos, setProductos] = useState<IProducto[]>([]);
     const [categorias, setCategorias] = useState<CategoriaResponse[]>([]);
     const [busqueda, setBusqueda] = useState('');
@@ -367,7 +372,15 @@ export function GestionProductosPage() {
     // ── Render ────────────────────────────────────────────────────────────────
 
     return (
-        <Stack gap="xl">
+        <Stack gap="md">
+            <Tabs value={activeTab} onChange={(v) => setSearchParams(v && v !== 'productos' ? { tab: v } : {})}>
+                <Tabs.List>
+                    <Tabs.Tab value="productos" leftSection={<Package size={14} />}>Productos</Tabs.Tab>
+                    <Tabs.Tab value="promociones" leftSection={<Tag size={14} />}>Promociones</Tabs.Tab>
+                </Tabs.List>
+
+                <Tabs.Panel value="productos" pt="md">
+                <Stack gap="xl">
             {/* Encabezado */}
             <Group justify="space-between">
                 <div>
@@ -722,6 +735,13 @@ export function GestionProductosPage() {
                     </Stack>
                 </form>
             </Modal>
+                </Stack>
+                </Tabs.Panel>
+
+                <Tabs.Panel value="promociones" pt="md">
+                    <PromocionesTab />
+                </Tabs.Panel>
+            </Tabs>
         </Stack>
     );
 }

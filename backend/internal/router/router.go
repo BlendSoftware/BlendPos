@@ -39,6 +39,8 @@ type Deps struct {
 	ProveedorSvc   service.ProveedorService
 	CategoriaSvc   service.CategoriaService
 	AuditSvc       service.AuditService
+	CompraSvc      service.CompraService
+	PromocionSvc   service.PromocionService
 
 	// Repos still needed by handlers that bypass the service layer
 	ProductoRepo        repository.ProductoRepository
@@ -169,6 +171,16 @@ func New(d Deps) *gin.Engine {
 			prov.POST("/:id/precios/masivo", proveedoresH.ActualizarPreciosMasivo)
 		}
 
+		compraH := handler.NewCompraHandler(d.CompraSvc)
+		compras := v1.Group("/compras", middleware.RequireRole("administrador", "supervisor"))
+		{
+			compras.POST("", compraH.Crear)
+			compras.GET("", compraH.Listar)
+			compras.GET("/:id", compraH.ObtenerPorID)
+			compras.PATCH("/:id/estado", compraH.ActualizarEstado)
+			compras.DELETE("/:id", compraH.Eliminar)
+		}
+
 		v1.POST("/csv/import", middleware.RequireRole("administrador"), proveedoresH.ImportarCSV)
 
 		usuarios := v1.Group("/usuarios", middleware.RequireRole("administrador"))
@@ -194,6 +206,17 @@ func New(d Deps) *gin.Engine {
 
 		// Audit log — read-only, admin only (Q-03)
 		v1.GET("/audit", middleware.RequireRole("administrador"), auditH.List)
+
+		// Promociones
+		promocionH := handler.NewPromocionHandler(d.PromocionSvc)
+		v1.GET("/promociones", middleware.RequireRole("cajero", "supervisor", "administrador"), promocionH.Listar)
+		v1.GET("/promociones/:id", middleware.RequireRole("cajero", "supervisor", "administrador"), promocionH.ObtenerPorID)
+		promociones := v1.Group("/promociones", middleware.RequireRole("administrador"))
+		{
+			promociones.POST("", promocionH.Crear)
+			promociones.PUT("/:id", promocionH.Actualizar)
+			promociones.DELETE("/:id", promocionH.Eliminar)
+		}
 	}
 
 	// Swagger UI — only enabled outside production

@@ -5,7 +5,7 @@ import {
 import { AreaChart, BarChart, DonutChart } from '@mantine/charts';
 import {
     TrendingUp, ShoppingCart, Package, AlertTriangle,
-    CheckCircle, CreditCard, Banknote, QrCode, Landmark, RefreshCw,
+    CheckCircle, CreditCard, Banknote, QrCode, Landmark, RefreshCw, Receipt,
 } from 'lucide-react';
 import { formatARS } from '../../utils/format';
 import styles from './DashboardPage.module.css';
@@ -13,6 +13,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { getAlertasStock } from '../../services/api/inventario';
 import type { AlertaStockResponse } from '../../services/api/inventario';
 import { listarVentas, type VentaListItem } from '../../services/api/ventas';
+import { listarCompras } from '../../services/api/compras';
 import { trySyncQueue, recoverLostSales } from '../../offline/sync';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -69,18 +70,25 @@ export function DashboardPage() {
     const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
     const [alertas, setAlertas] = useState<AlertaStockResponse[]>([]);
     const [apiVentas, setApiVentas] = useState<VentaListItem[]>([]);
+    const [comprasPendientes, setComprasPendientes] = useState<{ count: number; total: number }>({ count: 0, total: 0 });
 
     const fetchDashboardData = useCallback(async (showSpinner = false) => {
         if (showSpinner) setRefreshing(true);
         const today = new Date().toLocaleDateString('en-CA');
         try {
             await recoverLostSales().then(() => trySyncQueue()).catch(() => { });
-            const [alertasRes, ventasRes] = await Promise.allSettled([
+            const [alertasRes, ventasRes, comprasRes] = await Promise.allSettled([
                 getAlertasStock(),
                 listarVentas({ fecha: today, estado: 'completada', limit: 200 }),
+                listarCompras({ estado: 'pendiente', limit: 200 }),
             ]);
             if (alertasRes.status === 'fulfilled') setAlertas(alertasRes.value);
             if (ventasRes.status === 'fulfilled') setApiVentas(ventasRes.value.data);
+            if (comprasRes.status === 'fulfilled') {
+                const items = comprasRes.value.data ?? [];
+                const total = items.reduce((s, c) => s + Number(c.total), 0);
+                setComprasPendientes({ count: items.length, total });
+            }
             setLastRefresh(new Date());
         } finally {
             setLoading(false);
@@ -217,15 +225,16 @@ export function DashboardPage() {
 
             {/* KPI row */}
             {loading ? (
-                <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                    {[1, 2, 3, 4].map((i) => <Skeleton key={i} h={110} radius="md" />)}
+                <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }}>
+                    {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} h={110} radius="md" />)}
                 </SimpleGrid>
             ) : (
-                <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
+                <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }}>
                     <KpiCard label="Ventas hoy" value={formatARS(totalHoy)} sub={`${ventasHoy.length} transacciones`} icon={<TrendingUp size={22} />} color="blue" />
                     <KpiCard label="Ticket promedio" value={formatARS(ticketProm)} sub="por transacción" icon={<ShoppingCart size={22} />} color="teal" />
                     <KpiCard label="Stock crítico" value={String(stockCritico.length)} sub="productos bajo mínimo" icon={<AlertTriangle size={22} />} color="yellow" />
                     <KpiCard label="Sin stock" value={String(sinStock.length)} sub="productos agotados" icon={<Package size={22} />} color="red" />
+                    <KpiCard label="Facturas pendientes" value={String(comprasPendientes.count)} sub={comprasPendientes.count > 0 ? `Total: ${formatARS(comprasPendientes.total)}` : 'Sin facturas pendientes'} icon={<Receipt size={22} />} color={comprasPendientes.count > 0 ? 'orange' : 'gray'} />
                 </SimpleGrid>
             )}
 
