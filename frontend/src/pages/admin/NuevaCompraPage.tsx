@@ -65,6 +65,15 @@ function fmt(n: number) {
     return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 }
 
+function normalizeDateInput(v: Date | string | null): Date | null {
+    if (!v) return null;
+    if (typeof v === 'string') {
+        const [y, mo, d] = v.slice(0, 10).split('-').map(Number);
+        return new Date(y, mo - 1, d, 12, 0, 0);
+    }
+    return new Date(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate(), 12, 0, 0);
+}
+
 function toDateStr(d: Date | null): string {
     if (!d) return '';
     const y = d.getFullYear();
@@ -231,7 +240,7 @@ export function NuevaCompraPage() {
 
             await crearCompra(payload);
             notifications.show({ color: 'teal', message: 'Compra guardada correctamente' });
-            navigate('/admin/proveedores?tab=compras');
+            navigate('/admin/compras');
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : 'Error al guardar la compra';
             notifications.show({ color: 'red', message: msg });
@@ -245,7 +254,7 @@ export function NuevaCompraPage() {
         <Stack gap="lg" p="md">
             {/* Breadcrumb */}
             <Breadcrumbs>
-                <Anchor onClick={() => navigate('/admin/proveedores?tab=compras')} size="sm" style={{ cursor: 'pointer' }}>
+                <Anchor onClick={() => navigate('/admin/compras')} size="sm" style={{ cursor: 'pointer' }}>
                     <Group gap={4}><ChevronLeft size={14} /> Compras</Group>
                 </Anchor>
                 <Text size="sm">Nueva compra</Text>
@@ -275,7 +284,7 @@ export function NuevaCompraPage() {
                                     placeholder="dd/mm/aaaa"
                                     valueFormat="DD/MM/YYYY"
                                     value={fechaCompra}
-                                    onChange={(v) => setFechaCompra(v ? new Date(v) : null)}
+                                    onChange={(v) => setFechaCompra(normalizeDateInput(v))}
                                 />
                             </SimpleGrid>
                         </Paper>
@@ -340,7 +349,7 @@ export function NuevaCompraPage() {
                                             valueFormat="DD/MM/YYYY"
                                             clearable
                                             value={fechaVence}
-                                            onChange={(v) => setFechaVence(v ? new Date(v) : null)}
+                                            onChange={(v) => setFechaVence(normalizeDateInput(v))}
                                         />
                                     </Grid.Col>
                                     <Grid.Col span={{ base: 12, sm: 3 }}>
@@ -461,7 +470,7 @@ export function NuevaCompraPage() {
                                     justify="flex-start"
                                     w="fit-content"
                                 >
-                                    + Agregar producto
+                                    Agregar producto
                                 </Button>
                             </Stack>
                         </Paper>
@@ -579,14 +588,14 @@ export function NuevaCompraPage() {
                                 leftSection={<Plus size={14} />}
                                 onClick={addPago}
                             >
-                                + Agregar pago
+                                Agregar pago
                             </Button>
 
                             <Button
                                 variant="subtle"
                                 color="gray"
                                 fullWidth
-                                onClick={() => navigate('/admin/proveedores?tab=compras')}
+                                onClick={() => navigate('/admin/compras')}
                             >
                                 Cancelar
                             </Button>

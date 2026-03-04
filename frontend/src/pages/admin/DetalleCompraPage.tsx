@@ -71,7 +71,7 @@ export function DetalleCompraPage() {
     if (error || !compra) return (
         <Stack gap="lg" p="md">
             <Button variant="subtle" leftSection={<ChevronLeft size={16} />} w="fit-content"
-                onClick={() => navigate('/admin/proveedores?tab=compras')}>
+                onClick={() => navigate('/admin/compras')}>
                 Volver a Compras
             </Button>
             <Alert icon={<AlertCircle size={16} />} color="red">{error ?? 'Compra no encontrada'}</Alert>
@@ -81,6 +81,10 @@ export function DetalleCompraPage() {
     const subtotal = Number(compra.subtotal);
     const descuento = Number(compra.descuento_total);
     const total = Number(compra.total);
+    const iva = (compra.items ?? []).reduce((s, i) => s + Number(i.total), 0) - total;
+    const totalConIva = total + iva;
+    const pagado = (compra.pagos ?? []).reduce((s, p) => s + Number(p.monto), 0);
+    const saldo = totalConIva - pagado;
 
     return (
         <Stack gap="lg" p="md">
@@ -89,7 +93,7 @@ export function DetalleCompraPage() {
                 variant="subtle"
                 leftSection={<ChevronLeft size={16} />}
                 w="fit-content"
-                onClick={() => navigate('/admin/proveedores?tab=compras')}
+                onClick={() => navigate('/admin/compras')}
             >
                 Volver a Compras
             </Button>
@@ -220,8 +224,23 @@ export function DetalleCompraPage() {
                             <Divider />
                             <Group justify="space-between">
                                 <Text fw={700}>Total</Text>
-                                <Text fw={700} size="lg">{formatARS(total)}</Text>
+                                <Text fw={700} size="lg">{formatARS(totalConIva)}</Text>
                             </Group>
+                            {pagado > 0 && (
+                                <Group justify="space-between">
+                                    <Text size="sm" c="dimmed">Pagado</Text>
+                                    <Text size="sm" c="teal">-{formatARS(pagado)}</Text>
+                                </Group>
+                            )}
+                            {saldo > 0.005 && (
+                                <>
+                                    <Divider />
+                                    <Group justify="space-between">
+                                        <Text fw={700} c="orange">Saldo pendiente</Text>
+                                        <Text fw={700} size="lg" c="orange">{formatARS(saldo)}</Text>
+                                    </Group>
+                                </>
+                            )}
                         </Stack>
                     </Paper>
                 </Grid.Col>

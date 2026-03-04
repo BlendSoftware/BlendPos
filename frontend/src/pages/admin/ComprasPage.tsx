@@ -145,6 +145,7 @@ export function ComprasPage() {
                             <Table.Th>Fecha</Table.Th>
                             <Table.Th>Vencimiento</Table.Th>
                             <Table.Th style={{ textAlign: 'right' }}>Total</Table.Th>
+                            <Table.Th style={{ textAlign: 'right' }}>Saldo pendiente</Table.Th>
                             <Table.Th>Estado</Table.Th>
                             <Table.Th style={{ textAlign: 'center' }}>Acciones</Table.Th>
                         </Table.Tr>
@@ -153,14 +154,14 @@ export function ComprasPage() {
                         {loading ? (
                             Array.from({ length: 5 }).map((_, i) => (
                                 <Table.Tr key={i}>
-                                    {Array.from({ length: 7 }).map((_, j) => (
+                                    {Array.from({ length: 8 }).map((_, j) => (
                                         <Table.Td key={j}><Skeleton height={16} /></Table.Td>
                                     ))}
                                 </Table.Tr>
                             ))
                         ) : compras.length === 0 ? (
                             <Table.Tr>
-                                <Table.Td colSpan={7} style={{ textAlign: 'center' }}>
+                                <Table.Td colSpan={8} style={{ textAlign: 'center' }}>
                                     <Text c="dimmed" py="xl">No hay compras registradas</Text>
                                 </Table.Td>
                             </Table.Tr>
@@ -180,7 +181,22 @@ export function ComprasPage() {
                                         <Text size="sm">{c.fecha_vencimiento ? fmtDate(c.fecha_vencimiento) : '—'}</Text>
                                     </Table.Td>
                                     <Table.Td style={{ textAlign: 'right' }}>
-                                        <Text size="sm" fw={600}>{fmt(c.total)}</Text>
+                                        {(() => {
+                                            const totalConIva = (c.items ?? []).reduce((s, i) => s + Number(i.total), 0);
+                                            return (
+                                                <Text size="sm" fw={600}>{fmt(totalConIva)}</Text>
+                                            );
+                                        })()}
+                                    </Table.Td>
+                                    <Table.Td style={{ textAlign: 'right' }}>
+                                        {(() => {
+                                            const totalConIva = (c.items ?? []).reduce((s, i) => s + Number(i.total), 0);
+                                            const pagado = (c.pagos ?? []).reduce((s, p) => s + Number(p.monto), 0);
+                                            const saldo = totalConIva - pagado;
+                                            return saldo > 0.005
+                                                ? <Text size="sm" fw={600} c="orange">{fmt(saldo)}</Text>
+                                                : <Text size="sm" c="dimmed">—</Text>;
+                                        })()}
                                     </Table.Td>
                                     <Table.Td>
                                         <Select

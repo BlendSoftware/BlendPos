@@ -50,17 +50,25 @@ export function FacturacionPage() {
     const ordenarPor = 'fecha';
     const orden = 'desc';
 
+    // Normaliza el valor que devuelve Mantine DateInput a una Date a mediodía local.
+    // - Si Mantine pasa un string 'YYYY-MM-DD' (cuando el usuario tipea), lo parsea como local.
+    // - Si pasa una Date (click de calendario), era UTC midnight → convertimos a local noon
+    //   para que DateInput la muestre en el día correcto (evita desfase UTC-3).
+    function normalizeDateInput(v: Date | string | null): Date | null {
+        if (!v) return null;
+        if (typeof v === 'string') {
+            const s = v.slice(0, 10);
+            const [y, m, d] = s.split('-').map(Number);
+            return new Date(y, m - 1, d, 12, 0, 0);
+        }
+        return new Date(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate(), 12, 0, 0);
+    }
+
+    // Convierte la Date almacenada (mediodía local) a string 'YYYY-MM-DD' para la API.
     const toDateStr = (d: Date | null): string | undefined => {
         if (!d) return undefined;
-        // Mantine v8 DateInput passes:
-        //   - a string 'YYYY-MM-DD' when the user types in the field
-        //   - a native Date at UTC midnight when the user clicks the calendar
         if (typeof (d as unknown) === 'string') return (d as unknown as string).slice(0, 10);
-        // UTC midnight Date → must use UTC getters to avoid -3h offset shifting the day back
-        const y = (d as Date).getUTCFullYear();
-        const m = String((d as Date).getUTCMonth() + 1).padStart(2, '0');
-        const day = String((d as Date).getUTCDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
     const cargarVentas = useCallback(async () => {
@@ -315,14 +323,14 @@ export function FacturacionPage() {
                         <DateInput
                             placeholder="Desde"
                             value={desde}
-                            onChange={(v) => setDesde(v as Date | null)}
+                            onChange={(v) => setDesde(normalizeDateInput(v))}
                             clearable
                             style={{ width: 140 }}
                         />
                         <DateInput
                             placeholder="Hasta"
                             value={hasta}
-                            onChange={(v) => setHasta(v as Date | null)}
+                            onChange={(v) => setHasta(normalizeDateInput(v))}
                             clearable
                             style={{ width: 140 }}
                         />
