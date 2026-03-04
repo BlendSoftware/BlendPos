@@ -315,14 +315,14 @@ export function FacturacionPage() {
                         <DateInput
                             placeholder="Desde"
                             value={desde}
-                            onChange={(v) => setDesde(v)}
+                            onChange={(v) => setDesde(v as Date | null)}
                             clearable
                             style={{ width: 140 }}
                         />
                         <DateInput
                             placeholder="Hasta"
                             value={hasta}
-                            onChange={(v) => setHasta(v)}
+                            onChange={(v) => setHasta(v as Date | null)}
                             clearable
                             style={{ width: 140 }}
                         />

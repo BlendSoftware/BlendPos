@@ -348,7 +348,7 @@ export function PromocionesTab() {
                                 placeholder="dd/mm/aaaa"
                                 valueFormat="DD/MM/YYYY"
                                 {...form.getInputProps('fechaInicio')}
-                                onChange={(v) => form.setFieldValue('fechaInicio', v)}
+                                onChange={(v) => form.setFieldValue('fechaInicio', v as Date | null)}
                             />
                             <DateInput
                                 label="Fecha de fin"
@@ -356,7 +356,7 @@ export function PromocionesTab() {
                                 valueFormat="DD/MM/YYYY"
                                 minDate={form.values.fechaInicio ?? undefined}
                                 {...form.getInputProps('fechaFin')}
-                                onChange={(v) => form.setFieldValue('fechaFin', v)}
+                                onChange={(v) => form.setFieldValue('fechaFin', v as Date | null)}
                             />
                         </Group>
 

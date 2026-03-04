@@ -14,7 +14,6 @@ const METODO_LABEL: Record<string, string> = {
     qr: 'QR',
     transferencia: 'Transferencia',
     mixto: 'Mixto',
-    transferencia: 'Transferencia',
 };
 
 export const PrintableTicket = forwardRef<HTMLDivElement, PrintableTicketProps>(

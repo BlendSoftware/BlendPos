@@ -213,7 +213,7 @@ export const useCartStore = create<CartState>()((set, get) => ({
         const { descuentoGlobal } = get();
         const updatedCart = get().cart.map((c) => {
             if (c.id !== id) return c;
-            const effectivo = Math.max(descuento, c.promoDescuento);
+            const effectivo = Math.max(descuento, c.promoDescuento ?? 0);
             return { ...c, descuento, subtotal: c.cantidad * c.precio * (1 - effectivo / 100) };
         });
         const total = computeTotal(updatedCart);
