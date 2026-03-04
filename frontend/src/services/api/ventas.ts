@@ -80,7 +80,7 @@ export interface ItemVentaRequest {
 }
 
 export interface PagoRequest {
-    metodo: 'efectivo' | 'debito' | 'credito' | 'transferencia';
+    metodo: 'efectivo' | 'debito' | 'credito' | 'transferencia' | 'qr';
     monto: number;
 }
 

@@ -306,7 +306,7 @@ export function CierreCajaPage() {
                                     <Table.Th ta="right">Contado</Table.Th>
                                     <Table.Th ta="right">Esperado</Table.Th>
                                     <Table.Th ta="right">Diferencia</Table.Th>
-                                    <Table.Th ta="right">Tarjeta</Table.Th>
+                                    <Table.Th ta="right">Tarjeta/Trans.</Table.Th>
                                     <Table.Th ta="right">QR</Table.Th>
                                     <Table.Th ta="right">Total ventas</Table.Th>
                                     <Table.Th>Cerrado por</Table.Th>
@@ -333,7 +333,7 @@ export function CierreCajaPage() {
                                     const esperadoEfectivo = Number(h.monto_esperado?.efectivo ?? 0);
                                     const declaradoEfectivo = Number(h.monto_declarado?.efectivo ?? 0);
                                     const diferencia = declaradoEfectivo - esperadoEfectivo;
-                                    const tarjeta = Number(h.monto_esperado?.debito ?? 0) + Number(h.monto_esperado?.credito ?? 0);
+                                    const tarjeta = Number(h.monto_esperado?.debito ?? 0) + Number(h.monto_esperado?.credito ?? 0) + Number(h.monto_esperado?.transferencia ?? 0);
                                     const qr = Number(h.monto_esperado?.qr ?? 0);
                                     const totalVentas = Number(h.monto_esperado?.total ?? 0);
                                     return (

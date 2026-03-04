@@ -26,9 +26,13 @@ const TIPO_OPTIONS = [
 
 function toDateStr(d: Date | null): string {
     if (!d) return '';
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    // Mantine v8 DateInput passes a string 'YYYY-MM-DD' when the user types,
+    // or a native Date at UTC midnight when the user clicks the calendar.
+    if (typeof (d as unknown) === 'string') return (d as unknown as string).slice(0, 10);
+    // UTC midnight Date — must use UTC getters to avoid UTC-3 shifting the day back.
+    const y = (d as Date).getUTCFullYear();
+    const m = String((d as Date).getUTCMonth() + 1).padStart(2, '0');
+    const day = String((d as Date).getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
 }
 
@@ -96,8 +100,15 @@ export function PromocionesTab() {
             valor:  (v) => v <= 0 ? 'El valor debe ser mayor a 0' : null,
             tipo:   (v) => !v ? 'Seleccioná un tipo' : null,
             fechaInicio: (v) => !v ? 'Requerida' : null,
-            fechaFin:    (v, vals) =>
-                !v ? 'Requerida' : (vals.fechaInicio && v <= vals.fechaInicio) ? 'Debe ser posterior a la fecha de inicio' : null,
+            fechaFin:    (v, vals) => {
+                if (!v) return 'Requerida';
+                // Normalizar a string YYYY-MM-DD antes de comparar para evitar
+                // error de coerción cuando uno es Date (calendario) y otro es string (tipeado).
+                const finStr   = toDateStr(v as Date | null);
+                const inicioStr = vals.fechaInicio ? toDateStr(vals.fechaInicio as Date | null) : null;
+                if (inicioStr && finStr && finStr <= inicioStr) return 'Debe ser posterior a la fecha de inicio';
+                return null;
+            },
             productoIds: (v) => v.length === 0 ? 'Seleccioná al menos un producto' : null,
         },
     });
@@ -140,8 +151,9 @@ export function PromocionesTab() {
             tipo:              p.tipo,
             valor:             p.valor,
             cantidadRequerida: p.cantidad_requerida ?? 1,
-            fechaInicio:       new Date(p.fecha_inicio),
-            fechaFin:          new Date(p.fecha_fin),
+            // Slice to 'YYYY-MM-DD' so dayjs renders it as local midnight (correct day shown)
+            fechaInicio:       p.fecha_inicio.slice(0, 10) as unknown as Date,
+            fechaFin:          p.fecha_fin.slice(0, 10) as unknown as Date,
             activa:            p.activa,
             productoIds:       p.productos.map(pr => pr.id),
         });
@@ -336,7 +348,7 @@ export function PromocionesTab() {
                                 placeholder="dd/mm/aaaa"
                                 valueFormat="DD/MM/YYYY"
                                 {...form.getInputProps('fechaInicio')}
-                                onChange={(v) => form.setFieldValue('fechaInicio', v ? new Date(v) : null)}
+                                onChange={(v) => form.setFieldValue('fechaInicio', v)}
                             />
                             <DateInput
                                 label="Fecha de fin"
@@ -344,7 +356,7 @@ export function PromocionesTab() {
                                 valueFormat="DD/MM/YYYY"
                                 minDate={form.values.fechaInicio ?? undefined}
                                 {...form.getInputProps('fechaFin')}
-                                onChange={(v) => form.setFieldValue('fechaFin', v ? new Date(v) : null)}
+                                onChange={(v) => form.setFieldValue('fechaFin', v)}
                             />
                         </Group>
 

@@ -25,7 +25,8 @@ const METODO_LABEL: Record<string, string> = {
     efectivo: 'Efectivo',
     debito: 'Débito',
     credito: 'Crédito',
-    qr: 'QR/Transferencia',
+    qr: 'QR',
+    transferencia: 'Transferencia',
     mixto: 'Mixto',
 };
 
@@ -34,6 +35,7 @@ const METODO_COLOR: Record<string, string> = {
     debito: 'blue',
     credito: 'violet',
     qr: 'cyan',
+    transferencia: 'orange',
     mixto: 'orange',
 };
 
@@ -41,7 +43,8 @@ const PAGO_LABEL: Record<string, string> = {
     efectivo: 'Efectivo',
     debito: 'Débito',
     credito: 'Crédito',
-    qr: 'QR/Transferencia',
+    qr: 'QR',
+    transferencia: 'Transferencia',
 };
 
 function SaleRow({ sale }: { sale: SaleRecord }) {
@@ -121,8 +124,8 @@ function SaleRow({ sale }: { sale: SaleRecord }) {
                             <Group gap="xs">
                                 <Text size="xs" c="dimmed" w={20}>{item.cantidad}×</Text>
                                 <Text size="xs">{item.nombre}</Text>
-                                {item.descuento > 0 && (
-                                    <Badge size="xs" color="orange" variant="light">-{item.descuento}%</Badge>
+                                {Math.max(item.descuento, item.promoDescuento ?? 0) > 0 && (
+                                    <Badge size="xs" color="orange" variant="light">-{Math.max(item.descuento, item.promoDescuento ?? 0)}%</Badge>
                                 )}
                             </Group>
                             <Text size="xs" ff="monospace" c="dimmed">

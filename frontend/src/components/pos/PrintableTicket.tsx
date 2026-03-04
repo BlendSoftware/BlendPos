@@ -11,7 +11,8 @@ const METODO_LABEL: Record<string, string> = {
     efectivo: 'Efectivo',
     debito: 'Débito',
     credito: 'Crédito',
-    qr: 'QR / Transferencia',
+    qr: 'QR',
+    transferencia: 'Transferencia',
     mixto: 'Mixto',
     transferencia: 'Transferencia',
 };

@@ -1,23 +1,52 @@
-/* Card base: en dark usa el fondo por defecto de Mantine Paper, en claro fuerza blanco */
+/* Card base */
 .card {
     background: var(--mantine-color-dark-7);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 }
 
 :global([data-mantine-color-scheme='light']) .card {
     background: var(--mantine-color-white);
 }
 
+:global([data-mantine-color-scheme='light']) .card:hover {
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+}
+
+/* KPI card: glow sutil en el borde izquierdo */
+.kpiCard {
+    position: relative;
+    overflow: hidden;
+}
+
+.kpiCard::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 60%);
+    pointer-events: none;
+}
+
 /* Filas de alerta de stock */
 .alertRow {
     background: var(--mantine-color-dark-6);
     border-radius: var(--mantine-radius-sm);
+    transition: background 0.12s ease;
+}
+
+.alertRow:hover {
+    background: var(--mantine-color-dark-5);
 }
 
 :global([data-mantine-color-scheme='light']) .alertRow {
     background: var(--mantine-color-gray-1);
 }
 
-/* Texto de totales en la tabla — visible en ambos modos */
+/* Texto de totales en la tabla */
 .totalCell {
     color: var(--mantine-color-teal-4);
 }
@@ -32,4 +61,19 @@
 
 :global([data-mantine-color-scheme='light']) .ticketCell {
     color: var(--mantine-color-blue-7);
+}
+
+/* Acento de color en paneles de gráficos */
+.chartPanel {
+    background: var(--mantine-color-dark-7);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.chartPanel:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+:global([data-mantine-color-scheme='light']) .chartPanel {
+    background: var(--mantine-color-white);
 }

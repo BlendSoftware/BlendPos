@@ -334,6 +334,9 @@ export class ThermalPrinterService {
             line(leftRight(cantStr, formatPrice(item.subtotal), W));
             if (item.descuento > 0) {
                 line(leftRight(`  Dto. ${item.descuento}%`, `- ${formatPrice(item.precio * item.cantidad * (item.descuento / 100))}`, W));
+            } else if ((item as unknown as { promoDescuento?: number }).promoDescuento ?? 0 > 0) {
+                const pct = (item as unknown as { promoDescuento: number }).promoDescuento;
+                line(leftRight(`  Dto.promo ${pct}%`, `- ${formatPrice(item.precio * item.cantidad * (pct / 100))}`, W));
             }
         });
 
@@ -354,8 +357,8 @@ export class ThermalPrinterService {
         // ── Pago ───────────────────────────────────────────
         const metodoLabel: Record<string, string> = {
             efectivo: 'Efectivo', debito: 'Tarjeta D\u00e9bito',
-            credito: 'Tarjeta Cr\u00e9dito', qr: 'QR/Transferencia',
-            mixto: 'Mixto',
+            credito: 'Tarjeta Crédito', qr: 'QR',
+            transferencia: 'Transferencia', mixto: 'Mixto',
         };
         line(leftRight('Forma de pago:', metodoLabel[sale.metodoPago] ?? sale.metodoPago, W));
         if (sale.metodoPago === 'mixto' && sale.pagos && sale.pagos.length > 0) {
@@ -442,6 +445,9 @@ export class ThermalPrinterService {
             lines.push(leftRight(`${item.cantidad} x ${formatPrice(item.precio)}`, formatPrice(item.subtotal)));
             if (item.descuento > 0) {
                 lines.push(leftRight(`  Dto. ${item.descuento}%`, `- ${formatPrice(item.precio * item.cantidad * (item.descuento / 100))}`));
+            } else if ((item as unknown as { promoDescuento?: number }).promoDescuento ?? 0 > 0) {
+                const pct = (item as unknown as { promoDescuento: number }).promoDescuento;
+                lines.push(leftRight(`  Dto.promo ${pct}%`, `- ${formatPrice(item.precio * item.cantidad * (pct / 100))}`));
             }
         });
 
@@ -459,8 +465,8 @@ export class ThermalPrinterService {
 
         const metodoLabel: Record<string, string> = {
             efectivo: 'Efectivo', debito: 'Tarjeta Débito',
-            credito: 'Tarjeta Crédito', qr: 'QR/Transferencia',
-            mixto: 'Mixto',
+            credito: 'Tarjeta Crédito', qr: 'QR',
+            transferencia: 'Transferencia', mixto: 'Mixto',
         };
         lines.push(leftRight('Forma de pago:', metodoLabel[sale.metodoPago] ?? sale.metodoPago));
         if (sale.metodoPago === 'mixto' && sale.pagos && sale.pagos.length > 0) {

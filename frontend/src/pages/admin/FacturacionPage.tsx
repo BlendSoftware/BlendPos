@@ -16,12 +16,12 @@ import { formatARS } from '../../utils/format';
 import type { IVenta } from '../../types';
 
 const METODO_COLOR: Record<string, string> = {
-    efectivo: 'teal', debito: 'blue', credito: 'violet', transferencia: 'orange', qr: 'orange',
+    efectivo: 'teal', debito: 'blue', credito: 'violet', transferencia: 'cyan', qr: 'orange',
 };
 
 const METODO_LABEL: Record<string, string> = {
     efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito',
-    transferencia: 'Transferencia', qr: 'QR / Transferencia',
+    transferencia: 'Transferencia', qr: 'QR',
 };
 
 type Periodo = 'hoy' | 'ayer' | 'semana' | 'mes' | 'personalizado' | 'todas';
@@ -46,19 +46,55 @@ export function FacturacionPage() {
     const [loadingVentas, setLoadingVentas] = useState(false);
     const [desde, setDesde] = useState<Date | null>(null);
     const [hasta, setHasta] = useState<Date | null>(null);
+    const [periodo, setPeriodo] = useState<string>('todas');
     const ordenarPor = 'fecha';
     const orden = 'desc';
 
-    const toDateStr = (d: Date | null) => d ? d.toISOString().slice(0, 10) : undefined;
+    const toDateStr = (d: Date | null): string | undefined => {
+        if (!d) return undefined;
+        // Mantine v8 DateInput passes:
+        //   - a string 'YYYY-MM-DD' when the user types in the field
+        //   - a native Date at UTC midnight when the user clicks the calendar
+        if (typeof (d as unknown) === 'string') return (d as unknown as string).slice(0, 10);
+        // UTC midnight Date → must use UTC getters to avoid -3h offset shifting the day back
+        const y = (d as Date).getUTCFullYear();
+        const m = String((d as Date).getUTCMonth() + 1).padStart(2, '0');
+        const day = String((d as Date).getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
 
     const cargarVentas = useCallback(async () => {
         setLoadingVentas(true);
         try {
+            // Para períodos fijos (hoy/ayer/semana/mes) calculamos las fechas server-side
+            // para no depender del límite de 200 ventas del cliente.
+            let efectivoDesde = toDateStr(desde);
+            let efectivoHasta = toDateStr(hasta);
+
+            if (periodo !== 'personalizado' && periodo !== 'todas') {
+                const now = new Date();
+                const pad = (n: number) => String(n).padStart(2, '0');
+                const localStr = (d: Date) =>
+                    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                if (periodo === 'hoy') {
+                    efectivoDesde = localStr(today);
+                } else if (periodo === 'ayer') {
+                    const ayer = new Date(today.getTime() - 86400000);
+                    efectivoDesde = localStr(ayer);
+                    efectivoHasta = localStr(ayer);
+                } else if (periodo === 'semana') {
+                    efectivoDesde = localStr(new Date(today.getTime() - 7 * 86400000));
+                } else if (periodo === 'mes') {
+                    efectivoDesde = localStr(new Date(today.getTime() - 30 * 86400000));
+                }
+            }
+
             const resp = await listarVentas({
                 estado: 'all',
-                limit: 200,
-                desde: toDateStr(desde),
-                hasta: toDateStr(hasta),
+                limit: 1000,
+                desde: efectivoDesde,
+                hasta: efectivoHasta,
                 ordenar_por: ordenarPor,
                 orden: orden,
             });
@@ -66,7 +102,7 @@ export function FacturacionPage() {
         } catch { /* silent */ } finally {
             setLoadingVentas(false);
         }
-    }, [desde, hasta, ordenarPor, orden]);
+    }, [desde, hasta, periodo, ordenarPor, orden]);
 
     useEffect(() => { cargarVentas(); }, [cargarVentas]);
 
@@ -98,7 +134,7 @@ export function FacturacionPage() {
     }, [apiVentas]);
 
     const [busqueda, setBusqueda] = useState('');
-    const [periodo, setPeriodo] = useState<string>('todas');
+    // periodo is declared above (before cargarVentas) — keeping this comment for clarity
     const [filtroMetodo, setFiltroMetodo] = useState<string | null>(null);
     const [filtroEstado, setFiltroEstado] = useState<string | null>(null);
     const [sortBy, setSortBy] = useState<string>('fecha');
@@ -114,14 +150,13 @@ export function FacturacionPage() {
             .filter(
                 (v) => {
                     const matchPeriodo = periodo === 'personalizado'
-                        ? (!desde || new Date(v.fecha) >= desde) && (!hasta || new Date(v.fecha) <= hasta)
+                        ? (!desde || v.fecha.slice(0, 10) >= toDateStr(desde)!) && (!hasta || v.fecha.slice(0, 10) <= toDateStr(hasta)!)
                         : matchesPeriodo(v.fecha, periodo as Periodo);
                     const matchBusqueda = !q ||
                         v.numeroTicket.includes(q) ||
                         v.cajeroNombre.toLowerCase().includes(q) ||
                         v.id.toLowerCase().includes(q);
-                    const matchMetodo = !filtroMetodo || v.metodoPago === filtroMetodo || v.pagos?.some((p) => p.metodo === filtroMetodo)
-                        || (filtroMetodo === 'qr' && ((v.metodoPago as string) === 'transferencia' || v.pagos?.some((p) => (p.metodo as string) === 'transferencia')));
+                    const matchMetodo = !filtroMetodo || v.metodoPago === filtroMetodo || v.pagos?.some((p) => p.metodo === filtroMetodo);
                     const matchEstado = !filtroEstado || (filtroEstado === 'anulada' ? v.anulada : !v.anulada);
                     return matchPeriodo && matchBusqueda && matchMetodo && matchEstado;
                 }
@@ -256,7 +291,14 @@ export function FacturacionPage() {
                 <Select
                     placeholder="Período"
                     value={periodo}
-                    onChange={(v) => setPeriodo(v ?? 'todas')}
+                    onChange={(v) => {
+                        const next = v ?? 'todas';
+                        setPeriodo(next);
+                        if (next !== 'personalizado') {
+                            setDesde(null);
+                            setHasta(null);
+                        }
+                    }}
                     data={[
                         { value: 'hoy', label: 'Hoy' },
                         { value: 'ayer', label: 'Ayer' },
@@ -273,14 +315,14 @@ export function FacturacionPage() {
                         <DateInput
                             placeholder="Desde"
                             value={desde}
-                            onChange={(v) => setDesde(v ? new Date(v) : null)}
+                            onChange={(v) => setDesde(v)}
                             clearable
                             style={{ width: 140 }}
                         />
                         <DateInput
                             placeholder="Hasta"
                             value={hasta}
-                            onChange={(v) => setHasta(v ? new Date(v) : null)}
+                            onChange={(v) => setHasta(v)}
                             clearable
                             style={{ width: 140 }}
                         />
@@ -294,7 +336,8 @@ export function FacturacionPage() {
                         { value: 'efectivo', label: 'Efectivo' },
                         { value: 'debito', label: 'Débito' },
                         { value: 'credito', label: 'Crédito' },
-                        { value: 'qr', label: 'QR / Transferencia' },
+                        { value: 'qr', label: 'QR' },
+                        { value: 'transferencia', label: 'Transferencia' },
                     ]}
                     style={{ width: 140 }}
                     clearable

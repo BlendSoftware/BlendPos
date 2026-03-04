@@ -29,6 +29,7 @@ const FacturacionPage      = lazy(() => import('./pages/admin/FacturacionPage').
 const CierreCajaPage       = lazy(() => import('./pages/admin/CierreCajaPage').then(m => ({ default: m.CierreCajaPage })));
 const UsuariosPage         = lazy(() => import('./pages/admin/UsuariosPage').then(m => ({ default: m.UsuariosPage })));
 const CategoriasPage       = lazy(() => import('./pages/admin/CategoriasPage').then(m => ({ default: m.CategoriasPage })));
+const ComprasPage          = lazy(() => import('./pages/admin/ComprasPage').then(m => ({ default: m.ComprasPage })));
 const NuevaCompraPage      = lazy(() => import('./pages/admin/NuevaCompraPage').then(m => ({ default: m.NuevaCompraPage })));
 const DetalleCompraPage    = lazy(() => import('./pages/admin/DetalleCompraPage').then(m => ({ default: m.DetalleCompraPage })));
 
@@ -102,6 +103,13 @@ function App() {
                             <RouteErrorBoundary>
                                 <Suspense fallback={<LoadingSpinner />}>
                                     <CategoriasPage />
+                                </Suspense>
+                            </RouteErrorBoundary>
+                        } />
+                        <Route path="compras" element={
+                            <RouteErrorBoundary>
+                                <Suspense fallback={<LoadingSpinner />}>
+                                    <ComprasPage />
                                 </Suspense>
                             </RouteErrorBoundary>
                         } />

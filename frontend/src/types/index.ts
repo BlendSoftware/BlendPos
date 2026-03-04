@@ -79,9 +79,9 @@ export interface IVenta {
     subtotal: number;
     descuentoGlobal: number; // %
     total: number;
-    metodoPago: 'efectivo' | 'debito' | 'credito' | 'qr' | 'mixto';
+    metodoPago: 'efectivo' | 'debito' | 'credito' | 'qr' | 'transferencia' | 'mixto';
     /** Desglose de pagos cuando aplica (ej: mixto). */
-    pagos?: Array<{ metodo: 'efectivo' | 'debito' | 'credito' | 'qr'; monto: number }>;
+    pagos?: Array<{ metodo: 'efectivo' | 'debito' | 'credito' | 'qr' | 'transferencia'; monto: number }>;
     /** Vuelto calculado (solo sobre efectivo). */
     vuelto?: number;
     cajeroId: string;

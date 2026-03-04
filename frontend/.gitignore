@@ -10,7 +10,13 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dev-dist
 *.local
+
+# Environment — belt-and-suspenders (also covered by root .gitignore)
+.env
+.env.*
+!.env.example
 
 # Editor directories and files
 .vscode/*

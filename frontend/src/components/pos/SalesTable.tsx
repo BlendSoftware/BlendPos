@@ -113,9 +113,9 @@ export function SalesTable() {
                                         <Text size="sm" fw={600} lineClamp={1}>
                                             {item.nombre}
                                         </Text>
-                                        {item.descuento > 0 && (
+                                        {Math.max(item.descuento, item.promoDescuento ?? 0) > 0 && (
                                             <Badge size="xs" color="orange" variant="light" mt={2}>
-                                                -{item.descuento}% dto.
+                                                -{Math.max(item.descuento, item.promoDescuento ?? 0)}% dto.
                                             </Badge>
                                         )}
                                     </Box>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Modal, Text, Stack, Group, Button, UnstyledButton, Badge } from '@mantine/core';
 import { Receipt, FileText, Building2 } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
@@ -52,6 +52,20 @@ export function ComprobanteModal() {
         closeComprobanteModal();
         openPaymentModal();
     };
+
+    useEffect(() => {
+        if (!isComprobanteModalOpen) return;
+        const keyMap: Record<string, TipoComprobante> = { '1': 'ticket', '2': 'factura_b', '3': 'factura_a' };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key in keyMap) {
+                e.preventDefault();
+                handleSelect(keyMap[e.key]);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isComprobanteModalOpen]);
 
     return (
         <Modal

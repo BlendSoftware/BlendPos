@@ -13,7 +13,7 @@ type VentaFilter struct {
 	OrdenarPor string `form:"ordenar_por"`               // "fecha" | "total" | "numero_ticket"
 	Orden      string `form:"orden"`                     // "asc" | "desc" (default desc)
 	Page       int    `form:"page,default=1"   validate:"min=1"`
-	Limit      int    `form:"limit,default=50" validate:"min=1,max=200"`
+	Limit      int    `form:"limit,default=50" validate:"min=1,max=1000"`
 }
 
 // VentaListItem is returned inside VentaListResponse for GET /v1/ventas.

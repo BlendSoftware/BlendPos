@@ -23,9 +23,10 @@ function toRegistrarVentaRequest(sale: LocalSale): Record<string, unknown> {
     const items = sale.items.map((item) => ({
         producto_id: item.id,
         cantidad: item.cantidad,
-        descuento: item.descuento > 0
-            ? +(item.cantidad * item.precio * item.descuento / 100).toFixed(2)
-            : 0,
+        descuento: (() => {
+            const pct = Math.max(item.descuento, (item as unknown as { promoDescuento?: number }).promoDescuento ?? 0);
+            return pct > 0 ? +(item.cantidad * item.precio * pct / 100).toFixed(2) : 0;
+        })(),
     }));
 
     // Construir pagos: usar sale.pagos si existe, sino construir desde metodoPago + total

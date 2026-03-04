@@ -6,7 +6,7 @@ import { getLocalStock, deductLocalStock } from '../offline/catalog';
 // Exported here so other stores and services can import them without creating
 // a circular dependency through useSaleStore.
 
-export type MetodoPago = 'efectivo' | 'debito' | 'credito' | 'qr' | 'mixto';
+export type MetodoPago = 'efectivo' | 'debito' | 'credito' | 'qr' | 'transferencia' | 'mixto';
 
 export interface PagoDetalle {
     metodo: Exclude<MetodoPago, 'mixto'>;
@@ -20,7 +20,8 @@ export interface CartItem {
     codigoBarras: string;
     cantidad: number;
     subtotal: number;
-    descuento: number; // porcentaje 0-100
+    descuento: number;       // porcentaje 0-100 — descuento MANUAL via DiscountModal
+    promoDescuento?: number;  // porcentaje 0-100 — descuento aplicado por promoción automática (opcional para compatibilidad con historial antiguo)
 }
 
 // ── State interface ───────────────────────────────────────────────────────────
@@ -55,6 +56,10 @@ interface CartState {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Devuelve el mayor entre el descuento manual y el descuento por promoción. */
+const effectivePct = (item: CartItem): number =>
+    Math.max(item.descuento, item.promoDescuento ?? 0);
 
 const computeTotal = (cart: CartItem[]): number =>
     cart.reduce((sum, item) => sum + item.subtotal, 0);
@@ -116,7 +121,7 @@ export const useCartStore = create<CartState>()((set, get) => ({
                     ? {
                         ...c,
                         cantidad: c.cantidad + 1,
-                        subtotal: (c.cantidad + 1) * c.precio * (1 - c.descuento / 100),
+                        subtotal: (c.cantidad + 1) * c.precio * (1 - effectivePct(c) / 100),
                     }
                     : c
             );
@@ -126,6 +131,7 @@ export const useCartStore = create<CartState>()((set, get) => ({
                 cantidad: 1,
                 subtotal: item.precio,
                 descuento: 0,
+                promoDescuento: 0,
             };
             updatedCart = [...cart, newItem];
         }
@@ -192,7 +198,7 @@ export const useCartStore = create<CartState>()((set, get) => ({
         const { descuentoGlobal } = get();
         const updatedCart = get().cart.map((c) =>
             c.id === id
-                ? { ...c, cantidad, subtotal: cantidad * c.precio * (1 - c.descuento / 100) }
+                ? { ...c, cantidad, subtotal: cantidad * c.precio * (1 - effectivePct(c) / 100) }
                 : c
         );
         const total = computeTotal(updatedCart);
@@ -205,11 +211,11 @@ export const useCartStore = create<CartState>()((set, get) => ({
 
     setItemDiscount: (id, descuento) => {
         const { descuentoGlobal } = get();
-        const updatedCart = get().cart.map((c) =>
-            c.id === id
-                ? { ...c, descuento, subtotal: c.cantidad * c.precio * (1 - descuento / 100) }
-                : c
-        );
+        const updatedCart = get().cart.map((c) => {
+            if (c.id !== id) return c;
+            const effectivo = Math.max(descuento, c.promoDescuento);
+            return { ...c, descuento, subtotal: c.cantidad * c.precio * (1 - effectivo / 100) };
+        });
         const total = computeTotal(updatedCart);
         set({
             cart: updatedCart,
@@ -222,13 +228,15 @@ export const useCartStore = create<CartState>()((set, get) => ({
         const { cart, descuentoGlobal } = get();
         let changed = false;
         const updatedCart = cart.map((c) => {
-            const newDescuento = map[c.id] ?? 0;
-            if (c.descuento === newDescuento) return c;
+            const newPromo = map[c.id] ?? 0;
+            if (c.promoDescuento === newPromo) return c; // nothing changed for this item
             changed = true;
+            const effectivo = Math.max(c.descuento, newPromo);
             return {
                 ...c,
-                descuento: newDescuento,
-                subtotal: c.cantidad * c.precio * (1 - newDescuento / 100),
+                promoDescuento: newPromo,
+                // NOTE: descuento (manual) is intentionally NOT touched here
+                subtotal: c.cantidad * c.precio * (1 - effectivo / 100),
             };
         });
         if (!changed) return; // avoid unnecessary re-render

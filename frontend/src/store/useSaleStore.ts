@@ -108,14 +108,6 @@ export const useSaleStore = create<SaleState>()(
                     clienteEmail: pago.clienteEmail,
                 };
 
-                console.log('[confirmSale] Venta registrada:', {
-                    numeroTicket,
-                    total: finalTotal,
-                    clienteEmail: pago.clienteEmail,
-                    metodoPago: pago.metodoPago,
-                    nextCounter,
-                });
-
                 // 🖨️ Printing is now handled by PostSaleModal (user-initiated).
 
                 // 💾 Offline-first: persist + enqueue for backend sync
@@ -136,24 +128,13 @@ export const useSaleStore = create<SaleState>()(
             setCajero: (nombre) => set({ cajero: nombre }),
             syncTicketCounter: async () => {
                 try {
-                    console.log('[useSaleStore] Sincronizando contador de tickets...');
                     const lastTicketNumber = await getLastTicketNumber();
                     const currentCounter = get().ticketCounter;
-                    
-                    console.log('[useSaleStore] Resultado de sincronización:', {
-                        backend: lastTicketNumber,
-                        local: currentCounter,
-                        willUpdate: lastTicketNumber > currentCounter
-                    });
-                    
                     if (lastTicketNumber > currentCounter) {
                         set({ ticketCounter: lastTicketNumber });
-                        console.log(`[useSaleStore] ✅ Contador actualizado: ${currentCounter} → ${lastTicketNumber}`);
-                    } else {
-                        console.log(`[useSaleStore] ✅ Contador local está actualizado (${currentCounter})`);
                     }
                 } catch (error) {
-                    console.error('[useSaleStore] ❌ Error al sincronizar contador:', error);
+                    console.error('[useSaleStore] Error al sincronizar contador de tickets:', error);
                 }
             },
         }),

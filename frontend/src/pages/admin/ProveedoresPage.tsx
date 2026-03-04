@@ -1,6 +1,5 @@
 import { Fragment, useState, useCallback, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ComprasPage } from './ComprasPage';
 import {
     Stack, Title, Text, Group, Button, TextInput, Modal, Tabs,
     Table, Paper, Badge, ActionIcon, Tooltip, Divider, Alert,
@@ -10,7 +9,7 @@ import { useForm } from '@mantine/form';
 import { Dropzone, type FileWithPath } from '@mantine/dropzone';
 import { notifications } from '@mantine/notifications';
 import { Plus, Edit, Upload, CheckCircle, X, ChevronDown, ChevronUp, Search, Trash2,
-    Barcode, Copy, Hash, TrendingDown, FileText, AlertCircle, CheckSquare, ShoppingCart, Truck } from 'lucide-react';
+    Barcode, Copy, Hash, TrendingDown, FileText, AlertCircle, CheckSquare, Truck } from 'lucide-react';
 import {
     listarProveedores, crearProveedor, actualizarProveedor, importarCSV,
     type ProveedorResponse, type CSVImportResponse,
@@ -219,13 +218,10 @@ export function ProveedoresPage() {
                     <Title order={2} fw={800}>Proveedores</Title>
                     <Text c="dimmed" size="sm">{proveedores.filter((p) => p.activo).length} activos</Text>
                 </div>
-                {activeTab !== 'compras' && (
-                    <Button leftSection={<Plus size={16} />} onClick={openCreate}>Nuevo proveedor</Button>
-                )}
+                <Button leftSection={<Plus size={16} />} onClick={openCreate}>Nuevo proveedor</Button>
             </Group>
 
-            {activeTab !== 'compras' && (
-                <TextInput
+            <TextInput
                     placeholder="Buscar por razón social o CUIT..."
                     leftSection={<Search size={14} />}
                     value={busqueda}
@@ -233,7 +229,6 @@ export function ProveedoresPage() {
                     style={{ maxWidth: 360 }}
                     rightSection={busqueda ? <ActionIcon size="sm" variant="subtle" onClick={() => setBusqueda('')}><X size={12} /></ActionIcon> : null}
                 />
-            )}
 
             <Tabs
                 value={activeTab}
@@ -242,7 +237,6 @@ export function ProveedoresPage() {
                 <Tabs.List>
                     <Tabs.Tab value="lista">Lista de proveedores</Tabs.Tab>
                     <Tabs.Tab value="csv" leftSection={<Upload size={14} />}>Importar precios CSV</Tabs.Tab>
-                    <Tabs.Tab value="compras" leftSection={<ShoppingCart size={15} />}>Compras</Tabs.Tab>
                 </Tabs.List>
 
                 {/* ── Tab: Lista ────────────────────────────────────────── */}
@@ -482,11 +476,6 @@ export function ProveedoresPage() {
                             </Stack>
                         )}
                     </Stack>
-                </Tabs.Panel>
-
-                {/* ── Tab: Compras ──────────────────────────────────── */}
-                <Tabs.Panel value="compras" pt="lg">
-                    <ComprasPage />
                 </Tabs.Panel>
 
             </Tabs>

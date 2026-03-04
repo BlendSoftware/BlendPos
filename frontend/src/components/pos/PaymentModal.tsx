@@ -32,6 +32,7 @@ export function PaymentModal() {
     const [mixtoDebito, setMixtoDebito] = useState<number | string>('');
     const [mixtoCredito, setMixtoCredito] = useState<number | string>('');
     const [mixtoQr, setMixtoQr] = useState<number | string>('');
+    const [mixtoTransferencia, setMixtoTransferencia] = useState<number | string>('');
     const [clienteEmail, setClienteEmail] = useState('');
 
     const isEmailValid = clienteEmail === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clienteEmail);
@@ -47,7 +48,7 @@ export function PaymentModal() {
     const numericRecibido = toNumber(montoRecibido);
 
     const nonCashTotal = metodoPago === 'mixto'
-        ? (toNumber(mixtoDebito) + toNumber(mixtoCredito) + toNumber(mixtoQr))
+        ? (toNumber(mixtoDebito) + toNumber(mixtoCredito) + toNumber(mixtoQr) + toNumber(mixtoTransferencia))
         : 0;
 
     const cashDue = metodoPago === 'mixto' ? (finalTotal - nonCashTotal) : 0;
@@ -82,6 +83,7 @@ export function PaymentModal() {
             setMixtoDebito('');
             setMixtoCredito('');
             setMixtoQr('');
+            setMixtoTransferencia('');
             setClienteEmail('');
         }
     }, [isOpen]);
@@ -100,11 +102,13 @@ export function PaymentModal() {
             const deb = toNumber(mixtoDebito);
             const cre = toNumber(mixtoCredito);
             const qr = toNumber(mixtoQr);
+            const trans = toNumber(mixtoTransferencia);
             const detalles: PagoDetalle[] = [];
 
             if (deb > 0) detalles.push({ metodo: 'debito', monto: deb });
             if (cre > 0) detalles.push({ metodo: 'credito', monto: cre });
             if (qr > 0) detalles.push({ metodo: 'qr', monto: qr });
+            if (trans > 0) detalles.push({ metodo: 'transferencia', monto: trans });
 
             if (cashDue > 0) detalles.push({ metodo: 'efectivo', monto: cashDue });
 
@@ -208,7 +212,8 @@ export function PaymentModal() {
                         { value: 'efectivo', label: '💵 Efectivo' },
                         { value: 'debito', label: '💳 Tarjeta de Débito' },
                         { value: 'credito', label: '💳 Tarjeta de Crédito' },
-                        { value: 'qr', label: '📱 QR / Transferencia' },
+                        { value: 'qr', label: '📱 QR' },
+                        { value: 'transferencia', label: '🔁 Transferencia' },
                         { value: 'mixto', label: '🧾 Mixto' },
                     ]}
                     data-pos-focusable
@@ -294,19 +299,34 @@ export function PaymentModal() {
                             />
                         </Group>
 
-                        <NumberInput
-                            label="QR / Transferencia"
-                            placeholder="$ 0"
-                            value={mixtoQr}
-                            onChange={setMixtoQr}
-                            min={0}
-                            prefix="$ "
-                            thousandSeparator="."
-                            decimalSeparator=","
-                            decimalScale={2}
-                            size="md"
-                            data-pos-focusable
-                        />
+                        <Group grow>
+                            <NumberInput
+                                label="QR"
+                                placeholder="$ 0"
+                                value={mixtoQr}
+                                onChange={setMixtoQr}
+                                min={0}
+                                prefix="$ "
+                                thousandSeparator="."
+                                decimalSeparator=","
+                                decimalScale={2}
+                                size="md"
+                                data-pos-focusable
+                            />
+                            <NumberInput
+                                label="Transferencia"
+                                placeholder="$ 0"
+                                value={mixtoTransferencia}
+                                onChange={setMixtoTransferencia}
+                                min={0}
+                                prefix="$ "
+                                thousandSeparator="."
+                                decimalSeparator=","
+                                decimalScale={2}
+                                size="md"
+                                data-pos-focusable
+                            />
+                        </Group>
 
                         {cashDue > 0 && (
                             <NumberInput
