@@ -165,18 +165,19 @@ func TestAbrirCajaDuplicada(t *testing.T) {
 	repo := newFullCajaRepo()
 	svc := service.NewCajaService(repo)
 
-	_, err := svc.Abrir(context.Background(), uuid.New(), dto.AbrirCajaRequest{
+	resp1, err := svc.Abrir(context.Background(), uuid.New(), dto.AbrirCajaRequest{
 		PuntoDeVenta: 1,
 		MontoInicial: decimal.NewFromFloat(5000),
 	})
 	require.NoError(t, err)
 
-	// Second open on same punto_de_venta should fail
-	_, err = svc.Abrir(context.Background(), uuid.New(), dto.AbrirCajaRequest{
+	// Second open on same punto_de_venta is idempotent: returns the existing session.
+	resp2, err2 := svc.Abrir(context.Background(), uuid.New(), dto.AbrirCajaRequest{
 		PuntoDeVenta: 1,
 		MontoInicial: decimal.NewFromFloat(2000),
 	})
-	assert.ErrorContains(t, err, "Ya existe una caja abierta")
+	require.NoError(t, err2)
+	assert.Equal(t, resp1.SesionCajaID, resp2.SesionCajaID, "second Abrir should return the same existing session")
 }
 
 func TestMovimientoInmutable(t *testing.T) {

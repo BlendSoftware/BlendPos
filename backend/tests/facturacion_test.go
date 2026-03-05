@@ -317,7 +317,7 @@ func TestFacturacionWorker_AFIPFalla_EstadoPendiente(t *testing.T) {
 	cb := infra.NewCircuitBreaker(infra.DefaultCBConfig())
 	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, tmpDir, "")
 
-	payload := worker.FacturacionJobPayload{VentaID: venta.ID.String()}
+	payload := worker.FacturacionJobPayload{VentaID: venta.ID.String(), TipoComprobante: "factura_c"}
 	w.Process(context.Background(), mustJSON(payload))
 
 	// Comprobante should be created with LastError about AFIP failure
