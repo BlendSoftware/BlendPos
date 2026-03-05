@@ -211,6 +211,7 @@ export function FacturacionPage() {
             pagos: v.pagos as SaleRecord['pagos'],
             vuelto: v.vuelto ?? 0,
             cajero: v.cajeroNombre,
+            tipoComprobante: 'ticket_interno',
         };
         const cfg = usePrinterStore.getState().config;
         thermalPrinter.printAll(saleRecord, cfg).catch(console.error);

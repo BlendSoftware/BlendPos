@@ -3,7 +3,7 @@ import {
     Modal, Stack, Text, Group, Button, Divider, Badge, ThemeIcon, Box, Alert,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { CheckCircle, Printer, X, Mail, Receipt, AlertCircle, Info } from 'lucide-react';
+import { CheckCircle, Printer, X, Mail, Receipt, Info } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { formatARS } from '../../utils/format';
 import { PrintableTicket } from './PrintableTicket';

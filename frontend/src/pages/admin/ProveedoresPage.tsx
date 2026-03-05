@@ -9,7 +9,7 @@ import { useForm } from '@mantine/form';
 import { Dropzone, type FileWithPath } from '@mantine/dropzone';
 import { notifications } from '@mantine/notifications';
 import { Plus, Edit, Upload, CheckCircle, X, ChevronDown, ChevronUp, Search, Trash2,
-    Barcode, Copy, Hash, TrendingDown, FileText, AlertCircle, CheckSquare, Truck } from 'lucide-react';
+    Barcode, Copy, Hash, TrendingDown, FileText, AlertCircle, CheckSquare } from 'lucide-react';
 import {
     listarProveedores, crearProveedor, actualizarProveedor, importarCSV,
     type ProveedorResponse, type CSVImportResponse,
