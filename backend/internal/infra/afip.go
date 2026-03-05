@@ -42,18 +42,27 @@ type AFIPResponse struct {
 
 // AFIPClient is an HTTP client that delegates AFIP communication to the Python Sidecar.
 // This decoupling isolates AFIP failures from the core Go backend (ADR-001).
-type AFIPClient struct {
+type AFIPClient interface {
+	Facturar(ctx context.Context, payload AFIPPayload) (*AFIPResponse, error)
+	GetSidecarURL() string
+	GetInternalToken() string
+}
+
+type afipClientImpl struct {
 	sidecarURL    string
 	internalToken string // X-Internal-Token header value (P1-008)
 	httpClient    *http.Client
 }
 
+func (c *afipClientImpl) GetSidecarURL() string { return c.sidecarURL }
+func (c *afipClientImpl) GetInternalToken() string { return c.internalToken }
+
 // NewAFIPClient creates an AFIPClient.
 // internalToken is sent as the X-Internal-Token header to authenticate
 // requests to the sidecar. Pass an empty string to disable the header
 // (e.g. in local development without the AFIP sidecar auth enabled).
-func NewAFIPClient(sidecarURL, internalToken string) *AFIPClient {
-	return &AFIPClient{
+func NewAFIPClient(sidecarURL, internalToken string) AFIPClient {
+	return &afipClientImpl{
 		sidecarURL:    sidecarURL,
 		internalToken: internalToken,
 		httpClient:    &http.Client{Timeout: 30 * time.Second},
@@ -61,7 +70,7 @@ func NewAFIPClient(sidecarURL, internalToken string) *AFIPClient {
 }
 
 // Facturar sends a POST to the Python Sidecar and returns the CAE response.
-func (c *AFIPClient) Facturar(ctx context.Context, payload AFIPPayload) (*AFIPResponse, error) {
+func (c *afipClientImpl) Facturar(ctx context.Context, payload AFIPPayload) (*AFIPResponse, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("afip: marshal payload: %w", err)

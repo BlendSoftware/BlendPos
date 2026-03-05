@@ -100,6 +100,7 @@ func main() {
 	auditRepo := repository.NewAuditRepository(db)
 	compraRepo := repository.NewCompraRepository(db)
 	promocionRepo := repository.NewPromocionRepository(db)
+	configFiscalRepo := repository.NewConfiguracionFiscalRepository(db)
 
 	// ── Services ─────────────────────────────────────────────────────────────
 	authSvc := service.NewAuthService(usuarioRepo, cfg, rdb)
@@ -113,9 +114,10 @@ func main() {
 	auditSvc := service.NewAuditService(auditRepo)
 	compraSvc := service.NewCompraService(compraRepo)
 	promocionSvc := service.NewPromocionService(promocionRepo)
+	configFiscalSvc := service.NewConfiguracionFiscalService(configFiscalRepo, afipClient)
 
 	workerHandlers := &worker.WorkerHandlers{
-		Facturacion: worker.NewFacturacionWorker(afipClient, afipCB, comprobanteRepo, ventaRepo, dispatcher, cfg.PDFStoragePath, cfg.AFIPCUITEmisor),
+		Facturacion: worker.NewFacturacionWorker(afipClient, afipCB, comprobanteRepo, ventaRepo, dispatcher, cfg.PDFStoragePath, configFiscalSvc),
 		Email:       worker.NewEmailWorker(mailer),
 	}
 
@@ -139,7 +141,7 @@ func main() {
 		AFIPClient:      afipClient,
 		CB:              afipCB,
 		RDB:             rdb,
-		CUITEmisor:      cfg.AFIPCUITEmisor,
+		ConfigFiscalSvc: configFiscalSvc,
 	})
 
 	r := router.New(router.Deps{
@@ -153,6 +155,7 @@ func main() {
 		VentaSvc:            ventaSvc,
 		CajaSvc:             cajaSvc,
 		FacturacionSvc:      facturacionSvc,
+		ConfigFiscalSvc:     configFiscalSvc,
 		ProveedorSvc:        proveedorSvc,
 		CategoriaSvc:        categoriaSvc,
 		AuditSvc:            auditSvc,

@@ -47,7 +47,7 @@ services:
       PORT: 8000
       DATABASE_URL: postgres://blendpos:blendpos@postgres:5432/blendpos?sslmode=disable
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: dev_secret_change_in_production!  # ⚠️ CHANGE in production — use a 256-bit random secret
+      JWT_SECRET: dev_secret_change_in_production!_32chars  # ⚠️ CHANGE in production — use a 256-bit random secret
       AFIP_SIDECAR_URL: http://afip-sidecar:8001
       AFIP_CUIT_EMISOR: "20442477060"
       ALLOWED_ORIGINS: "http://localhost:5173"

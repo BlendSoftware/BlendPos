@@ -24,11 +24,17 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		if _, ok := allowed[origin]; ok {
-			c.Header("Access-Control-Allow-Origin", origin)
-			c.Header("Access-Control-Allow-Credentials", "true")
-			// Vary: Origin tells caches that the response differs per origin
-			c.Header("Vary", "Origin")
+		_, isAllowed := allowed[origin]
+		_, wildcardAllowed := allowed["*"]
+
+		if isAllowed || wildcardAllowed {
+			if origin != "" {
+				c.Header("Access-Control-Allow-Origin", origin)
+				c.Header("Access-Control-Allow-Credentials", "true")
+				c.Header("Vary", "Origin")
+			} else if wildcardAllowed {
+				c.Header("Access-Control-Allow-Origin", "*")
+			}
 		}
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")

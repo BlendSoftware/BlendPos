@@ -27,11 +27,11 @@ type Job struct {
 // The worker pool dequeues them via BRPOP.
 type Dispatcher struct {
 	rdb        *redis.Client
-	afipClient *infra.AFIPClient
+	afipClient infra.AFIPClient
 	mailer     *infra.Mailer
 }
 
-func NewDispatcher(rdb *redis.Client, afipClient *infra.AFIPClient, mailer *infra.Mailer) *Dispatcher {
+func NewDispatcher(rdb *redis.Client, afipClient infra.AFIPClient, mailer *infra.Mailer) *Dispatcher {
 	return &Dispatcher{rdb: rdb, afipClient: afipClient, mailer: mailer}
 }
 

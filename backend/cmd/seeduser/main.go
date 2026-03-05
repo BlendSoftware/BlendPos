@@ -16,7 +16,7 @@ import (
 func main() {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://blendpos:blendpos@postgres:5432/blendpos?sslmode=disable"
+		dsn = "postgres://blendpos:blendpos@localhost:5432/blendpos?sslmode=disable"
 	}
 	username := "admin@blendpos.com"
 	password := "1234"
