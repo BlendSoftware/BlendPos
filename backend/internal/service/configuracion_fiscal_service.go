@@ -43,7 +43,7 @@ func (s *configuracionFiscalService) ObtenerConfiguracion(ctx context.Context) (
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Si no existe configuración, devolvemos un objeto vacío
 	if cfg == nil {
 		return &dto.ConfiguracionFiscalResponse{}, nil
