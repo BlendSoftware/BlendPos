@@ -17,6 +17,12 @@ interface APIResponseWrapper<T> {
     message?: string;
 }
 
+export interface UpdateConfiguracionFiscalResult {
+    message: string;
+    /** Present when config was saved but AFIP WSAA auth failed (HTTP 200 with warning). */
+    afip_warning?: string;
+}
+
 export async function getConfiguracionFiscal(): Promise<ConfiguracionFiscalResponse> {
     const res = await apiClient.get<APIResponseWrapper<ConfiguracionFiscalResponse>>('/v1/configuracion/fiscal');
     return res.data;
@@ -26,7 +32,7 @@ export async function updateConfiguracionFiscal(
     data: Omit<ConfiguracionFiscalResponse, 'tiene_certificado_crt' | 'tiene_certificado_key'>,
     crtFile?: File | null,
     keyFile?: File | null,
-): Promise<void> {
+): Promise<UpdateConfiguracionFiscalResult> {
     // Use FormData + native fetch to support file uploads,
     // since apiClient.put() serialises to JSON and can't handle multipart.
     const form = new FormData();
@@ -55,4 +61,6 @@ export async function updateConfiguracionFiscal(
         const body = await res.text();
         throw new Error(`${res.status}: ${body}`);
     }
+
+    return res.json() as Promise<UpdateConfiguracionFiscalResult>;
 }

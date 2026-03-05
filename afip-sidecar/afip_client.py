@@ -403,6 +403,17 @@ class AFIPClient:
             fecha_hoy = datetime.now().strftime('%Y%m%d')
             
             # Crear factura en pyafipws
+            # Para Factura C (tipo 11, Monotributistas): el total va en imp_tot_conc
+            # (concepto "no gravado" — monotributistas no son agentes de IVA).
+            # Para Factura A/B (tipos 1/6, Responsable Inscripto): el monto exento va
+            # en imp_op_ex. Si ambos son cero, los campos quedan en 0.00.
+            if req.tipo_comprobante == 11:
+                _imp_tot_conc = round(req.importe_exento, 2)
+                _imp_op_ex    = 0.00
+            else:
+                _imp_tot_conc = 0.00
+                _imp_op_ex    = round(req.importe_exento, 2)
+
             wsfe.CrearFactura(
                 concepto=req.concepto,
                 tipo_doc=req.tipo_doc_receptor,
@@ -412,11 +423,11 @@ class AFIPClient:
                 cbt_desde=numero_cbte,
                 cbt_hasta=numero_cbte,  # Un solo comprobante
                 imp_total=round(req.importe_total, 2),
-                imp_tot_conc=0.00,  # Monto no gravado
+                imp_tot_conc=_imp_tot_conc,
                 imp_neto=round(req.importe_neto, 2),
                 imp_iva=round(req.importe_iva, 2),
                 imp_trib=round(req.importe_tributos, 2),
-                imp_op_ex=round(req.importe_exento, 2),
+                imp_op_ex=_imp_op_ex,
                 fecha_cbte=fecha_hoy,
                 fecha_venc_pago=None,  # Solo si concepto=servicios
                 fecha_serv_desde=None,

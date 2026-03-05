@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -96,6 +97,16 @@ func (h *ConfiguracionFiscalHandler) Actualizar(c *gin.Context) {
 	req.CertificadoKey = readBase64File("certificado_key")
 
 	if err := h.svc.ActualizarConfiguracion(c.Request.Context(), req); err != nil {
+		var afipWarn *service.ErrAFIPAuthWarning
+		if errors.As(err, &afipWarn) {
+			// Config saved to DB but sidecar/WSAA reported a problem.
+			// Return 200 so the user knows their data was saved; include the warning.
+			c.JSON(http.StatusOK, gin.H{
+				"message":      "Configuración guardada correctamente.",
+				"afip_warning": afipWarn.Msg,
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, apierror.New(err.Error()))
 		return
 	}

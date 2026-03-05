@@ -86,7 +86,7 @@ export function ConfiguracionFiscalPage() {
         setSaving(true);
         setAfipResponse(null);
         try {
-            await updateConfiguracionFiscal(
+            const result = await updateConfiguracionFiscal(
                 {
                     cuit_emisor: values.cuit_emisor,
                     razon_social: values.razon_social,
@@ -101,8 +101,18 @@ export function ConfiguracionFiscalPage() {
             );
             if (crtFile) setCertStatus((s) => ({ ...s, crt: true }));
             if (keyFile) setCertStatus((s) => ({ ...s, key: true }));
-            setAfipResponse({ ok: true, message: 'Configuración guardada y AFIP notificado correctamente.' });
-            notifications.show({ title: 'Guardado', message: 'Configuración fiscal actualizada', color: 'teal', icon: <Check size={14} /> });
+
+            if (result.afip_warning) {
+                setAfipResponse({
+                    ok: false,
+                    message: result.afip_warning,
+                    hint: 'Verificá que el certificado esté registrado en ARCA y asociado al servicio "wsfe". Podés reintentar una vez que el certificado esté activo.',
+                });
+                notifications.show({ title: 'Guardado con advertencia AFIP', message: result.afip_warning, color: 'orange', icon: <AlertTriangle size={14} /> });
+            } else {
+                setAfipResponse({ ok: true, message: 'Configuración guardada y AFIP notificado correctamente.' });
+                notifications.show({ title: 'Guardado', message: 'Configuración fiscal actualizada', color: 'teal', icon: <Check size={14} /> });
+            }
         } catch (err: unknown) {
             const detail = (err as { response?: { data?: { data?: string; message?: string } } })?.response?.data?.data
                 ?? (err as { response?: { data?: { message?: string } } })?.response?.data?.message

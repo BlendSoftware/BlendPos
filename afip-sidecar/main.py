@@ -299,7 +299,7 @@ def configurar(req: "ConfigurarRequest") -> dict:
         key_path=key_path,
         homologacion=homologacion,
         cache_dir=cache_dir,
-        redis_client=rdb,
+        rdb=rdb,
     )
 
     # Intentar autenticación inmediata para validar el certificado
