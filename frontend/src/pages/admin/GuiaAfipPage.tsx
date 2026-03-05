@@ -389,7 +389,7 @@ openssl req -new -key afip.key ^
                                     <Text fw={600} size="sm" c="red">Factura rechazada — Resultado "R"</Text>
                                 </Accordion.Control>
                                 <Accordion.Panel>
-                                    <Table size="sm" withTableBorder withColumnBorders>
+                                    <Table withTableBorder withColumnBorders>
                                         <Table.Thead>
                                             <Table.Tr>
                                                 <Table.Th>Código</Table.Th>
