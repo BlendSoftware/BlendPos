@@ -183,12 +183,14 @@ func (w *FacturacionWorker) buildAFIPPayload(ctx context.Context, venta *model.V
 	puntoDeVenta := 1
 	condicionFiscal := "Monotributo" // Safest default: Factura C, no IVA
 
-	if cfg, err := w.configFiscalSvc.ObtenerConfiguracion(ctx); err == nil && cfg != nil && cfg.CUITEmsior != "" {
-		cuitEmisor = cfg.CUITEmsior
-		puntoDeVenta = cfg.PuntoDeVenta
-		condicionFiscal = cfg.CondicionFiscal
-	} else if err != nil {
-		log.Warn().Err(err).Msg("facturacion_worker: could not read fiscal config from DB, using defaults")
+	if w.configFiscalSvc != nil {
+		if cfg, err := w.configFiscalSvc.ObtenerConfiguracion(ctx); err == nil && cfg != nil && cfg.CUITEmsior != "" {
+			cuitEmisor = cfg.CUITEmsior
+			puntoDeVenta = cfg.PuntoDeVenta
+			condicionFiscal = cfg.CondicionFiscal
+		} else if err != nil {
+			log.Warn().Err(err).Msg("facturacion_worker: could not read fiscal config from DB, using defaults")
+		}
 	}
 
 	// ── Determine comprobante type from condicion fiscal ─────────────────────

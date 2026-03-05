@@ -315,7 +315,7 @@ func TestFacturacionWorker_AFIPFalla_EstadoPendiente(t *testing.T) {
 	// Use client pointing to a port nothing listens on
 	afipClient := infra.NewAFIPClient("http://localhost:19999", "")
 	cb := infra.NewCircuitBreaker(infra.DefaultCBConfig())
-	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, tmpDir, "")
+	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, tmpDir, nil)
 
 	payload := worker.FacturacionJobPayload{VentaID: venta.ID.String(), TipoComprobante: "factura_c"}
 	w.Process(context.Background(), mustJSON(payload))
@@ -339,7 +339,7 @@ func TestFacturacionWorker_GeneraPDF_AunSinAFIP(t *testing.T) {
 
 	afipClient := infra.NewAFIPClient("http://localhost:19999", "")
 	cb := infra.NewCircuitBreaker(infra.DefaultCBConfig())
-	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, tmpDir, "")
+	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, tmpDir, nil)
 	w.Process(context.Background(), mustJSON(worker.FacturacionJobPayload{VentaID: venta.ID.String()}))
 
 	comp, err := comprobanteRepo.FindByVentaID(context.Background(), venta.ID)
@@ -358,7 +358,7 @@ func TestFacturacionWorker_VentaIDInvalido_NoPanic(t *testing.T) {
 
 	afipClient := infra.NewAFIPClient("http://localhost:19999", "")
 	cb := infra.NewCircuitBreaker(infra.DefaultCBConfig())
-	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, t.TempDir(), "")
+	w := worker.NewFacturacionWorker(afipClient, cb, comprobanteRepo, ventaRepo, nil, t.TempDir(), nil)
 
 	payload := worker.FacturacionJobPayload{VentaID: "not-a-valid-uuid"}
 	assert.NotPanics(t, func() {

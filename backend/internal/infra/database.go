@@ -293,6 +293,21 @@ func applySchemaPatches(db *gorm.DB) error {
 		`ALTER TABLE promociones ADD COLUMN IF NOT EXISTS cantidad_requerida INTEGER NOT NULL DEFAULT 1`,
 		// migration 000019: tipo_comprobante on ventas (fiscal receipt type selected at POS)
 		`ALTER TABLE ventas ADD COLUMN IF NOT EXISTS tipo_comprobante VARCHAR(30) NOT NULL DEFAULT 'ticket_interno'`,
+		// 20260305: configuracion_fiscal table (AFIP fiscal config + certs per tenant)
+		`CREATE TABLE IF NOT EXISTS configuracion_fiscal (
+		  id                       UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+		  cuit_emisor              VARCHAR(20)  NOT NULL,
+		  razon_social             VARCHAR(255) NOT NULL DEFAULT '',
+		  condicion_fiscal         VARCHAR(50)  NOT NULL DEFAULT 'consumidor_final',
+		  punto_de_venta           INT          NOT NULL DEFAULT 1,
+		  certificado_crt          TEXT,
+		  certificado_key          TEXT,
+		  modo                     VARCHAR(20)  NOT NULL DEFAULT 'homologacion',
+		  fecha_inicio_actividades DATE,
+		  iibb                     VARCHAR(50),
+		  created_at               TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+		  updated_at               TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+		)`,
 		// migration 000002: historial_precios index (safe to re-create)
 		`DO $$ BEGIN
 		  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'historial_precios')
