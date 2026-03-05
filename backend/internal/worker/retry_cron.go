@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"blendpos/internal/dto"
 	"blendpos/internal/infra"
 	"blendpos/internal/repository"
 
@@ -17,6 +18,12 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
 )
+
+// ConfiguracionFiscalProvider provides fiscal configuration to workers,
+// avoiding a direct dependency on the service package (resolving import cycle).
+type ConfiguracionFiscalProvider interface {
+	ObtenerConfiguracion(ctx context.Context) (*dto.ConfiguracionFiscalResponse, error)
+}
 
 const (
 	retryTickInterval = 30 * time.Second
@@ -26,10 +33,10 @@ const (
 // RetryCronConfig holds all dependencies for the retry goroutine.
 type RetryCronConfig struct {
 	ComprobanteRepo repository.ComprobanteRepository
-	AFIPClient      *infra.AFIPClient
+	AFIPClient      infra.AFIPClient
 	CB              *infra.CircuitBreaker
 	RDB             *redis.Client
-	CUITEmisor      string
+	ConfigFiscalSvc ConfiguracionFiscalProvider
 }
 
 // StartRetryCron launches a background goroutine that ticks every 30s,
@@ -83,8 +90,16 @@ func processRetries(ctx context.Context, cfg RetryCronConfig) {
 			return
 		}
 
+		// Read CUIT from fiscal config (fallback to empty)
+		cuitEmisor := ""
+		if cfg.ConfigFiscalSvc != nil {
+			if fiscalCfg, err := cfg.ConfigFiscalSvc.ObtenerConfiguracion(ctx); err == nil && fiscalCfg != nil {
+				cuitEmisor = fiscalCfg.CUITEmsior
+			}
+		}
+
 		afipPayload := infra.AFIPPayload{
-			CUITEmisor:      cfg.CUITEmisor,
+			CUITEmisor:      cuitEmisor,
 			PuntoDeVenta:    comp.PuntoDeVenta,
 			TipoComprobante: 11,
 			TipoDocReceptor: 99,

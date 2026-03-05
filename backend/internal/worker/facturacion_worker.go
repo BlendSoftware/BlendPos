@@ -9,8 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -44,24 +42,24 @@ type FacturacionJobPayload struct {
 // After a successful AFIP call (or fallback), it generates a PDF ticket
 // and optionally enqueues an email job.
 type FacturacionWorker struct {
-	afipClient      *infra.AFIPClient
+	afipClient      infra.AFIPClient
 	cb              *infra.CircuitBreaker
 	comprobanteRepo repository.ComprobanteRepository
 	ventaRepo       repository.VentaRepository
 	dispatcher      *Dispatcher
 	pdfStoragePath  string
-	cuitEmisor      string
+	configFiscalSvc ConfiguracionFiscalProvider
 }
 
 // NewFacturacionWorker wires all dependencies for the billing worker.
 func NewFacturacionWorker(
-	afipClient *infra.AFIPClient,
+	afipClient infra.AFIPClient,
 	cb *infra.CircuitBreaker,
 	comprobanteRepo repository.ComprobanteRepository,
 	ventaRepo repository.VentaRepository,
 	dispatcher *Dispatcher,
 	pdfStoragePath string,
-	cuitEmisor string,
+	configFiscalSvc ConfiguracionFiscalProvider,
 ) *FacturacionWorker {
 	return &FacturacionWorker{
 		afipClient:      afipClient,
@@ -70,7 +68,7 @@ func NewFacturacionWorker(
 		ventaRepo:       ventaRepo,
 		dispatcher:      dispatcher,
 		pdfStoragePath:  pdfStoragePath,
-		cuitEmisor:      cuitEmisor,
+		configFiscalSvc: configFiscalSvc,
 	}
 }
 
@@ -148,7 +146,7 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 		return
 	}
 	// 3. AFIP call through Circuit Breaker
-	afipPayload := w.buildAFIPPayload(venta, &payload)
+	afipPayload := w.buildAFIPPayload(ctx, venta, &payload)
 	afipResp, afipErr := w.callAFIPWithCB(ctx, afipPayload)
 
 	// 4. Update Comprobante based on AFIP result
@@ -179,17 +177,23 @@ func (w *FacturacionWorker) callAFIPWithCB(ctx context.Context, payload infra.AF
 	return afipResp, err
 }
 
-func (w *FacturacionWorker) buildAFIPPayload(venta *model.Venta, payload *FacturacionJobPayload) infra.AFIPPayload {
-	// Read PuntoDeVenta from env (AFIP_PUNTO_VENTA), default 1
+func (w *FacturacionWorker) buildAFIPPayload(ctx context.Context, venta *model.Venta, payload *FacturacionJobPayload) infra.AFIPPayload {
+	// ── Read fiscal config from DB (with fallback defaults) ──────────────────
+	cuitEmisor := ""
 	puntoDeVenta := 1
-	if envPDV := os.Getenv("AFIP_PUNTO_VENTA"); envPDV != "" {
-		if v, err := strconv.Atoi(envPDV); err == nil && v > 0 {
-			puntoDeVenta = v
-		}
+	condicionFiscal := "Monotributo" // Safest default: Factura C, no IVA
+
+	if cfg, err := w.configFiscalSvc.ObtenerConfiguracion(ctx); err == nil && cfg != nil && cfg.CUITEmsior != "" {
+		cuitEmisor = cfg.CUITEmsior
+		puntoDeVenta = cfg.PuntoDeVenta
+		condicionFiscal = cfg.CondicionFiscal
+	} else if err != nil {
+		log.Warn().Err(err).Msg("facturacion_worker: could not read fiscal config from DB, using defaults")
 	}
 
-	// Map tipo string → AFIP numeric type
-	tipoComprobante := 11 // Default: Factura C
+	// ── Determine comprobante type from condicion fiscal ─────────────────────
+	// Overrideable from job payload for specific cases (e.g. B2B).
+	tipoComprobante := 11 // Default: Factura C (Monotributo / Exento)
 	switch payload.TipoComprobante {
 	case "factura_a":
 		tipoComprobante = 1
@@ -197,9 +201,39 @@ func (w *FacturacionWorker) buildAFIPPayload(venta *model.Venta, payload *Factur
 		tipoComprobante = 6
 	case "factura_c":
 		tipoComprobante = 11
+	default:
+		// Auto-resolve from condicion fiscal when no override is given
+		switch condicionFiscal {
+		case "Responsable Inscripto":
+			// If receptor is RI → Factura A; else Factura B
+			if payload.TipoDocReceptor != nil && *payload.TipoDocReceptor == 80 {
+				tipoComprobante = 1 // Factura A
+			} else {
+				tipoComprobante = 6 // Factura B
+			}
+		}
 	}
 
-	// Doc receptor
+	// ── IVA calculation ───────────────────────────────────────────────────────
+	// Monotributo / Exento: total sin discriminar IVA (importe_exento = total)
+	// Responsable Inscripto: desglosar 21% IVA
+	var importeNeto, importeIVA, importeExento decimal.Decimal
+	total := venta.Total
+
+	switch condicionFiscal {
+	case "Responsable Inscripto":
+		// neto = total / 1.21 ; iva = total - neto
+		divisor := decimal.NewFromFloat(1.21)
+		importeNeto = total.Div(divisor).RoundBank(2)
+		importeIVA = total.Sub(importeNeto).RoundBank(2)
+		importeExento = decimal.Zero
+	default: // Monotributo, Exento
+		importeNeto = decimal.Zero
+		importeIVA = decimal.Zero
+		importeExento = total
+	}
+
+	// ── Doc receptor ─────────────────────────────────────────────────────────
 	tipoDocReceptor := 99 // ConsumidorFinal
 	if payload.TipoDocReceptor != nil {
 		tipoDocReceptor = *payload.TipoDocReceptor
@@ -210,16 +244,16 @@ func (w *FacturacionWorker) buildAFIPPayload(venta *model.Venta, payload *Factur
 	}
 
 	return infra.AFIPPayload{
-		CUITEmisor:      w.cuitEmisor,
+		CUITEmisor:      cuitEmisor,
 		PuntoDeVenta:    puntoDeVenta,
 		TipoComprobante: tipoComprobante,
 		TipoDocReceptor: tipoDocReceptor,
 		NroDocReceptor:  nroDocReceptor,
 		Concepto:        1, // Productos
-		ImporteNeto:     venta.Total.StringFixed(2),
-		ImporteExento:   decimal.Zero.StringFixed(2),
-		ImporteIVA:      decimal.Zero.StringFixed(2),
-		ImporteTotal:    venta.Total.StringFixed(2),
+		ImporteNeto:     importeNeto.StringFixed(2),
+		ImporteExento:   importeExento.StringFixed(2),
+		ImporteIVA:      importeIVA.StringFixed(2),
+		ImporteTotal:    total.StringFixed(2),
 		VentaID:         payload.VentaID,
 	}
 }

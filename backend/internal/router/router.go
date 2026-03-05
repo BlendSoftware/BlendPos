@@ -36,6 +36,7 @@ type Deps struct {
 	VentaSvc       service.VentaService
 	CajaSvc        service.CajaService
 	FacturacionSvc service.FacturacionService
+	ConfigFiscalSvc service.ConfiguracionFiscalService
 	ProveedorSvc   service.ProveedorService
 	CategoriaSvc   service.CategoriaService
 	AuditSvc       service.AuditService
@@ -79,6 +80,7 @@ func New(d Deps) *gin.Engine {
 	ventasH := handler.NewVentasHandler(d.VentaSvc)
 	cajaH := handler.NewCajaHandler(d.CajaSvc)
 	facturacionH := handler.NewFacturacionHandler(d.FacturacionSvc, cfg.PDFStoragePath)
+	configFiscalH := handler.NewConfiguracionFiscalHandler(d.ConfigFiscalSvc)
 	proveedoresH := handler.NewProveedoresHandler(d.ProveedorSvc)
 	usuariosH := handler.NewUsuariosHandler(d.AuthSvc)
 	consultaH := handler.NewConsultaPreciosHandler(d.ProductoRepo, d.RDB)
@@ -159,6 +161,12 @@ func New(d Deps) *gin.Engine {
 			fact.GET("/pdf/:id", facturacionH.DescargarPDF)
 			fact.DELETE("/:id", facturacionH.AnularComprobante)
 			fact.POST("/:id/reintentar", facturacionH.ReintentarComprobante)
+		}
+
+		conf := v1.Group("/configuracion/fiscal", middleware.RequireRole("administrador"))
+		{
+			conf.GET("", configFiscalH.Obtener)
+			conf.PUT("", configFiscalH.Actualizar)
 		}
 
 		prov := v1.Group("/proveedores", middleware.RequireRole("administrador"))

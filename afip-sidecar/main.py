@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 # Import local modules
-from schemas import FacturarRequest, FacturarResponse, HealthResponse
+from schemas import FacturarRequest, FacturarResponse, HealthResponse, ConfigurarRequest
 from afip_client import AFIPClient
 
 # ── Authentication (P1-008) ───────────────────────────────────────────────────
@@ -252,12 +252,84 @@ def health() -> HealthResponse:
     )
 
 
+@app.post("/configurar", dependencies=[Depends(verify_internal_token)])
+def configurar(req: "ConfigurarRequest") -> dict:
+    """
+    Reconfigura el sidecar con nuevos certificados AFIP en caliente.
+    Llamado por el backend Go cuando el dueño sube certificados desde la UI de admin.
+    
+    Los certificados llegan en base64 porque son binarios y el transporte es JSON.
+    Se escriben a disco en /certs/ y se reinicia el AFIPClient para re-autenticar con WSAA.
+    """
+    import base64
+    global afip_client
+
+    certs_dir = "/certs"
+    os.makedirs(certs_dir, exist_ok=True)
+
+    try:
+        crt_bytes = base64.b64decode(req.crt_base64)
+        key_bytes = base64.b64decode(req.key_base64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error decodificando certificados (base64 inválido): {e}")
+
+    crt_path = os.path.join(certs_dir, "afip.crt")
+    key_path = os.path.join(certs_dir, "afip.key")
+    
+    with open(crt_path, "wb") as f:
+        f.write(crt_bytes)
+    with open(key_path, "wb") as f:
+        f.write(key_bytes)
+    
+    logger.info(f"✓ Certificados guardados en {certs_dir} para CUIT {req.cuit_emisor}")
+
+    # Reconstruir el cliente con la nueva configuración
+    homologacion = req.modo.lower() != "produccion"
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    cache_dir  = os.getenv("AFIP_CACHE_DIR", "/tmp/afip_cache")
+
+    try:
+        rdb = redis_sync.from_url(redis_url, socket_connect_timeout=2) if redis_url else None
+    except Exception:
+        rdb = None
+
+    nuevo_client = AFIPClient(
+        cuit_emisor=req.cuit_emisor,
+        cert_path=crt_path,
+        key_path=key_path,
+        homologacion=homologacion,
+        cache_dir=cache_dir,
+        redis_client=rdb,
+    )
+
+    # Intentar autenticación inmediata para validar el certificado
+    try:
+        result = nuevo_client.autenticar(forzar=True)
+        afip_client = nuevo_client
+        logger.info(f"✓ Nuevo cliente AFIP configurado y autenticado. Token válido hasta: {result.get('expiracion', 'N/A')}")
+        return {"ok": True, "message": "Certificados actualizados y autenticación WSAA exitosa"}
+    except Exception as e:
+        # El cliente anterior sigue activo — no rompemos el servicio si el nuevo cert falla
+        error_str = str(e)
+        logger.warning(f"⚠ Nuevo cert guardado pero WSAA rechazó: {error_str}")
+        # Si es el error conocido de cert no confiable, aún reemplazamos el client
+        # para que cuando AFIP homologue el cert funcione en el próximo request
+        afip_client = nuevo_client
+        return {
+            "ok": False,
+            "message": "Certificados guardados, pero AFIP/WSAA devolvió error de autenticación.",
+            "afip_error": error_str,
+            "hint": "Verificá que el certificado esté registrado y asociado al servicio 'wsfe' en AFIP."
+        }
+
+
 @app.post("/facturar", response_model=FacturarResponse, dependencies=[Depends(verify_internal_token)])
 def facturar(req: FacturarRequest) -> FacturarResponse:
     """
     Emite una factura electrónica en AFIP via WSFEV1.
     
     Este endpoint es llamado exclusivamente por el worker de Go
+
     cuando una venta necesita ser facturada.
     
     Flujo:

@@ -8,6 +8,19 @@ from typing import Optional, List
 from pydantic import BaseModel, Field, validator
 
 
+class ConfigurarRequest(BaseModel):
+    """
+    Payload para reconfigurar el sidecar de AFIP en caliente.
+    Enviado desde el backend Go cuando el dueño sube nuevos certificados desde la UI.
+    Los certificados se envían en base64 para transporte seguro sobre HTTP interno.
+    """
+    cuit_emisor: str = Field(..., description="CUIT del emisor (sin guiones)")
+    modo: str = Field("homologacion", description="'homologacion' o 'produccion'")
+    crt_base64: str = Field(..., description="Contenido del .crt en base64")
+    key_base64: str = Field(..., description="Contenido del .key en base64")
+
+
+
 class ItemFacturaRequest(BaseModel):
     """
     Representa un item dentro de una factura.
