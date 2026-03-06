@@ -33,6 +33,8 @@ type ProductoRepository interface {
 	FindVinculoByHijoIDTx(tx *gorm.DB, hijoID uuid.UUID) (*model.ProductoHijo, error)
 	FindVinculoByID(ctx context.Context, id uuid.UUID) (*model.ProductoHijo, error)
 	ListVinculos(ctx context.Context) ([]model.ProductoHijo, error)
+	DeleteVinculo(ctx context.Context, id uuid.UUID) error
+	UpdateVinculo(ctx context.Context, id uuid.UUID, unidadesPorPadre int, desarmeAuto bool) error
 
 	// Used inside transactions — callers must pass the tx instance
 	UpdateStockTx(tx *gorm.DB, id uuid.UUID, delta int) error
@@ -174,6 +176,29 @@ func (r *productoRepo) ListVinculos(ctx context.Context) ([]model.ProductoHijo, 
 	var vinculos []model.ProductoHijo
 	err := r.db.WithContext(ctx).Preload("Padre").Preload("Hijo").Find(&vinculos).Error
 	return vinculos, err
+}
+
+func (r *productoRepo) DeleteVinculo(ctx context.Context, id uuid.UUID) error {
+	result := r.db.WithContext(ctx).Delete(&model.ProductoHijo{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("vínculo no encontrado")
+	}
+	return nil
+}
+
+func (r *productoRepo) UpdateVinculo(ctx context.Context, id uuid.UUID, unidadesPorPadre int, desarmeAuto bool) error {
+	result := r.db.WithContext(ctx).Model(&model.ProductoHijo{}).Where("id = ?", id).
+		Updates(map[string]interface{}{"unidades_por_padre": unidadesPorPadre, "desarme_auto": desarmeAuto})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("vínculo no encontrado")
+	}
+	return nil
 }
 
 func (r *productoRepo) UpdateStockTx(tx *gorm.DB, id uuid.UUID, delta int) error {

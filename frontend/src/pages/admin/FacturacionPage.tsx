@@ -12,6 +12,7 @@ import { getComprobante, descargarPDF, getPDFUrl } from '../../services/api/fact
 import { tokenStore } from '../../store/tokenStore';
 import { formatARS } from '../../utils/format';
 import type { IVenta } from '../../types';
+import type { MetodoPago } from '../../store/useSaleStore';
 
 const METODO_COLOR: Record<string, string> = {
     efectivo: 'teal', debito: 'blue', credito: 'violet', transferencia: 'cyan', qr: 'orange',

@@ -22,6 +22,10 @@ type InventarioService interface {
 	// DescontarStockTx is called within a sale transaction — requires a live *gorm.DB tx.
 	// Using *gorm.DB directly (not interface{}) catches type errors at compile time (P2-003).
 	DescontarStockTx(ctx context.Context, productoID uuid.UUID, cantidad int, tx *gorm.DB) error
+	// EliminarVinculo deletes a parent-child product link by id.
+	EliminarVinculo(ctx context.Context, id string) error
+	// ActualizarVinculo updates the unidades_por_padre and desarme_auto fields of a link.
+	ActualizarVinculo(ctx context.Context, id string, req dto.ActualizarVinculoRequest) (*dto.VinculoResponse, error)
 	// ListarMovimientos returns stock movement history with optional filters
 	ListarMovimientos(ctx context.Context, filter dto.MovimientoStockFilter) (*dto.MovimientoStockListResponse, error)
 	// RegistrarMovimientoTx records a stock movement inside an existing transaction
@@ -232,6 +236,30 @@ func (s *inventarioService) RegistrarMovimientoTx(tx *gorm.DB, m *model.Movimien
 		return nil
 	}
 	return s.movRepo.CreateTx(tx, m)
+}
+
+func (s *inventarioService) EliminarVinculo(ctx context.Context, id string) error {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return fmt.Errorf("id inválido: %w", err)
+	}
+	return s.repo.DeleteVinculo(ctx, uid)
+}
+
+func (s *inventarioService) ActualizarVinculo(ctx context.Context, id string, req dto.ActualizarVinculoRequest) (*dto.VinculoResponse, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("id inválido: %w", err)
+	}
+	if err := s.repo.UpdateVinculo(ctx, uid, req.UnidadesPorPadre, req.DesarmeAuto); err != nil {
+		return nil, err
+	}
+	vinculo, err := s.repo.FindVinculoByID(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	resp := toVinculoResponse(vinculo)
+	return &resp, nil
 }
 
 // ListarMovimientos returns a paginated list of stock movements.
