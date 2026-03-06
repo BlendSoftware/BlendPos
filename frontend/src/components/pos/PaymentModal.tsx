@@ -34,7 +34,7 @@ export function PaymentModal() {
     const [mixtoQr, setMixtoQr] = useState<number | string>('');
     const [mixtoTransferencia, setMixtoTransferencia] = useState<number | string>('');
     const [clienteEmail, setClienteEmail] = useState('');
-    const [tipoComprobante, setTipoComprobante] = useState<'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c'>('ticket_interno');
+    const [tipoComprobante, setTipoComprobante] = useState<'auto' | 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c'>('auto');
     const [cuitReceptor, setCuitReceptor] = useState('');
 
     const isEmailValid = clienteEmail === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clienteEmail);
@@ -88,7 +88,7 @@ export function PaymentModal() {
             setMixtoQr('');
             setMixtoTransferencia('');
             setClienteEmail('');
-            setTipoComprobante('ticket_interno');
+            setTipoComprobante('auto');
             setCuitReceptor('');
         }
     }, [isOpen]);
@@ -130,7 +130,7 @@ export function PaymentModal() {
             efectivoRecibido: efectivoRecibidoToSave,
             vuelto: vueltoCalc,
             clienteEmail: clienteEmail.trim() || undefined,
-            tipoComprobante,
+            tipoComprobante: tipoComprobante === 'auto' ? undefined : tipoComprobante,
             cuitReceptor: cuitReceptor.trim() || undefined,
         });
         closePaymentModal();
@@ -217,6 +217,7 @@ export function PaymentModal() {
                         value={tipoComprobante}
                         onChange={(v) => setTipoComprobante(v as typeof tipoComprobante)}
                         data={[
+                            { value: 'auto', label: '⚡ Automático' },
                             { value: 'ticket_interno', label: 'Ticket' },
                             { value: 'factura_c', label: 'Factura C' },
                             { value: 'factura_b', label: 'Factura B' },
@@ -224,6 +225,11 @@ export function PaymentModal() {
                         ]}
                         size="sm"
                     />
+                    <Text size="xs" c="dimmed">
+                        {tipoComprobante === 'auto' 
+                            ? 'Se determinará automáticamente según tu condición fiscal en AFIP'
+                            : 'Tipo de comprobante seleccionado manualmente'}
+                    </Text>
                 </Stack>
 
                 {/* CUIT/DNI del receptor — solo para Factura A */}

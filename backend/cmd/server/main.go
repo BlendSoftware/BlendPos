@@ -107,7 +107,7 @@ func main() {
 	productoSvc := service.NewProductoService(productoRepo, movimientoStockRepo, categoriaRepo, rdb)
 	inventarioSvc := service.NewInventarioService(productoRepo, movimientoStockRepo)
 	cajaSvc := service.NewCajaService(cajaRepo)
-	ventaSvc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, dispatcher, comprobanteRepo)
+	ventaSvc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, dispatcher, comprobanteRepo, configFiscalRepo)
 	facturacionSvc := service.NewFacturacionService(comprobanteRepo, dispatcher)
 	proveedorSvc := service.NewProveedorService(proveedorRepo, productoRepo)
 	categoriaSvc := service.NewCategoriaService(categoriaRepo)

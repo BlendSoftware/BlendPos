@@ -46,7 +46,7 @@ export function FacturacionPage() {
     const [loadingVentas, setLoadingVentas] = useState(false);
     const [desde, setDesde] = useState<Date | null>(null);
     const [hasta, setHasta] = useState<Date | null>(null);
-    const [periodo, setPeriodo] = useState<string>('todas');
+    const [periodo, setPeriodo] = useState<string>('mes');
     const ordenarPor = 'fecha';
     const orden = 'desc';
 

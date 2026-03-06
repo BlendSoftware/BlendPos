@@ -79,7 +79,7 @@ export function DashboardPage() {
     const [alertas, setAlertas]         = useState<AlertaStockResponse[]>([]);
     const [apiVentas, setApiVentas]     = useState<VentaListItem[]>([]);
     const [comprasPendientes, setComprasPendientes] = useState<{ count: number; total: number }>({ count: 0, total: 0 });
-    const [periodo, setPeriodo]         = useState<Periodo>('dia');
+    const [periodo, setPeriodo]         = useState<Periodo>('mes');
 
     const fetchDashboardData = useCallback(async (showSpinner = false, p: Periodo = periodo) => {
         if (showSpinner) setRefreshing(true);

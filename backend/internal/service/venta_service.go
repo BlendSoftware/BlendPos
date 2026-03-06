@@ -31,6 +31,7 @@ type ventaService struct {
 	cajaRepo        repository.CajaRepository
 	productoRepo    repository.ProductoRepository
 	comprobanteRepo repository.ComprobanteRepository
+	configFiscalRepo repository.ConfiguracionFiscalRepository
 	dispatcher      *worker.Dispatcher
 }
 
@@ -42,6 +43,7 @@ func NewVentaService(
 	productoRepo repository.ProductoRepository,
 	dispatcher *worker.Dispatcher,
 	comprobanteRepo repository.ComprobanteRepository,
+	configFiscalRepo repository.ConfiguracionFiscalRepository,
 ) VentaService {
 	return &ventaService{
 		repo:            repo,
@@ -50,6 +52,7 @@ func NewVentaService(
 		cajaRepo:        cajaRepo,
 		productoRepo:    productoRepo,
 		comprobanteRepo: comprobanteRepo,
+		configFiscalRepo: configFiscalRepo,
 		dispatcher:      dispatcher,
 	}
 }
@@ -173,10 +176,33 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 	}
 	vuelto := totalPagos.Sub(total)
 
-	// Resolve tipo_comprobante (defaults to "ticket_interno")
+	// Resolve tipo_comprobante — auto-determine from fiscal config if not specified
 	tipoComp := "ticket_interno"
 	if req.TipoComprobante != nil && *req.TipoComprobante != "" {
 		tipoComp = *req.TipoComprobante
+	} else {
+		// Auto-determine from fiscal configuration
+		if s.configFiscalRepo != nil {
+			if cfg, err := s.configFiscalRepo.Get(ctx); err == nil && cfg != nil && cfg.CUITEmsior != "" {
+				// Configuración fiscal existe — determinar tipo según condición fiscal
+				switch cfg.CondicionFiscal {
+				case "Responsable Inscripto":
+					// RI → Factura B por defecto (o A si receptor tiene CUIT)
+					if req.TipoDocReceptor != nil && *req.TipoDocReceptor == 80 {
+						tipoComp = "factura_a"
+					} else {
+						tipoComp = "factura_b"
+					}
+				case "Monotributo", "Exento":
+					// Monotributo/Exento → Factura C
+					tipoComp = "factura_c"
+				default:
+					// Sin config o config inválida → ticket interno
+					tipoComp = "ticket_interno"
+				}
+				log.Info().Str("condicion_fiscal", cfg.CondicionFiscal).Str("tipo_comprobante", tipoComp).Msg("Auto-determinando tipo de comprobante desde configuración fiscal")
+			}
+		}
 	}
 
 	// 5. ACID transaction with row-level stock lock
