@@ -148,18 +148,14 @@ export function PosHeader() {
                 </Group>
             </Modal>
             <Flex align="center" justify="space-between" h="100%" px="lg">
-                <div>
-                    <Text fw={800} style={{ fontSize: '1.25rem', letterSpacing: '-0.5px' }}>
-                        <span style={{ color: '#4dabf7' }}>Blend</span>
-                        <span style={{ color: '#22d3ee' }}>POS</span>
+                <Group gap="sm">
+                    <Text fw={800} size="xl" c={isDark ? 'white' : 'blue.7'} ff="monospace">
+                        BLEND
                     </Text>
-                    <Text
-                        c="dimmed"
-                        style={{ fontSize: '0.7rem', letterSpacing: '1px', textTransform: 'uppercase' }}
-                    >
-                        Terminal de Venta
+                    <Text fw={300} size="xl" c="dimmed">
+                        POS
                     </Text>
-                </div>
+                </Group>
 
                 <Group gap="xs">
                     <User size={18} color="#909296" />

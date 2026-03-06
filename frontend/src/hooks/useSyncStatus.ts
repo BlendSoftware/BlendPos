@@ -26,7 +26,7 @@ export function useSyncStatus() {
             // On success → reset interval
             intervalRef.current = BASE_INTERVAL_MS;
             setSyncState('idle');
-        } catch {
+        } catch (err) {
             // Network errors while offline → don't alarm the user
             // Keep state as 'idle' to avoid showing error badges
             intervalRef.current = Math.min(intervalRef.current * 2, MAX_INTERVAL_MS);

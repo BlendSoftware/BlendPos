@@ -17,8 +17,6 @@ import (
 type InventarioService interface {
 	CrearVinculo(ctx context.Context, req dto.CrearVinculoRequest) (*dto.VinculoResponse, error)
 	ListarVinculos(ctx context.Context) ([]dto.VinculoResponse, error)
-	EliminarVinculo(ctx context.Context, id string) error
-	ActualizarVinculo(ctx context.Context, id string, req dto.ActualizarVinculoRequest) (*dto.VinculoResponse, error)
 	DesarmeManual(ctx context.Context, req dto.DesarmeManualRequest) (*dto.DesarmeManualResponse, error)
 	ObtenerAlertas(ctx context.Context) ([]dto.AlertaStockResponse, error)
 	// DescontarStockTx is called within a sale transaction — requires a live *gorm.DB tx.
@@ -110,43 +108,6 @@ func (s *inventarioService) ListarVinculos(ctx context.Context) ([]dto.VinculoRe
 		result = append(result, toVinculoResponse(&vinculos[i]))
 	}
 	return result, nil
-}
-
-func (s *inventarioService) EliminarVinculo(ctx context.Context, id string) error {
-	vinculoID, err := uuid.Parse(id)
-	if err != nil {
-		return fmt.Errorf("vinculo_id inválido: %w", err)
-	}
-	if _, err := s.repo.FindVinculoByID(ctx, vinculoID); err != nil {
-		return errors.New("vínculo no encontrado")
-	}
-	return s.repo.DeleteVinculo(ctx, vinculoID)
-}
-
-func (s *inventarioService) ActualizarVinculo(ctx context.Context, id string, req dto.ActualizarVinculoRequest) (*dto.VinculoResponse, error) {
-	vinculoID, err := uuid.Parse(id)
-	if err != nil {
-		return nil, fmt.Errorf("vinculo_id inválido: %w", err)
-	}
-	if err := s.repo.UpdateVinculo(ctx, vinculoID, req.UnidadesPorPadre, req.DesarmeAuto); err != nil {
-		return nil, err
-	}
-	v, err := s.repo.FindVinculoByID(ctx, vinculoID)
-	if err != nil {
-		return nil, err
-	}
-	// Reload Padre / Hijo for names
-	if v.Padre == nil || v.Hijo == nil {
-		vinculos, _ := s.repo.ListVinculos(ctx)
-		for i := range vinculos {
-			if vinculos[i].ID == vinculoID {
-				v = &vinculos[i]
-				break
-			}
-		}
-	}
-	resp := toVinculoResponse(v)
-	return &resp, nil
 }
 
 func (s *inventarioService) DesarmeManual(ctx context.Context, req dto.DesarmeManualRequest) (*dto.DesarmeManualResponse, error) {
