@@ -230,9 +230,11 @@ func (w *FacturacionWorker) buildAFIPPayload(ctx context.Context, venta *model.V
 		importeIVA = total.Sub(importeNeto).RoundBank(2)
 		importeExento = decimal.Zero
 	default: // Monotributo, Exento
-		importeNeto = decimal.Zero
+		// Factura C: el total va íntegramente en imp_neto.
+		// AFIP requiere ImpTotal = ImpNeto + ImpTrib, e ImpTotConc = 0 para tipo C.
+		importeNeto = total
 		importeIVA = decimal.Zero
-		importeExento = total
+		importeExento = decimal.Zero
 	}
 
 	// ── Doc receptor ─────────────────────────────────────────────────────────
@@ -246,17 +248,20 @@ func (w *FacturacionWorker) buildAFIPPayload(ctx context.Context, venta *model.V
 	}
 
 	return infra.AFIPPayload{
-		CUITEmisor:      cuitEmisor,
-		PuntoDeVenta:    puntoDeVenta,
-		TipoComprobante: tipoComprobante,
-		TipoDocReceptor: tipoDocReceptor,
-		NroDocReceptor:  nroDocReceptor,
-		Concepto:        1, // Productos
-		ImporteNeto:     importeNeto.StringFixed(2),
-		ImporteExento:   importeExento.StringFixed(2),
-		ImporteIVA:      importeIVA.StringFixed(2),
-		ImporteTotal:    total.StringFixed(2),
-		VentaID:         payload.VentaID,
+		CUITEmisor:       cuitEmisor,
+		PuntoDeVenta:     puntoDeVenta,
+		TipoComprobante:  tipoComprobante,
+		TipoDocReceptor:  tipoDocReceptor,
+		NroDocReceptor:   nroDocReceptor,
+		Concepto:         1, // Productos
+		ImporteNeto:      importeNeto.StringFixed(2),
+		ImporteExento:    importeExento.StringFixed(2),
+		ImporteIVA:       importeIVA.StringFixed(2),
+		ImporteTributos:  "0.00", // Sin tributos adicionales por ahora
+		ImporteTotal:     total.StringFixed(2),
+		Moneda:           "PES",
+		CotizacionMoneda: 1.0,
+		VentaID:          payload.VentaID,
 	}
 }
 
@@ -281,6 +286,12 @@ func (w *FacturacionWorker) handleAFIPResult(ctx context.Context, comp *model.Co
 		comp.CAE = &cae
 		if venc, err := parseFechaCAE(afipResp.CAEVencimiento); err == nil {
 			comp.CAEVencimiento = venc
+		}
+		if afipResp.NumeroComprobante > 0 {
+			comp.Numero = &afipResp.NumeroComprobante
+		}
+		if afipResp.PuntoDeVenta > 0 {
+			comp.PuntoDeVenta = afipResp.PuntoDeVenta
 		}
 		comp.RetryCount = 0
 		comp.NextRetryAt = nil

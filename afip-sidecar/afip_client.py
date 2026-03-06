@@ -408,7 +408,9 @@ class AFIPClient:
             # Para Factura A/B (tipos 1/6, Responsable Inscripto): el monto exento va
             # en imp_op_ex. Si ambos son cero, los campos quedan en 0.00.
             if req.tipo_comprobante == 11:
-                _imp_tot_conc = round(req.importe_exento, 2)
+                # Factura C (Monotributo): ImpTotConc DEBE ser 0.
+                # El total va en imp_neto (enviado por el backend como importe_neto).
+                _imp_tot_conc = 0.00
                 _imp_op_ex    = 0.00
             else:
                 _imp_tot_conc = 0.00
@@ -442,7 +444,12 @@ class AFIPClient:
             condicion_iva = getattr(req, 'condicion_iva_receptor_id', None)
             if condicion_iva is None:
                 condicion_iva = 5 if req.tipo_doc_receptor == 99 else 1  # 1=IVA Responsable Inscripto
-            wsfe.factura['condicion_iva_receptor_id'] = condicion_iva
+            
+            logger.debug(f"DEBUG: Asignando condicion_iva={condicion_iva} (tipo int)")
+            wsfe.factura['condicion_iva_receptor_id'] = int(condicion_iva)
+            
+            # Debug: verificar estructura de factura antes de agregar IVA
+            logger.debug(f"DEBUG factura antes de IVA: iva={wsfe.factura.get('iva')}, condicion_iva_receptor_id={wsfe.factura.get('condicion_iva_receptor_id')}")
             
             # Agregar IVA si corresponde
             if req.importe_iva > 0:
@@ -453,6 +460,9 @@ class AFIPClient:
                     base_imp=round(req.importe_neto, 2),
                     importe=round(req.importe_iva, 2)
                 )
+            
+            # Debug: verificar estructura de factura antes de CAESolicitar
+            logger.warning(f"DEBUG factura completa antes de CAESolicitar: {wsfe.factura}")
             
             # Solicitar CAE
             resultado = wsfe.CAESolicitar()

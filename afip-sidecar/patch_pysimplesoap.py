@@ -82,7 +82,50 @@ def patch_file(path, file_description):
             content
         )
         print(f"  ✓ Corregido: open(..., 'w') -> open(..., 'wb') para pickle.dump")
+
+    # ── Parche: hashlib.md5(url) → hashlib.md5(url.encode()) ────────────────
+    # Python 3: hashlib.md5() requires bytes, not str
+    # client.py usa hashlib.md5(url) para generar el nombre del archivo pkl del WSDL
+    old_md5 = "hashlib.md5(url).hexdigest()"
+    new_md5 = "hashlib.md5(url.encode('utf-8') if isinstance(url, str) else url).hexdigest()"
+    if old_md5 in content:
+        content = content.replace(old_md5, new_md5)
+        print(f"  ✓ hashlib.md5(url) → hashlib.md5(url.encode())")
+    else:
+        print(f"  ⚠ hashlib.md5 anchor not found (may already be patched)")
     
+    # ── Parche: wsdl_validate_params lista-en-dict ───────────────────────────
+    # Cuando struct es dict pero value es lista, pysimplesoap itera la lista como
+    # si fueran keys del dict → TypeError: unhashable type: 'dict'.
+    # Fix: si value es list, validar cada item de la lista contra struct.
+    old_validate = (
+        "        # traverse tree\n"
+        "        elif isinstance(struct, dict):\n"
+        "            if struct and value:\n"
+        "                for key in value:\n"
+        "                    if key not in struct:"
+    )
+    new_validate = (
+        "        # traverse tree\n"
+        "        elif isinstance(struct, dict):\n"
+        "            if isinstance(value, list):\n"
+        "                # value is a list of struct-type items; validate each (AFIP fix)\n"
+        "                for item in value:\n"
+        "                    next_valid, next_errors, next_warnings = self.wsdl_validate_params(struct, item)\n"
+        "                    if not next_valid:\n"
+        "                        valid = False\n"
+        "                    errors.extend(next_errors)\n"
+        "                    warnings.extend(next_warnings)\n"
+        "            elif struct and value:\n"
+        "                for key in value:\n"
+        "                    if key not in struct:"
+    )
+    if old_validate in content:
+        content = content.replace(old_validate, new_validate)
+        print(f"  ✓ wsdl_validate_params: agregado manejo de value=list cuando struct=dict")
+    else:
+        print(f"  ⚠ wsdl_validate_params patch anchor not found (may already be patched)")
+
     if content != original:
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)

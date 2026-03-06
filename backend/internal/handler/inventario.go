@@ -10,7 +10,9 @@ import (
 
 	"blendpos/internal/apierror"
 	"blendpos/internal/dto"
+	"blendpos/internal/infra"
 	"blendpos/internal/middleware"
+	"blendpos/internal/repository"
 	"blendpos/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -120,12 +122,27 @@ func (h *InventarioHandler) ListarMovimientos(c *gin.Context) {
 }
 
 type FacturacionHandler struct {
-	svc         service.FacturacionService
-	pdfBasePath string // base directory for PDF storage — path traversal guard
+	svc             service.FacturacionService
+	pdfBasePath     string // base directory for PDF storage — path traversal guard
+	comprobanteRepo repository.ComprobanteRepository
+	ventaRepo       repository.VentaRepository
+	configFiscalSvc service.ConfiguracionFiscalService
 }
 
-func NewFacturacionHandler(svc service.FacturacionService, pdfBasePath string) *FacturacionHandler {
-	return &FacturacionHandler{svc: svc, pdfBasePath: pdfBasePath}
+func NewFacturacionHandler(
+	svc service.FacturacionService,
+	pdfBasePath string,
+	comprobanteRepo repository.ComprobanteRepository,
+	ventaRepo repository.VentaRepository,
+	configFiscalSvc service.ConfiguracionFiscalService,
+) *FacturacionHandler {
+	return &FacturacionHandler{
+		svc:             svc,
+		pdfBasePath:     pdfBasePath,
+		comprobanteRepo: comprobanteRepo,
+		ventaRepo:       ventaRepo,
+		configFiscalSvc: configFiscalSvc,
+	}
 }
 
 func (h *FacturacionHandler) ObtenerComprobante(c *gin.Context) {
@@ -241,6 +258,77 @@ func (h *FacturacionHandler) ReintentarComprobante(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// RegenerarPDF POST /v1/facturacion/:id/regen-pdf
+// Regenera el PDF fiscal (A4) de un comprobante que ya tiene CAE.
+// Útil para comprobantes que fueron generados como ticket por falta de config fiscal.
+func (h *FacturacionHandler) RegenerarPDF(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID inválido"))
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Access check
+	claims := middleware.GetClaims(c)
+	if err := h.svc.VerificarAccesoComprobante(ctx, id, claims.Rol, claims.PuntoDeVenta); err != nil {
+		c.JSON(http.StatusForbidden, apierror.New("Acceso denegado"))
+		return
+	}
+
+	// Get comprobante
+	comp, err := h.comprobanteRepo.FindByID(ctx, id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, apierror.New("Comprobante no encontrado"))
+		return
+	}
+
+	// Only fiscal comprobantes with CAE can get a fiscal PDF
+	if comp.CAE == nil || *comp.CAE == "" {
+		c.JSON(http.StatusBadRequest, apierror.New("El comprobante no tiene CAE — solo facturas electrónicas pueden regenerarse"))
+		return
+	}
+
+	// Get fiscal config
+	fiscalCfg, err := h.configFiscalSvc.ObtenerConfiguracion(ctx)
+	if err != nil || fiscalCfg == nil || fiscalCfg.CUITEmsior == "" {
+		c.JSON(http.StatusServiceUnavailable, apierror.New("Configuración fiscal no disponible"))
+		return
+	}
+
+	// Get venta with all details
+	venta, err := h.ventaRepo.FindByID(ctx, comp.VentaID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, apierror.New("Venta no encontrada"))
+		return
+	}
+
+	// Generate fiscal A4 PDF
+	pdfPath, err := infra.GenerateFacturaFiscalPDF(
+		venta, comp,
+		fiscalCfg.CUITEmsior,
+		fiscalCfg.RazonSocial,
+		fiscalCfg.CondicionFiscal,
+		fiscalCfg.PuntoDeVenta,
+		h.pdfBasePath,
+	)
+	if err != nil {
+		log.Error().Err(err).Str("comprobante_id", id.String()).Msg("RegenerarPDF: generation failed")
+		c.JSON(http.StatusInternalServerError, apierror.New("Error al generar PDF fiscal"))
+		return
+	}
+
+	// Update pdf_path in DB
+	comp.PDFPath = &pdfPath
+	if err := h.comprobanteRepo.Update(ctx, comp); err != nil {
+		log.Error().Err(err).Str("comprobante_id", id.String()).Msg("RegenerarPDF: failed to update pdf_path")
+	}
+
+	log.Info().Str("comprobante_id", id.String()).Str("pdf_path", pdfPath).Msg("RegenerarPDF: PDF fiscal regenerado")
+	c.JSON(http.StatusOK, gin.H{"message": "PDF fiscal regenerado correctamente", "pdf_path": pdfPath})
 }
 
 type ProveedoresHandler struct{ svc service.ProveedorService }

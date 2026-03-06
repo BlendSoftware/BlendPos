@@ -130,7 +130,7 @@ func (h *CajaHandler) GetActiva(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, apierror.New("ID de usuario inválido"))
 		return
 	}
-	resp, err := h.svc.GetActiva(c.Request.Context(), usuarioID, claims.PuntoDeVenta)
+	resp, err := h.svc.GetActiva(c.Request.Context(), usuarioID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, apierror.New(err.Error()))
 		return

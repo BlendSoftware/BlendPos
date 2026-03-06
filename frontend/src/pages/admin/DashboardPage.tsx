@@ -34,7 +34,8 @@ function getDateRange(periodo: Periodo): { fecha?: string; desde?: string; hasta
         desde.setDate(today.getDate() - 6);
         return { desde: toStr(desde), hasta: todayStr, limit: 500 };
     }
-    const desde = new Date(today.getFullYear(), today.getMonth(), 1);
+    // 'mes' = últimos 30 días (igual que FacturacionPage)
+    const desde = new Date(today.getTime() - 30 * 86400000);
     return { desde: toStr(desde), hasta: todayStr, limit: 1000 };
 }
 

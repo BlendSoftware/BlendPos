@@ -329,7 +329,6 @@ def facturar(req: FacturarRequest) -> FacturarResponse:
     Emite una factura electrónica en AFIP via WSFEV1.
     
     Este endpoint es llamado exclusivamente por el worker de Go
-
     cuando una venta necesita ser facturada.
     
     Flujo:
@@ -353,6 +352,13 @@ def facturar(req: FacturarRequest) -> FacturarResponse:
     logger.info(
         f"→ Solicitud de factura recibida — PV: {req.punto_de_venta}, "
         f"Tipo: {req.tipo_comprobante}, Total: ${req.importe_total:.2f}"
+    )
+    
+    # Debug: log del payload completo
+    logger.info(
+        f"DEBUG Payload: CUIT={req.cuit_emisor}, Neto={req.importe_neto}, "
+        f"IVA={req.importe_iva}, Exento={req.importe_exento}, "
+        f"Tributos={req.importe_tributos}, Moneda={req.moneda}, Cotiz={req.cotizacion_moneda}"
     )
     
     try:

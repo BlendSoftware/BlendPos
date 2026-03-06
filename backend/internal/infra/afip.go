@@ -22,19 +22,24 @@ type AFIPPayload struct {
 	TipoDocReceptor int    `json:"tipo_doc_receptor"` // 96=DNI, 80=CUIT, 99=ConsumidorFinal
 	NroDocReceptor  string `json:"nro_doc_receptor"`  // DNI/CUIT del receptor, "0" para Consumidor Final
 	Concepto        int    `json:"concepto"`          // 1=Productos, 2=Servicios, 3=Ambos
-	ImporteNeto     string `json:"importe_neto"`      // Monto gravado sin IVA  (2 decimales)
-	ImporteExento   string `json:"importe_exento"`    // Monto exento de IVA    (2 decimales)
-	ImporteIVA      string `json:"importe_iva"`       // Monto de IVA           (2 decimales)
-	ImporteTotal    string `json:"importe_total"`     // Total (neto+exento+iva) (2 decimales)
-	VentaID         string `json:"venta_id"`
+	ImporteNeto      string  `json:"importe_neto"`      // Monto gravado sin IVA  (2 decimales)
+	ImporteExento    string  `json:"importe_exento"`    // Monto exento de IVA    (2 decimales)
+	ImporteIVA       string  `json:"importe_iva"`       // Monto de IVA           (2 decimales)
+	ImporteTributos  string  `json:"importe_tributos"`  // Otros tributos (IIBB, percepciones)
+	ImporteTotal     string  `json:"importe_total"`     // Total (neto+exento+iva+tributos) (2 decimales)
+	Moneda           string  `json:"moneda"`             // PES=Pesos, DOL=Dólar
+	CotizacionMoneda float64 `json:"cotizacion_moneda"` // Cotización (1.0 para pesos)
+	VentaID          string  `json:"venta_id"`
 }
 
 // AFIPResponse is returned by the Python Sidecar after querying WSFEV1.
 type AFIPResponse struct {
-	CAE            string `json:"cae"`
-	CAEVencimiento string `json:"cae_vencimiento"`
-	Resultado      string `json:"resultado"` // "A" (aprobado) | "R" (rechazado)
-	Observaciones  []struct {
+	CAE              string `json:"cae"`
+	CAEVencimiento   string `json:"cae_vencimiento"`
+	NumeroComprobante int64  `json:"numero_comprobante"`
+	PuntoDeVenta     int    `json:"punto_de_venta"`
+	Resultado        string `json:"resultado"` // "A" (aprobado) | "R" (rechazado)
+	Observaciones    []struct {
 		Codigo  int    `json:"codigo"`
 		Mensaje string `json:"mensaje"`
 	} `json:"observaciones"`

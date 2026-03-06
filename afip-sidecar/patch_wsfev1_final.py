@@ -57,25 +57,25 @@ NEW = '''    @inicializar_y_capturar_excepciones
             # RG 5616: CondicionIVAReceptorId (5=ConsumidorFinal, etc.)
             'CondicionIVAReceptorId': f.get('condicion_iva_receptor_id'),
             'CbtesAsoc': f['cbtes_asoc'] and [
-                {'CbteAsoc': {'Tipo': cbte_asoc['tipo'],
-                              'PtoVta': cbte_asoc['pto_vta'],
-                              'Nro': cbte_asoc['nro']}}
+                {'Tipo': cbte_asoc['tipo'],
+                 'PtoVta': cbte_asoc['pto_vta'],
+                 'Nro': cbte_asoc['nro']}
                 for cbte_asoc in f['cbtes_asoc']] or None,
             'Tributos': f['tributos'] and [
-                {'Tributo': {'Id': tributo['tributo_id'],
-                             'Desc': tributo['desc'],
-                             'BaseImp': tributo['base_imp'],
-                             'Alic': tributo['alic'],
-                             'Importe': tributo['importe']}}
+                {'Id': tributo['tributo_id'],
+                 'Desc': tributo['desc'],
+                 'BaseImp': tributo['base_imp'],
+                 'Alic': tributo['alic'],
+                 'Importe': tributo['importe']}
                 for tributo in f['tributos']] or None,
             'Iva': f['iva'] and [
-                {'AlicIva': {'Id': iva['iva_id'],
-                             'BaseImp': iva['base_imp'],
-                             'Importe': iva['importe']}}
+                {'Id': iva['iva_id'],
+                 'BaseImp': iva['base_imp'],
+                 'Importe': iva['importe']}
                 for iva in f['iva']] or None,
             'Opcionales': f['opcionales'] and [
-                {'Opcional': {'Id': opcional['opcional_id'],
-                              'Valor': opcional['valor']}}
+                {'Id': opcional['opcional_id'],
+                 'Valor': opcional['valor']}
                 for opcional in f['opcionales']] or None,
         }.items() if v is not None}
         ret = self.client.FECAESolicitar(

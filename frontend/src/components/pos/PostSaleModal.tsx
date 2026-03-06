@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-    Modal, Stack, Text, Group, Button, Divider, Badge, ThemeIcon, Box, Alert,
+    Modal, Stack, Text, Group, Button, Divider, Badge, ThemeIcon, Box, Alert, Loader,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { CheckCircle, Printer, X, Mail, Receipt, Info } from 'lucide-react';
+import { CheckCircle, Printer, X, Mail, Receipt, AlertCircle, Info, FileText, Download } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { formatARS } from '../../utils/format';
 import { PrintableTicket } from './PrintableTicket';
+import { getComprobante, descargarPDF, type FacturacionResponse } from '../../services/api/facturacion';
 
 const METODO_LABEL: Record<string, string> = {
     efectivo: '💵 Efectivo',
@@ -25,7 +26,12 @@ export function PostSaleModal() {
     const close = usePOSUIStore((s) => s.closePostSaleModal);
     const [printing, setPrinting] = useState(false);
     const [smtpConfigured, setSMTPConfigured] = useState<boolean | null>(null);
+    const [comprobante, setComprobante] = useState<FacturacionResponse | null>(null);
+    const [loadingComprobante, setLoadingComprobante] = useState(false);
+    const [downloadingPDF, setDownloadingPDF] = useState(false);
     const ticketRef = useRef<HTMLDivElement>(null);
+
+    const isFiscal = record && ['factura_a', 'factura_b', 'factura_c'].includes(record.tipoComprobante);
 
     // Check SMTP configuration on mount
     useEffect(() => {
@@ -43,6 +49,39 @@ export function PostSaleModal() {
         };
         checkSMTP();
     }, []);
+
+    // Load comprobante if this is a fiscal invoice
+    useEffect(() => {
+        if (!record || !isFiscal || !isOpen) {
+            setComprobante(null);
+            return;
+        }
+
+        let cancelled = false;
+        const loadComprobante = async () => {
+            setLoadingComprobante(true);
+            try {
+                // Wait a bit for the worker to process
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                const comp = await getComprobante(record.id);
+                if (!cancelled) {
+                    setComprobante(comp);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    console.warn('[PostSaleModal] No se pudo cargar comprobante:', err);
+                    setComprobante(null);
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoadingComprobante(false);
+                }
+            }
+        };
+
+        loadComprobante();
+        return () => { cancelled = true; };
+    }, [record, isFiscal, isOpen]);
 
     if (!record) return null;
 
@@ -243,8 +282,49 @@ export function PostSaleModal() {
         }
     };
 
+    const handleDownloadFactura = async () => {
+        if (!comprobante) return;
+        
+        setDownloadingPDF(true);
+        try {
+            const tipoLetra = record.tipoComprobante === 'factura_a' ? 'A' 
+                : record.tipoComprobante === 'factura_b' ? 'B' 
+                : 'C';
+            const fileName = `factura_${tipoLetra}_${comprobante.punto_de_venta.toString().padStart(4, '0')}_${comprobante.numero?.toString().padStart(8, '0') || '00000000'}.pdf`;
+            
+            await descargarPDF(comprobante.id, fileName);
+            
+            notifications.show({
+                title: 'Factura descargada',
+                message: `${fileName}`,
+                color: 'green',
+                icon: <Download size={14} />,
+                autoClose: 3000,
+            });
+        } catch (err) {
+            console.error('[PostSaleModal] Error descargando factura:', err);
+            notifications.show({
+                title: 'Error al descargar',
+                message: 'La factura aún no está disponible. Intenta nuevamente en unos segundos.',
+                color: 'orange',
+                autoClose: 5000,
+            });
+        } finally {
+            setDownloadingPDF(false);
+        }
+    };
+
     const total = record.totalConDescuento || record.total;
     const vuelto = record.vuelto ?? 0;
+
+    const TIPO_COMPROBANTE_LABEL: Record<string, { label: string; color: string }> = {
+        ticket_interno: { label: 'Ticket Interno', color: 'gray' },
+        factura_a: { label: 'Factura A', color: 'orange' },
+        factura_b: { label: 'Factura B', color: 'blue' },
+        factura_c: { label: 'Factura C', color: 'cyan' },
+    };
+
+    const comprobanteInfo = TIPO_COMPROBANTE_LABEL[record.tipoComprobante] || { label: 'Ticket', color: 'gray' };
 
     return (
         <Modal
@@ -289,6 +369,12 @@ export function PostSaleModal() {
                         <Text size="lg" fw={800} ff="monospace">{formatARS(total)}</Text>
                     </Group>
                     <Group justify="space-between">
+                        <Text size="sm" c="dimmed">Comprobante</Text>
+                        <Badge variant="light" color={comprobanteInfo.color} size="md">
+                            {comprobanteInfo.label}
+                        </Badge>
+                    </Group>
+                    <Group justify="space-between">
                         <Text size="sm" c="dimmed">Método</Text>
                         <Badge variant="light" color="blue" size="md">
                             {METODO_LABEL[record.metodoPago] ?? record.metodoPago}
@@ -323,6 +409,53 @@ export function PostSaleModal() {
                     </Group>
                 </Stack>
 
+                {/* Factura fiscal status */}
+                {isFiscal && (
+                    <>
+                        <Divider />
+                        {loadingComprobante ? (
+                            <Alert icon={<Loader size={16} />} color="blue" variant="light">
+                                <Text size="xs">
+                                    Procesando factura AFIP...
+                                </Text>
+                            </Alert>
+                        ) : comprobante ? (
+                            <Alert 
+                                icon={<FileText size={16} />} 
+                                color={comprobante.estado === 'emitido' ? 'green' : comprobante.estado === 'error' ? 'red' : 'orange'}
+                                variant="light"
+                                title={comprobante.estado === 'emitido' ? 'Factura emitida' : comprobante.estado === 'error' ? 'Error en facturación' : 'Factura pendiente'}
+                            >
+                                <Stack gap={4}>
+                                    {comprobante.cae && (
+                                        <Text size="xs">
+                                            <strong>CAE:</strong> {comprobante.cae}
+                                        </Text>
+                                    )}
+                                    {comprobante.numero && (
+                                        <Text size="xs">
+                                            <strong>Comprobante:</strong> {comprobante.punto_de_venta.toString().padStart(4, '0')}-{comprobante.numero.toString().padStart(8, '0')}
+                                        </Text>
+                                    )}
+                                    <Text size="xs" c="dimmed">
+                                        {comprobante.estado === 'emitido' 
+                                            ? 'La factura fiscal está lista para descargar'
+                                            : comprobante.estado === 'error'
+                                            ? 'Hubo un error al generar la factura'
+                                            : 'La factura se está procesando en AFIP'}
+                                    </Text>
+                                </Stack>
+                            </Alert>
+                        ) : (
+                            <Alert icon={<AlertCircle size={16} />} color="orange" variant="light">
+                                <Text size="xs">
+                                    La factura fiscal se está procesando. Podrás descargarla desde Admin → Facturación en unos minutos.
+                                </Text>
+                            </Alert>
+                        )}
+                    </>
+                )}
+
                 {record.clienteEmail && (
                     <>
                         <Divider />
@@ -354,6 +487,22 @@ export function PostSaleModal() {
 
                 {/* Actions */}
                 <Stack gap="sm">
+                    {/* Descargar Factura Fiscal (si es factura A/B/C) */}
+                    {isFiscal && comprobante && comprobante.estado === 'emitido' && (
+                        <Button
+                            size="lg"
+                            leftSection={<FileText size={18} />}
+                            onClick={handleDownloadFactura}
+                            loading={downloadingPDF}
+                            variant="gradient"
+                            gradient={{ from: 'blue', to: 'cyan', deg: 90 }}
+                            fullWidth
+                        >
+                            Descargar Factura Fiscal PDF
+                        </Button>
+                    )}
+
+                    {/* Imprimir ticket térmico */}
                     <Button
                         size="lg"
                         leftSection={<Printer size={18} />}

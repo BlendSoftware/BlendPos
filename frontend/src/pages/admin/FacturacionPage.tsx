@@ -7,11 +7,9 @@ import { DateInput } from '@mantine/dates';
 import { Printer, Download, ChevronDown, ChevronUp, Search, Ban, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
-import { type SaleRecord, type MetodoPago } from '../../store/useSaleStore';
 import { anularVenta, listarVentas, type VentaListItem } from '../../services/api/ventas';
-import { getComprobante, descargarPDF } from '../../services/api/facturacion';
-import { thermalPrinter } from '../../services/ThermalPrinterService';
-import { usePrinterStore } from '../../store/usePrinterStore';
+import { getComprobante, descargarPDF, getPDFUrl } from '../../services/api/facturacion';
+import { tokenStore } from '../../store/tokenStore';
 import { formatARS } from '../../utils/format';
 import type { IVenta } from '../../types';
 
@@ -191,36 +189,37 @@ export function FacturacionPage() {
     }, [ventas, anuladas, busqueda, periodo, filtroMetodo, filtroEstado, desde, hasta, sortBy, sortDir]);
 
     const handleReprint = async (v: IVenta) => {
-        // Reconstruye un SaleRecord desde IVenta y lo manda a la impresora
-        const saleRecord: SaleRecord = {
-            id: v.id,
-            numeroTicket: v.numeroTicket,
-            fecha: new Date(v.fecha),
-            items: v.items.map((item) => ({
-                id: item.productoId,
-                nombre: item.productoNombre,
-                precio: item.precioUnitario,
-                codigoBarras: item.codigoBarras || '',
-                cantidad: item.cantidad,
-                subtotal: item.subtotal,
-                descuento: item.descuento,
-            })),
-            total: v.total,
-            totalConDescuento: v.total,
-            metodoPago: v.metodoPago as MetodoPago,
-            pagos: v.pagos as SaleRecord['pagos'],
-            vuelto: v.vuelto ?? 0,
-            cajero: v.cajeroNombre,
-            tipoComprobante: 'ticket_interno',
-        };
-        const cfg = usePrinterStore.getState().config;
-        thermalPrinter.printAll(saleRecord, cfg).catch(console.error);
-        notifications.show({
-            title: 'Reimpresión enviada',
-            message: `Ticket #${v.numeroTicket}`,
-            color: 'blue',
-            icon: <Printer size={14} />,
-        });
+        // Obtener el comprobante y abrir el PDF en nueva pestaña para imprimir
+        try {
+            const comp = await getComprobante(v.id).catch(() => null);
+            const pdfId = comp?.id ?? v.id;
+            const url = getPDFUrl(pdfId);
+            const token = tokenStore.getAccessToken();
+
+            // Descargar el blob y abrirlo en una nueva pestaña para imprimir
+            const resp = await fetch(url, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!resp.ok) throw new Error('PDF no disponible');
+            const blob = await resp.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const win = window.open(blobUrl, '_blank');
+            if (win) {
+                win.onload = () => {
+                    setTimeout(() => {
+                        win.print();
+                        URL.revokeObjectURL(blobUrl);
+                    }, 500);
+                };
+            }
+        } catch {
+            notifications.show({
+                title: 'Error al imprimir',
+                message: 'No se pudo obtener el PDF del comprobante.',
+                color: 'orange',
+                icon: <Printer size={14} />,
+            });
+        }
     };
 
     const handleDownloadPDF = async (v: IVenta) => {
@@ -228,7 +227,7 @@ export function FacturacionPage() {
             // Intentar obtener el id real del comprobante desde el backend
             const comp = await getComprobante(v.id).catch(() => null);
             const pdfId = comp?.id ?? v.id;
-            await descargarPDF(pdfId, `ticket_${v.numeroTicket}.pdf`);
+            await descargarPDF(pdfId, `factura_${v.numeroTicket}.pdf`);
         } catch {
             notifications.show({
                 title: 'PDF no disponible',

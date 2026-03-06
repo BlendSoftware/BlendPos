@@ -99,20 +99,23 @@ func processRetries(ctx context.Context, cfg RetryCronConfig) {
 		}
 
 		afipPayload := infra.AFIPPayload{
-			CUITEmisor:      cuitEmisor,
-			PuntoDeVenta:    comp.PuntoDeVenta,
-			TipoComprobante: 11,
-			TipoDocReceptor: 99,
-			NroDocReceptor:  "0",
-			Concepto:        1,
-			ImporteNeto:     comp.MontoNeto.StringFixed(2),
-			ImporteExento:   decimal.Zero.StringFixed(2),
-			ImporteIVA:      comp.MontoIVA.StringFixed(2),
-			ImporteTotal:    comp.MontoTotal.StringFixed(2),
-			VentaID:         comp.VentaID.String(),
-		}
+		CUITEmisor:       cuitEmisor,
+		PuntoDeVenta:     comp.PuntoDeVenta,
+		TipoComprobante:  11,
+		TipoDocReceptor:  99,
+		NroDocReceptor:   "0",
+		Concepto:         1,
+		ImporteNeto:      comp.MontoNeto.StringFixed(2),
+		ImporteExento:    decimal.Zero.StringFixed(2),
+		ImporteIVA:       comp.MontoIVA.StringFixed(2),
+		ImporteTributos:  "0.00",
+		ImporteTotal:     comp.MontoTotal.StringFixed(2),
+		Moneda:           "PES",
+		CotizacionMoneda: 1.0,
+		VentaID:          comp.VentaID.String(),
+	}
 
-		var afipResp *infra.AFIPResponse
+	var afipResp *infra.AFIPResponse
 		cbErr := cfg.CB.Execute(func() error {
 			resp, err := cfg.AFIPClient.Facturar(ctx, afipPayload)
 			if err != nil {
@@ -165,6 +168,12 @@ func processRetries(ctx context.Context, cfg RetryCronConfig) {
 			comp.CAE = &cae
 			if venc, err := parseFechaCAE(afipResp.CAEVencimiento); err == nil {
 				comp.CAEVencimiento = venc
+			}
+			if afipResp.NumeroComprobante > 0 {
+				comp.Numero = &afipResp.NumeroComprobante
+			}
+			if afipResp.PuntoDeVenta > 0 {
+				comp.PuntoDeVenta = afipResp.PuntoDeVenta
 			}
 			comp.NextRetryAt = nil
 			comp.LastError = nil

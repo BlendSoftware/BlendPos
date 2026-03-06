@@ -171,7 +171,19 @@ func GenerateFacturaFiscalPDF(
 		tipoLetra = "C"
 	}
 
-	fileName := fmt.Sprintf("factura_%s_%04d_%08d.pdf", tipoLetra, comp.PuntoDeVenta, comp.Numero)
+	// Dereference Numero pointer safely
+	var numeroComprobante int64
+	if comp.Numero != nil {
+		numeroComprobante = *comp.Numero
+	}
+
+	// Use fiscal config PuntoDeVenta as fallback when comprobante has 0 (old records)
+	pvDisplay := comp.PuntoDeVenta
+	if pvDisplay == 0 {
+		pvDisplay = puntoDeVenta
+	}
+
+	fileName := fmt.Sprintf("factura_%s_%04d_%08d.pdf", tipoLetra, pvDisplay, numeroComprobante)
 	filePath := filepath.Join(storagePath, fileName)
 
 	// A4 210mm × 297mm
@@ -219,9 +231,9 @@ func GenerateFacturaFiscalPDF(
 	pdf.CellFormat(rightW, 7, tr(strings.ToUpper(strings.ReplaceAll(comp.Tipo, "_", " "))), "", 1, "R", false, 0, "")
 	pdf.SetXY(10+leftW+centerW, startY+7)
 	pdf.SetFont("Helvetica", "", 9)
-	pdf.CellFormat(rightW, 5, tr(fmt.Sprintf("Punto Venta: %04d", comp.PuntoDeVenta)), "", 1, "R", false, 0, "")
+	pdf.CellFormat(rightW, 5, tr(fmt.Sprintf("Punto Venta: %04d", pvDisplay)), "", 1, "R", false, 0, "")
 	pdf.SetXY(10+leftW+centerW, startY+12)
-	pdf.CellFormat(rightW, 5, tr(fmt.Sprintf("Nro: %08d", comp.Numero)), "", 1, "R", false, 0, "")
+	pdf.CellFormat(rightW, 5, tr(fmt.Sprintf("Nro: %08d", numeroComprobante)), "", 1, "R", false, 0, "")
 	pdf.SetXY(10+leftW+centerW, startY+17)
 	pdf.CellFormat(rightW, 5, tr("Fecha: "+venta.CreatedAt.Format("02/01/2006")), "", 1, "R", false, 0, "")
 
@@ -273,7 +285,7 @@ func GenerateFacturaFiscalPDF(
 		}
 
 		// Calculate IVA per item if applicable
-		ivaItem := "—"
+		ivaItem := "-"
 		if condicionFiscal == "Responsable Inscripto" && tipoLetra != "C" {
 			ivaAmount := item.Subtotal.Mul(decimal.NewFromFloat(0.21))
 			ivaItem = "$" + ivaAmount.StringFixed(2)
@@ -317,13 +329,17 @@ func GenerateFacturaFiscalPDF(
 		neto = venta.Total.Div(decimal.NewFromFloat(1.21))
 		iva = venta.Total.Sub(neto)
 	} else {
-		// Factura C / Monotributo: exento
-		exento = venta.Total
+		// Factura C / Monotributo: todo va en neto (sin IVA)
+		neto = venta.Total
 	}
 
 	if !neto.IsZero() {
+		netoLabel := "Subtotal (Neto):"
+		if tipoLetra == "C" {
+			netoLabel = "Neto:"
+		}
 		pdf.SetX(totalsX)
-		pdf.CellFormat(40, 5, tr("Subtotal (Neto):"), "", 0, "L", false, 0, "")
+		pdf.CellFormat(40, 5, tr(netoLabel), "", 0, "L", false, 0, "")
 		pdf.CellFormat(30, 5, "$"+neto.StringFixed(2), "", 1, "R", false, 0, "")
 	}
 
@@ -364,7 +380,7 @@ func GenerateFacturaFiscalPDF(
 		barcodeData := fmt.Sprintf("%s%02d%04d%s",
 			strings.ReplaceAll(cuitEmisor, "-", ""),
 			tipoComprobanteCode(comp.Tipo),
-			comp.PuntoDeVenta,
+			pvDisplay,
 			*comp.CAE,
 		)
 

@@ -30,23 +30,25 @@ type Deps struct {
 	AfipCB *infra.CircuitBreaker
 
 	// Services
-	AuthSvc        service.AuthService
-	ProductoSvc    service.ProductoService
-	InventarioSvc  service.InventarioService
-	VentaSvc       service.VentaService
-	CajaSvc        service.CajaService
-	FacturacionSvc service.FacturacionService
+	AuthSvc         service.AuthService
+	ProductoSvc     service.ProductoService
+	InventarioSvc   service.InventarioService
+	VentaSvc        service.VentaService
+	CajaSvc         service.CajaService
+	FacturacionSvc  service.FacturacionService
 	ConfigFiscalSvc service.ConfiguracionFiscalService
-	ProveedorSvc   service.ProveedorService
-	CategoriaSvc   service.CategoriaService
-	AuditSvc       service.AuditService
-	CompraSvc      service.CompraService
-	PromocionSvc   service.PromocionService
+	ProveedorSvc    service.ProveedorService
+	CategoriaSvc    service.CategoriaService
+	AuditSvc        service.AuditService
+	CompraSvc       service.CompraService
+	PromocionSvc    service.PromocionService
 
 	// Repos still needed by handlers that bypass the service layer
 	ProductoRepo        repository.ProductoRepository
 	HistorialPrecioRepo repository.HistorialPrecioRepository
 	AuditRepo           repository.AuditRepository
+	ComprobanteRepo     repository.ComprobanteRepository
+	VentaRepo           repository.VentaRepository
 }
 
 // New wires handlers and registers routes. It does NOT create infrastructure,
@@ -79,8 +81,7 @@ func New(d Deps) *gin.Engine {
 	inventarioH := handler.NewInventarioHandler(d.InventarioSvc)
 	ventasH := handler.NewVentasHandler(d.VentaSvc)
 	cajaH := handler.NewCajaHandler(d.CajaSvc)
-	facturacionH := handler.NewFacturacionHandler(d.FacturacionSvc, cfg.PDFStoragePath)
-	configFiscalH := handler.NewConfiguracionFiscalHandler(d.ConfigFiscalSvc)
+	facturacionH := handler.NewFacturacionHandler(d.FacturacionSvc, cfg.PDFStoragePath, d.ComprobanteRepo, d.VentaRepo, d.ConfigFiscalSvc)
 	proveedoresH := handler.NewProveedoresHandler(d.ProveedorSvc)
 	usuariosH := handler.NewUsuariosHandler(d.AuthSvc)
 	consultaH := handler.NewConsultaPreciosHandler(d.ProductoRepo, d.RDB)
@@ -138,8 +139,6 @@ func New(d Deps) *gin.Engine {
 		{
 			inv.POST("/vinculos", inventarioH.CrearVinculo)
 			inv.GET("/vinculos", inventarioH.ListarVinculos)
-			inv.PUT("/vinculos/:id", inventarioH.ActualizarVinculo)
-			inv.DELETE("/vinculos/:id", inventarioH.EliminarVinculo)
 			inv.POST("/desarme", inventarioH.DesarmeManual)
 			inv.GET("/alertas", inventarioH.ObtenerAlertas)
 			inv.GET("/movimientos", inventarioH.ListarMovimientos)
@@ -161,12 +160,7 @@ func New(d Deps) *gin.Engine {
 			fact.GET("/pdf/:id", facturacionH.DescargarPDF)
 			fact.DELETE("/:id", facturacionH.AnularComprobante)
 			fact.POST("/:id/reintentar", facturacionH.ReintentarComprobante)
-		}
-
-		conf := v1.Group("/configuracion/fiscal", middleware.RequireRole("administrador"))
-		{
-			conf.GET("", configFiscalH.Obtener)
-			conf.PUT("", configFiscalH.Actualizar)
+			fact.POST("/:id/regen-pdf", facturacionH.RegenerarPDF)
 		}
 
 		prov := v1.Group("/proveedores", middleware.RequireRole("administrador"))
@@ -177,16 +171,6 @@ func New(d Deps) *gin.Engine {
 			prov.PUT("/:id", proveedoresH.Actualizar)
 			prov.DELETE("/:id", proveedoresH.Eliminar)
 			prov.POST("/:id/precios/masivo", proveedoresH.ActualizarPreciosMasivo)
-		}
-
-		compraH := handler.NewCompraHandler(d.CompraSvc)
-		compras := v1.Group("/compras", middleware.RequireRole("administrador", "supervisor"))
-		{
-			compras.POST("", compraH.Crear)
-			compras.GET("", compraH.Listar)
-			compras.GET("/:id", compraH.ObtenerPorID)
-			compras.PATCH("/:id/estado", compraH.ActualizarEstado)
-			compras.DELETE("/:id", compraH.Eliminar)
 		}
 
 		v1.POST("/csv/import", middleware.RequireRole("administrador"), proveedoresH.ImportarCSV)
@@ -214,17 +198,6 @@ func New(d Deps) *gin.Engine {
 
 		// Audit log — read-only, admin only (Q-03)
 		v1.GET("/audit", middleware.RequireRole("administrador"), auditH.List)
-
-		// Promociones
-		promocionH := handler.NewPromocionHandler(d.PromocionSvc)
-		v1.GET("/promociones", middleware.RequireRole("cajero", "supervisor", "administrador"), promocionH.Listar)
-		v1.GET("/promociones/:id", middleware.RequireRole("cajero", "supervisor", "administrador"), promocionH.ObtenerPorID)
-		promociones := v1.Group("/promociones", middleware.RequireRole("administrador"))
-		{
-			promociones.POST("", promocionH.Crear)
-			promociones.PUT("/:id", promocionH.Actualizar)
-			promociones.DELETE("/:id", promocionH.Eliminar)
-		}
 	}
 
 	// Swagger UI — only enabled outside production

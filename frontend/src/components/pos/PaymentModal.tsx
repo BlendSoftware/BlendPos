@@ -3,7 +3,7 @@ import {
     Modal, Stack, Text, Group, Button, Divider, Select, NumberInput,
     Badge, Box, Alert, TextInput, Collapse, SegmentedControl
 } from '@mantine/core';
-import { CreditCard, Check, X, Wallet, AlertCircle, Mail } from 'lucide-react';
+import { CreditCard, Check, X, Wallet, AlertCircle, Mail, Receipt } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { useCartStore } from '../../store/useCartStore';
 import type { MetodoPago, PagoDetalle } from '../../store/useCartStore';
@@ -210,27 +210,47 @@ export function PaymentModal() {
                 </div>
 
                 {/* Tipo de comprobante */}
-                <Stack gap={4}>
-                    <Text size="sm" fw={500}>Tipo de comprobante</Text>
-                    <SegmentedControl
-                        fullWidth
-                        value={tipoComprobante}
-                        onChange={(v) => setTipoComprobante(v as typeof tipoComprobante)}
-                        data={[
-                            { value: 'auto', label: '⚡ Automático' },
-                            { value: 'ticket_interno', label: 'Ticket' },
-                            { value: 'factura_c', label: 'Factura C' },
-                            { value: 'factura_b', label: 'Factura B' },
-                            { value: 'factura_a', label: 'Factura A' },
-                        ]}
-                        size="sm"
-                    />
-                    <Text size="xs" c="dimmed">
-                        {tipoComprobante === 'auto' 
-                            ? 'Se determinará automáticamente según tu condición fiscal en AFIP'
-                            : 'Tipo de comprobante seleccionado manualmente'}
-                    </Text>
-                </Stack>
+                <Box
+                    style={{
+                        background: 'var(--mantine-color-dark-7)',
+                        borderRadius: 'var(--mantine-radius-md)',
+                        padding: 'var(--mantine-spacing-md)',
+                        border: '1px solid var(--mantine-color-dark-4)',
+                    }}
+                >
+                    <Stack gap="sm">
+                        <Group gap="xs">
+                            <Receipt size={18} />
+                            <Text size="sm" fw={600}>Tipo de comprobante</Text>
+                        </Group>
+                        <SegmentedControl
+                            fullWidth
+                            value={tipoComprobante}
+                            onChange={(v) => setTipoComprobante(v as typeof tipoComprobante)}
+                            data={[
+                                { value: 'auto', label: '⚡ Automático' },
+                                { value: 'ticket_interno', label: 'Ticket' },
+                                { value: 'factura_c', label: 'Factura C' },
+                                { value: 'factura_b', label: 'Factura B' },
+                                { value: 'factura_a', label: 'Factura A' },
+                            ]}
+                            size="sm"
+                        />
+                        <Alert icon={<AlertCircle size={14} />} color="blue" variant="light" p="xs">
+                            <Text size="xs">
+                                {tipoComprobante === 'auto' 
+                                    ? '📋 Se determinará según tu condición fiscal. Monotributo → Factura C, Responsable Inscripto → Factura B/A'
+                                    : tipoComprobante === 'ticket_interno'
+                                    ? '🎫 Comprobante no fiscal (sin AFIP). Solo para uso interno'
+                                    : tipoComprobante === 'factura_c'
+                                    ? '📄 Para consumidores finales (Monotributo). Sin discriminación de IVA'
+                                    : tipoComprobante === 'factura_b'
+                                    ? '📄 Para consumidores finales con CUIT. IVA incluido'
+                                    : '📄 Para Responsables Inscriptos. IVA discriminado (requiere CUIT del receptor)'}
+                            </Text>
+                        </Alert>
+                    </Stack>
+                </Box>
 
                 {/* CUIT/DNI del receptor — solo para Factura A */}
                 <Collapse in={tipoComprobante === 'factura_a'}>

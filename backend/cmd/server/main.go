@@ -164,6 +164,8 @@ func main() {
 		ProductoRepo:        productoRepo,
 		HistorialPrecioRepo: historialPrecioRepo,
 		AuditRepo:           auditRepo,
+		ComprobanteRepo:     comprobanteRepo,
+		VentaRepo:           ventaRepo,
 	})
 
 	srv := &http.Server{
