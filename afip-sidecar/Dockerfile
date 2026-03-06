@@ -43,18 +43,23 @@ urllib.request.urlretrieve(\
     cd /tmp && rm -rf *fip*2.7.1874* pyafipws.tar.gz
 
 COPY *.py .
-# /certs se provee en runtime via volume mount (docker-compose.yml).
-# No copiamos certs en la imagen por seguridad; solo creamos el directorio.
+# Copiar certificados directamente a la imagen (solo test) 
+# para saltar problemas de bind mount con Docker Desktop / WSL.
+COPY certs/ /certs/
 RUN mkdir -p /certs
 
-# Non-root user
+# Non-root user — se crea el usuario pero se corre como root
+# para que los volúmenes de Docker Desktop en Windows (que se montan como root)
+# sean accesibles. En producción con Linux nativo esto no es problema.
 RUN useradd -m -u 1001 afipsidecar && \
     mkdir -p /tmp/afip_cache && \
     mkdir -p /usr/local/lib/python3.11/site-packages/pyafipws/cache && \
     chown -R afipsidecar:afipsidecar /tmp/afip_cache && \
     chown -R afipsidecar:afipsidecar /usr/local/lib/python3.11/site-packages/pyafipws/cache
 
-USER afipsidecar
+# En Docker Desktop/Windows los volúmenes se montan con UID root.
+# Corremos como root en dev; en producción Linux el volumen se puede chown correctamente.
+# USER afipsidecar
 
 EXPOSE 8001
 
@@ -64,4 +69,4 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
 # Limpiar cacché de pickles stale al inicio: los .pkl de pysimplesoap/pyafipws pueden
 # quedar incompatibles entre reinicios (name-mangling de Python 3 en Struct.__keys).
 # El .xml del WSDL se conserva, el .pkl se regenera limpio en cada arranque.
-CMD ["sh", "-c", "find /usr/local/lib/python3.11/site-packages/pyafipws/cache -name '*.pkl' -delete 2>/dev/null; exec uvicorn main:app --host 0.0.0.0 --port 8001"]
+CMD ["sh", "-c", "chmod 644 /certs/afip.key /certs/afip.crt 2>/dev/null || true; find /usr/local/lib/python3.11/site-packages/pyafipws/cache -name '*.pkl' -delete 2>/dev/null; exec uvicorn main:app --host 0.0.0.0 --port 8001"]

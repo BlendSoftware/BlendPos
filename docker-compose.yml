@@ -49,7 +49,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: dev_secret_change_in_production!_32chars  # ⚠️ CHANGE in production — use a 256-bit random secret
       AFIP_SIDECAR_URL: http://afip-sidecar:8001
-      AFIP_CUIT_EMISOR: "20442477060"
+      AFIP_CUIT_EMISOR: "20471955575"
       ALLOWED_ORIGINS: "http://localhost:5173"
       INTERNAL_API_TOKEN: "dev_internal_token_change_in_production"
       SMTP_HOST: ${SMTP_HOST}
@@ -76,7 +76,7 @@ services:
       retries: 3
       start_period: 30s
     environment:
-      AFIP_CUIT_EMISOR: "20442477060"
+      AFIP_CUIT_EMISOR: "20471955575"
       AFIP_HOMOLOGACION: "true"
       AFIP_CERT_PATH: /certs/afip.crt
       AFIP_KEY_PATH: /certs/afip.key

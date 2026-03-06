@@ -23,10 +23,13 @@ services:
       
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      
+      # Internal Auth Token
+      INTERNAL_API_TOKEN: dev-token-123
     
     volumes:
       # Montar certificados desde host (read-only por seguridad)
-      - ./certs:/certs:ro
+      # - ./certs:/certs:ro
       
       # Cache persistente de tokens WSAA
       - afip-cache:/tmp/afip_cache

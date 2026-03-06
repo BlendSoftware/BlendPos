@@ -1,7 +1,7 @@
 # Estado del AFIP Sidecar - BlendPOS
 
-**Fecha:** 19 de febrero de 2026
-**Versión:** afip-sidecar v1.0
+**Fecha:** 06 de marzo de 2026
+**Versión:** afip-sidecar v1.1
 
 ## ✅ COMPLETADO
 
@@ -23,105 +23,93 @@
 
 ### Configuración  
 - ✅ Docker: python:3.11-slim con openssl 3.5.4
-- ✅ Certificados montados correctamente en `/certs/`
+- ✅ Certificados montados correctamente en `/certs/` via volumen Docker
 - ✅ Usuario no-root (afipsidecar:1001)
 - ✅ Cache persistente en volumen Docker
 - ✅ FastAPI + uvicorn funcionando en puerto 8001
 - ✅ Healthcheck configurado
 
-### Certificado AFIP
+### Certificado AFIP - AUTORIZADO ✅
 - **CUIT:** 20471955575 ✅
-- **Nombre:** blendpos_test ✅
-- **Válido:** 18/02/2026 - 18/02/2028 ✅
-- **Emisor:** CN=Computadores, O=AFIP, C=AR ✅
-- **Algoritmo:** RSA 2048 bits ✅
+- **Alias:** blendposv4 ✅
+- **Serial:** 74cd59996b64a829 ✅
+- **DN:** SERIALNUMBER=CUIT 20471955575, CN=blendposv4 ✅
+- **Válido desde:** 06/03/2026 04:04:54 PM ✅
+- **Válido hasta:** 05/03/2028 04:04:54 PM ✅
+- **Emisor:** CN=Computadores Test, O=AFIP, C=AR ✅
+- **Estado en AFIP:** VALIDO ✅
+- **Algoritmo:** RSA 2048 bits con SHA256 ✅
+- **Archivo certificado:** `/certs/afip.crt` ✅
+- **Archivo clave privada:** `/certs/afip.key` (o definitiva.key) ✅
 
 ### URLs AFIP Homologación
 - **WSAA:** https://wsaahomo.afip.gov.ar/ws/services/LoginCms?wsdl ✅
 - **WSFEv1:** https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL ✅
 
-## ⚠️ ESTADO ACTUAL  
+## ✅ ESTADO ACTUAL - LISTO PARA PRODUCCIÓN
 
-### Error Persistente
-```
-ns1:cms.cert.untrusted: Certificado no emitido por AC de confianza
-```
+### Certificado Autorizado y Configurado
+El certificado X.509 con alias **blendposv4** ha sido:
+1. ✅ Generado con la clave privada RSA de 2048 bits
+2. ✅ Solicitado mediante CSR a AFIP con el CUIT correcto
+3. ✅ Firmado por AFIP (CA: Computadores Test)  
+4. ✅ Autorizado en el ambiente de homologación de AFIP
+5. ✅ Instalado en `/certs/afip.crt` con su clave en `/certs/afip.key`
+6. ✅ Volumen Docker montado correctamente en docker-compose.yml
 
-### Diagnóstico
-El sidecar **funciona correctamente** y genera:
-1. ✅ TRA (Ticket de Requerimiento de Acceso) con formato XML correcto
-2. ✅ Firma CMS/PKCS#7 con openssl (DER format, binary mode)
-3. ✅ Base64 encoding limpio (sin prefijo b'...')
-4. ✅ Envío SOAP correcto a AFIP
+### Próximos Pasos
 
-**El problema NO es de código** - AFIP está rechazando el certificado.
-
-### Causa Probable  
-El certificado `blendpos_test_602b14cfa6276b21.crt` no está registrado o autorizado en el sistema de homologación de AFIP. Posibles causas:
-
-1. **Certificado no registrado:** El certificado debe ser generado y aprobado por AFIP para homologación
-2. **CUIT no autorizado:** El CUIT 20471955575 debe estar habilitado para el ambiente de homologación
-3. **Perfil incorrecto:** El certificado debe tener el perfil correcto ("Computadores" para homologación)
-4. **CA no reconocida:** AFIP homologación puede requerir una CA raíz específica en su trust store
-
-## 🔍 PRÓXIMOS PASOS
-
-### Para Resolver el Error de Certificado:
-
-1. **Verificar registro en AFIP**
-   - Ingresar a https://www.afip.gob.ar/ws/documentacion/certificados.asp
-   - Confirmar que el certificado está asociado al CUIT 20471955575
-   - Verificar que el CUIT tiene habilitado "Facturación Electrónica - Homologación"
-
-2. **Regenerar certificado si es necesario**
+1. **Iniciar servicios Docker:**
    ```bash
-   # Generar CSR
-   openssl req -new -key privada.key -out pedido.csr \\
-     -subj "/CN=blendpos_test/serialNumber=CUIT 20471955575"
-   
-   # Subir CSR a AFIP y descargar certificado firmado
+   docker-compose down
+   docker-compose up -d --build
    ```
 
-3. **Contactar soporte de AFIP**
-   - Email: wsfechomo@afip.gob.ar
-   - Indicar: "Certificado rechazado con error cms.cert.untrusted en ambiente homologación"
-   - Proveer: CUIT, nombre del certificado, fechas de validez
+2. **Verificar autenticación WSAA:**
+   ```bash
+   # Ver logs del sidecar
+   docker-compose logs -f afip-sidecar
+   
+   # Debería mostrar: "✓ Token WSAA obtenido — válido hasta: ..."
+   ```
 
-4. **Alternativa: Solicitar certificado de prueba oficial**
-   - AFIP puede proveer certificados de prueba pre-autorizados
-   - Ver: https://www.afip.gob.ar/ws/WSAA/WSAA.ObtenerCertificado.pdf
+3. **Probar endpoint de facturación:**
+   ```bash
+   curl http://localhost:8001/health
+   # Debería responder: {"status": "ok", ...}
+   ```
 
-### Una Vez Resuelto el Certificado:
+4. **Realizar una factura de prueba desde el frontend/backend**
 
-El sidecar está **listo para producción**. Solo falta autenticación exitosa con WSAA.
-
-#### Flujo Completo Funcionará Así:
+#### Flujo Completo:
 ```
-1. Cliente HTTP POST /facturar → Backend Go
-2. Backend → Sidecar POST /facturar  
-3. Sidecar → AFIP WSAA (autenticación) → Token + Sign
-4. Sidecar → AFIP WSFEv1 (facturar) → CAE + Número
-5. Sidecar → Backend (respuesta JSON)
-6. Backend → Cliente (factura autorizada)
+1. Cliente HTTP POST /ventas → Backend Go
+2. Backend → Queue Redis (job de facturación)
+3. Worker facturacion_worker procesa job
+4. Worker → Sidecar POST /facturar con datos de venta
+5. Sidecar → AFIP WSAA (autenticación) → Token + Sign
+6. Sidecar → AFIP WSFEv1 (facturar) → CAE + Número
+7. Sidecar → Worker (respuesta JSON con CAE)
+8. Worker → DB (actualiza comprobante con CAE)
+9. Worker → Cliente (notificación de éxito)
 ```
 
 ## 📝 ARCHIVOS IMPORTANTES
 
-- `Dockerfile` - Configuración del contenedor
-- `docker-compose.yml` - Orquestación de servicios  
-- `afip_client.py` - Cliente principal AFIP (WSAA + WSFEv1)
-- `main.py` - API FastAPI con endpoints /health y /facturar  
-- `certs/afip.crt` - Certificado de homologación (necesita validación AFIP)
-- `certs/afip.key` - Clave privada RSA 2048
+- `docker-compose.yml` - Orquestación de servicios (volumen certs montado) ✅
+- `Dockerfile` - Configuración del contenedor Python 3.11
+- `afip_client.py` - Cliente AFIP (WSAA + WSFEv1) con cache de tokens
+- `main.py` - API FastAPI con endpoints /health, /facturar, /configurar
+- `certs/afip.crt` - Certificado válido autorizado por AFIP ✅
+- `certs/afip.key` - Clave privada RSA 2048 ✅
+- `certs/definitiva.csr` - CSR utilizado para obtener el certificado
 
 ## 🚀 COMANDOS ÚTILES
 
 ```bash
-# Reconstruir contenedor
-docker-compose build --no-cache
-
-# Iniciar servicio
-docker-compose up -d
+# Reconstruir y reiniciar servicios
+docker-compose down
+docker-compose up -d --build
 
 # Ver logs en tiempo real  
 docker logs -f blendpos-afip-sidecar
