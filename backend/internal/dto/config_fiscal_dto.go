@@ -10,6 +10,16 @@ type ConfiguracionFiscalResponse struct {
 	Modo                   string  `json:"modo"`
 	FechaInicioActividades *string `json:"fecha_inicio_actividades"`
 	IIBB                   *string `json:"iibb"`
+	
+	// Domicilio comercial
+	DomicilioComercial    *string `json:"domicilio_comercial"`
+	DomicilioCiudad       *string `json:"domicilio_ciudad"`
+	DomicilioProvincia    *string `json:"domicilio_provincia"`
+	DomicilioCodigoPostal *string `json:"domicilio_codigo_postal"`
+	
+	// Logo
+	LogoPath *string `json:"logo_path"`
+	
 	TieneCertificadoCrt    bool    `json:"tiene_certificado_crt"`
 	TieneCertificadoKey    bool    `json:"tiene_certificado_key"`
 }
@@ -24,6 +34,15 @@ type ConfiguracionFiscalRequest struct {
 	Modo                   string  `json:"modo" form:"modo" validate:"required"`
 	FechaInicioActividades *string `json:"fecha_inicio_actividades" form:"fecha_inicio_actividades"`
 	IIBB                   *string `json:"iibb" form:"iibb"`
+	
+	// Domicilio comercial
+	DomicilioComercial    *string `json:"domicilio_comercial" form:"domicilio_comercial"`
+	DomicilioCiudad       *string `json:"domicilio_ciudad" form:"domicilio_ciudad"`
+	DomicilioProvincia    *string `json:"domicilio_provincia" form:"domicilio_provincia"`
+	DomicilioCodigoPostal *string `json:"domicilio_codigo_postal" form:"domicilio_codigo_postal"`
+	
+	// Logo path (optional)
+	LogoPath *string `json:"logo_path" form:"logo_path"`
 	
 	// These will be bound from multipart/form-data via context
 	CertificadoCrt *string `json:"-" form:"-"`

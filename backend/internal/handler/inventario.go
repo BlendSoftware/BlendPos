@@ -293,7 +293,7 @@ func (h *FacturacionHandler) RegenerarPDF(c *gin.Context) {
 	}
 
 	// Get fiscal config
-	fiscalCfg, err := h.configFiscalSvc.ObtenerConfiguracion(ctx)
+	fiscalCfg, err := h.configFiscalSvc.ObtenerConfiguracionCompleta(ctx)
 	if err != nil || fiscalCfg == nil || fiscalCfg.CUITEmsior == "" {
 		c.JSON(http.StatusServiceUnavailable, apierror.New("Configuración fiscal no disponible"))
 		return
@@ -308,11 +308,9 @@ func (h *FacturacionHandler) RegenerarPDF(c *gin.Context) {
 
 	// Generate fiscal A4 PDF
 	pdfPath, err := infra.GenerateFacturaFiscalPDF(
-		venta, comp,
-		fiscalCfg.CUITEmsior,
-		fiscalCfg.RazonSocial,
-		fiscalCfg.CondicionFiscal,
-		fiscalCfg.PuntoDeVenta,
+		venta,
+		comp,
+		fiscalCfg,
 		h.pdfBasePath,
 	)
 	if err != nil {

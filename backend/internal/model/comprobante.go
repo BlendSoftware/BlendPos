@@ -19,8 +19,15 @@ type Comprobante struct {
 	// CAE is the authorization code returned by AFIP
 	CAE            *string    `gorm:"type:varchar(20);column:cae"`
 	CAEVencimiento *time.Time `gorm:"column:cae_vencimiento"`
-	ReceptorCUIT   *string    `gorm:"type:varchar(20);column:receptor_cuit"`
-	ReceptorNombre *string
+	
+	// Datos del receptor (cliente)
+	ReceptorCUIT              *string `gorm:"type:varchar(20);column:receptor_cuit"`
+	ReceptorNombre            *string
+	ReceptorTipoDocumento     *int    `gorm:"default:99"` // 80=CUIT, 96=DNI, 99=Sin identificar
+	ReceptorNumeroDocumento   *string `gorm:"type:varchar(20)"`
+	ReceptorDomicilio         *string `gorm:"type:varchar(255)"`
+	ReceptorCondicionIVA      *int    `gorm:"default:5"` // 1=RI, 4=Exento, 5=Consumidor Final, 6=Monotributista
+	
 	MontoNeto      decimal.Decimal `gorm:"type:decimal(12,2);not null"`
 	MontoIVA       decimal.Decimal `gorm:"type:decimal(12,2);not null;default:0;column:monto_iva"`
 	MontoTotal     decimal.Decimal `gorm:"type:decimal(12,2);not null"`

@@ -12,6 +12,7 @@ import (
 
 	"blendpos/internal/dto"
 	"blendpos/internal/infra"
+	"blendpos/internal/model"
 	"blendpos/internal/repository"
 
 	"github.com/redis/go-redis/v9"
@@ -23,6 +24,7 @@ import (
 // avoiding a direct dependency on the service package (resolving import cycle).
 type ConfiguracionFiscalProvider interface {
 	ObtenerConfiguracion(ctx context.Context) (*dto.ConfiguracionFiscalResponse, error)
+	ObtenerConfiguracionCompleta(ctx context.Context) (*model.ConfiguracionFiscal, error)
 }
 
 const (

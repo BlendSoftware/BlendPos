@@ -18,6 +18,15 @@ type ConfiguracionFiscal struct {
 	Modo                   string    `gorm:"type:varchar(20);not null;default:'homologacion'"`
 	FechaInicioActividades *time.Time
 	IIBB                   *string `gorm:"type:varchar(50)"`
+	
+	// Domicilio comercial (obligatorio por AFIP)
+	DomicilioComercial   *string `gorm:"type:varchar(255)"`
+	DomicilioCiudad      *string `gorm:"type:varchar(100)"`
+	DomicilioProvincia   *string `gorm:"type:varchar(100)"`
+	DomicilioCodigoPostal *string `gorm:"type:varchar(10)"`
+	
+	// Logo para facturas
+	LogoPath *string `gorm:"type:varchar(255)"`
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

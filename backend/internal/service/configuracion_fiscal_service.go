@@ -26,6 +26,7 @@ func (e *ErrAFIPAuthWarning) Error() string { return e.Msg }
 
 type ConfiguracionFiscalService interface {
 	ObtenerConfiguracion(ctx context.Context) (*dto.ConfiguracionFiscalResponse, error)
+	ObtenerConfiguracionCompleta(ctx context.Context) (*model.ConfiguracionFiscal, error)
 	ActualizarConfiguracion(ctx context.Context, req dto.ConfiguracionFiscalRequest) error
 }
 
@@ -57,9 +58,20 @@ func (s *configuracionFiscalService) ObtenerConfiguracion(ctx context.Context) (
 		Modo:                   cfg.Modo,
 		FechaInicioActividades: datePtrToString(cfg.FechaInicioActividades),
 		IIBB:                   cfg.IIBB,
+		DomicilioComercial:     cfg.DomicilioComercial,
+		DomicilioCiudad:        cfg.DomicilioCiudad,
+		DomicilioProvincia:     cfg.DomicilioProvincia,
+		DomicilioCodigoPostal:  cfg.DomicilioCodigoPostal,
+		LogoPath:               cfg.LogoPath,
 		TieneCertificadoCrt:    cfg.CertificadoCrt != nil && *cfg.CertificadoCrt != "",
 		TieneCertificadoKey:    cfg.CertificadoKey != nil && *cfg.CertificadoKey != "",
 	}, nil
+}
+
+// ObtenerConfiguracionCompleta returns the full model (including all fields) for internal use.
+// Used by PDF generators that need complete fiscal data.
+func (s *configuracionFiscalService) ObtenerConfiguracionCompleta(ctx context.Context) (*model.ConfiguracionFiscal, error) {
+	return s.repo.Get(ctx)
 }
 
 func (s *configuracionFiscalService) ActualizarConfiguracion(ctx context.Context, req dto.ConfiguracionFiscalRequest) error {
@@ -92,6 +104,11 @@ func (s *configuracionFiscalService) ActualizarConfiguracion(ctx context.Context
 		Modo:                   req.Modo,
 		FechaInicioActividades: stringToDatePtr(req.FechaInicioActividades),
 		IIBB:                   req.IIBB,
+		DomicilioComercial:     req.DomicilioComercial,
+		DomicilioCiudad:        req.DomicilioCiudad,
+		DomicilioProvincia:     req.DomicilioProvincia,
+		DomicilioCodigoPostal:  req.DomicilioCodigoPostal,
+		LogoPath:               req.LogoPath,
 		CertificadoCrt:         newCrt,
 		CertificadoKey:         newKey,
 	}
