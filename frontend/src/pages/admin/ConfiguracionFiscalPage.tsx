@@ -27,6 +27,10 @@ interface FormValues {
     modo: string;
     fecha_inicio_actividades: string;
     iibb: string;
+    domicilio_comercial: string;
+    domicilio_ciudad: string;
+    domicilio_provincia: string;
+    domicilio_codigo_postal: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -52,6 +56,10 @@ export function ConfiguracionFiscalPage() {
             modo: 'homologacion',
             fecha_inicio_actividades: '',
             iibb: '',
+            domicilio_comercial: '',
+            domicilio_ciudad: '',
+            domicilio_provincia: '',
+            domicilio_codigo_postal: '',
         },
         validate: {
             cuit_emisor: (v) => (!v ? 'El CUIT es obligatorio' : null),
@@ -73,6 +81,10 @@ export function ConfiguracionFiscalPage() {
                         modo: cfg.modo ?? 'homologacion',
                         fecha_inicio_actividades: cfg.fecha_inicio_actividades ?? '',
                         iibb: cfg.iibb ?? '',
+                        domicilio_comercial: cfg.domicilio_comercial ?? '',
+                        domicilio_ciudad: cfg.domicilio_ciudad ?? '',
+                        domicilio_provincia: cfg.domicilio_provincia ?? '',
+                        domicilio_codigo_postal: cfg.domicilio_codigo_postal ?? '',
                     });
                     setCertStatus({ crt: cfg.tiene_certificado_crt, key: cfg.tiene_certificado_key });
                 }
@@ -95,6 +107,10 @@ export function ConfiguracionFiscalPage() {
                     modo: values.modo,
                     fecha_inicio_actividades: values.fecha_inicio_actividades || undefined,
                     iibb: values.iibb || undefined,
+                    domicilio_comercial: values.domicilio_comercial || undefined,
+                    domicilio_ciudad: values.domicilio_ciudad || undefined,
+                    domicilio_provincia: values.domicilio_provincia || undefined,
+                    domicilio_codigo_postal: values.domicilio_codigo_postal || undefined,
                 },
                 crtFile,
                 keyFile,
@@ -238,6 +254,27 @@ export function ConfiguracionFiscalPage() {
                                 ]}
                                 required
                                 {...form.getInputProps('condicion_fiscal')}
+                            />
+                            <TextInput
+                                label="Domicilio Comercial"
+                                placeholder="Av. Corrientes 1234"
+                                description="Dirección completa del local (requerido para factura legal)"
+                                {...form.getInputProps('domicilio_comercial')}
+                            />
+                            <TextInput
+                                label="Ciudad"
+                                placeholder="Buenos Aires"
+                                {...form.getInputProps('domicilio_ciudad')}
+                            />
+                            <TextInput
+                                label="Provincia"
+                                placeholder="Buenos Aires"
+                                {...form.getInputProps('domicilio_provincia')}
+                            />
+                            <TextInput
+                                label="Código Postal"
+                                placeholder="C1043"
+                                {...form.getInputProps('domicilio_codigo_postal')}
                             />
                             <TextInput
                                 label="Punto de Venta"

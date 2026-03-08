@@ -8,6 +8,10 @@ export interface ConfiguracionFiscalResponse {
     modo: string;
     fecha_inicio_actividades?: string;
     iibb?: string;
+    domicilio_comercial?: string;
+    domicilio_ciudad?: string;
+    domicilio_provincia?: string;
+    domicilio_codigo_postal?: string;
     tiene_certificado_crt: boolean;
     tiene_certificado_key: boolean;
 }
@@ -43,6 +47,10 @@ export async function updateConfiguracionFiscal(
     form.append('modo', data.modo);
     if (data.fecha_inicio_actividades) form.append('fecha_inicio_actividades', data.fecha_inicio_actividades);
     if (data.iibb) form.append('iibb', data.iibb);
+    if (data.domicilio_comercial) form.append('domicilio_comercial', data.domicilio_comercial);
+    if (data.domicilio_ciudad) form.append('domicilio_ciudad', data.domicilio_ciudad);
+    if (data.domicilio_provincia) form.append('domicilio_provincia', data.domicilio_provincia);
+    if (data.domicilio_codigo_postal) form.append('domicilio_codigo_postal', data.domicilio_codigo_postal);
     if (crtFile) form.append('certificado_crt', crtFile);
     if (keyFile) form.append('certificado_key', keyFile);
 
