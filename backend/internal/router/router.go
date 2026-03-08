@@ -88,6 +88,7 @@ func New(d Deps) *gin.Engine {
 	historialPreciosH := handler.NewHistorialPreciosHandler(d.HistorialPrecioRepo)
 	categoriasH := handler.NewCategoriasHandler(d.CategoriaSvc)
 	auditH := handler.NewAuditHandler(d.AuditRepo)
+	configFiscalH := handler.NewConfiguracionFiscalHandler(d.ConfigFiscalSvc)
 
 	// ── Routes ───────────────────────────────────────────────────────────────
 
@@ -198,6 +199,13 @@ func New(d Deps) *gin.Engine {
 
 		// Audit log — read-only, admin only (Q-03)
 		v1.GET("/audit", middleware.RequireRole("administrador"), auditH.List)
+
+		// Configuración fiscal — admin only (AFIP parameters)
+		configFiscal := v1.Group("/configuracion/fiscal", middleware.RequireRole("administrador"))
+		{
+			configFiscal.GET("", configFiscalH.Obtener)
+			configFiscal.PUT("", configFiscalH.Actualizar)
+		}
 	}
 
 	// Swagger UI — only enabled outside production
