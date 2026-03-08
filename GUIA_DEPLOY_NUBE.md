@@ -321,6 +321,11 @@ SMTP_USER=noreply@tudominio.com
 SMTP_PASSWORD=app_password_de_gmail
 SMTP_FROM=BlendPOS <noreply@tudominio.com>
 
+# AFIP Sidecar — OBLIGATORIO para facturación fiscal
+AFIP_CUIT_EMISOR=20471955575
+AFIP_HOMOLOGACION=false
+INTERNAL_API_TOKEN=GENERAR_CON_openssl_rand_hex_32
+
 # Let's Encrypt
 ACME_EMAIL=admin@tudominio.com
 ```
@@ -386,13 +391,34 @@ curl -I https://pos.tudominio.com
 | `JWT_REFRESH_HOURS` | Duración del refresh token | `24` | ❌ (default: 24) |
 | `WORKER_POOL_SIZE` | Workers para tareas async | `5` | ❌ (default: 5) |
 | `AFIP_SIDECAR_URL` | URL del sidecar AFIP | `http://afip-sidecar:8001` | ❌ |
-| `AFIP_CUIT_EMISOR` | CUIT del emisor para facturación | `20442477060` | ❌ |
+| `INTERNAL_API_TOKEN` | Token compartido backend-sidecar | `openssl rand -hex 32` | ❌ |
 | `SMTP_HOST` | Servidor SMTP | `smtp.gmail.com` | ❌ |
 | `SMTP_PORT` | Puerto SMTP | `587` | ❌ |
 | `SMTP_USER` | Usuario SMTP | `noreply@empresa.com` | ❌ |
 | `SMTP_PASSWORD` | Contraseña SMTP | `app_password` | ❌ |
 | `SMTP_FROM` | Remitente de emails | `BlendPOS <noreply@empresa.com>` | ❌ |
 | `PDF_STORAGE_PATH` | Ruta para PDFs generados | `/tmp/blendpos/pdfs` | ❌ |
+
+### AFIP Sidecar (Python)
+
+> **IMPORTANTE:** El AFIP Sidecar es OBLIGATORIO para emitir facturas fiscales. Sin él, el sistema solo genera tickets internos.
+
+| Variable | Descripción | Ejemplo | Obligatoria |
+|---|---|---|---|
+| `AFIP_CUIT_EMISOR` | CUIT del emisor (sin guiones) | `20471955575` | ✅ |
+| `AFIP_HOMOLOGACION` | Modo de testing AFIP | `true` o `false` | ✅ |
+| `AFIP_CERT_PATH` | Ruta al certificado X.509 | `/certs/afip.crt` | ✅ |
+| `AFIP_KEY_PATH` | Ruta a la clave privada | `/certs/afip.key` | ✅ |
+| `AFIP_CACHE_DIR` | Directorio para cache tokens | `/tmp/afip_cache` | ❌ (default: `/tmp/afip_cache`) |
+| `INTERNAL_API_TOKEN` | Token compartido con backend | `openssl rand -hex 32` | ✅ en producción |
+| `REDIS_URL` | Redis para cache de tokens WSAA | `redis://:pass@redis:6379/0` | ❌ |
+
+**Notas importantes:**
+- El certificado X.509 debe estar generado desde AFIP y vinculado al CUIT emisor
+- En homologación: usar certificado de testing de AFIP
+- En producción: `AFIP_HOMOLOGACION=false` y certificado real
+- El volumen `./afip-sidecar/certs:/certs:ro` debe contener `afip.crt` y `afip.key`
+- Sin certificado válido, el sidecar no arranca
 
 ### Frontend (build time)
 
@@ -482,11 +508,72 @@ docker compose exec backend migrate -path /migrations -database "$DATABASE_URL" 
 - Railway/Render: verificar que la variable `REDIS_URL` incluya la contraseña
 - Formato: `redis://:PASSWORD@hostname:port/0`
 
-### AFIP Sidecar no funciona
+### AFIP Sidecar no funciona / Solo genera tickets
 
-El sidecar de AFIP requiere certificados digitales (`.crt` y `.key`). En cloud:
-1. Montar los certificados como secrets/volumes
-2. O subir el sidecar como servicio separado con los certs incluidos en la imagen
+**Síntoma:** El sistema genera tickets internos en lugar de facturas fiscales AFIP.
+
+**Causas comunes:**
+
+1. **Variable `AFIP_CUIT_EMISOR` faltante** (problema más común):
+   ```bash
+   # Verificar logs del sidecar
+   docker compose logs afip-sidecar
+   
+   # Si ves: "ERROR: Variable AFIP_CUIT_EMISOR no configurada"
+   # Agregar en el .env:
+   AFIP_CUIT_EMISOR=20471955575
+   
+   # Reiniciar
+   docker compose restart afip-sidecar
+   ```
+
+2. **Certificados faltantes o inválidos:**
+   ```bash
+   # Verificar que existan los archivos
+   ls -la ./afip-sidecar/certs/
+   # Debe mostrar: afip.crt y afip.key
+   
+   # Verificar permisos
+   chmod 644 ./afip-sidecar/certs/afip.crt
+   chmod 600 ./afip-sidecar/certs/afip.key
+   ```
+
+3. **Backend no puede conectar al sidecar:**
+   ```bash
+   # Verificar que el sidecar esté corriendo
+   docker compose ps afip-sidecar
+   
+   # Verificar health
+   curl http://localhost:8001/health
+   
+   # Si no responde, revisar logs
+   docker compose logs afip-sidecar
+   ```
+
+4. **`INTERNAL_API_TOKEN` no coincide:**
+   ```bash
+   # Debe ser el mismo en backend y sidecar
+   # Si cambiaste uno, cambiar el otro también
+   docker compose restart backend afip-sidecar
+   ```
+
+5. **En cloud (Railway/Render):**
+   - Asegurate de montar los certificados como secrets o volumes
+   - Verificar que `AFIP_SIDECAR_URL` apunte correctamente al servicio interno
+   - El sidecar debe estar en la misma red privada que el backend
+
+**Verificación:**
+```bash
+# 1. Verificar configuración en BD
+docker compose exec postgres psql -U blendpos -d blendpos -c \
+  "SELECT punto_de_venta, condicion_fiscal, cuit FROM configuracion_fiscal LIMIT 1;"
+
+# 2. Probar endpoint directo del sidecar (requiere token)
+curl -X POST http://localhost:8001/facturar \
+  -H "X-Internal-Token: TU_INTERNAL_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{...}'
+```
 
 > **Nota:** Si no necesitás facturación electrónica, podés omitir el sidecar. El backend funciona sin él (las facturas quedan en estado "pendiente").
 

@@ -151,11 +151,13 @@ services:
       context: ./afip-sidecar
     restart: unless-stopped
     environment:
-      AFIP_HOMOLOGACION: "false"
+      AFIP_CUIT_EMISOR: ${AFIP_CUIT_EMISOR}
+      AFIP_HOMOLOGACION: ${AFIP_HOMOLOGACION:-false}
       AFIP_CERT_PATH: /certs/afip.crt
       AFIP_KEY_PATH: /certs/afip.key
+      AFIP_CACHE_DIR: /tmp/afip_cache
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
-      REDIS_URL: ${REDIS_URL}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
     volumes:
       - ./afip-sidecar/certs:/certs:ro
     # NOT exposed externally — only backend can reach it via internal network

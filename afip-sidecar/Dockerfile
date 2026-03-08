@@ -43,9 +43,11 @@ urllib.request.urlretrieve(\
     cd /tmp && rm -rf *fip*2.7.1874* pyafipws.tar.gz
 
 COPY *.py .
-# Copiar certificados directamente a la imagen (solo test) 
-# para saltar problemas de bind mount con Docker Desktop / WSL.
-COPY certs/ /certs/
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Crear directorio de certificados
+# Los certificados reales se cargan desde env vars (AFIP_CERT_B64, AFIP_KEY_B64) en entrypoint.sh
 RUN mkdir -p /certs
 
 # Non-root user — se crea el usuario pero se corre como root
@@ -66,7 +68,5 @@ EXPOSE 8001
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"
 
-# Limpiar cacché de pickles stale al inicio: los .pkl de pysimplesoap/pyafipws pueden
-# quedar incompatibles entre reinicios (name-mangling de Python 3 en Struct.__keys).
-# El .xml del WSDL se conserva, el .pkl se regenera limpio en cada arranque.
-CMD ["sh", "-c", "chmod 644 /certs/afip.key /certs/afip.crt 2>/dev/null || true; find /usr/local/lib/python3.11/site-packages/pyafipws/cache -name '*.pkl' -delete 2>/dev/null; exec uvicorn main:app --host 0.0.0.0 --port 8001"]
+# Entrypoint que carga certificados desde env vars (AFIP_CERT_B64, AFIP_KEY_B64) y arranca el servidor
+ENTRYPOINT ["/entrypoint.sh"]
