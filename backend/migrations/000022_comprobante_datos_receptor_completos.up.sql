@@ -1,19 +1,17 @@
--- Agregar campos completos del receptor según AFIP (idempotente)
-DO $$ 
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                   WHERE table_name='comprobantes' AND column_name='receptor_tipo_documento') THEN
-        ALTER TABLE comprobantes
-        ADD COLUMN receptor_tipo_documento INT DEFAULT 99, -- 80=CUIT, 96=DNI, 99=Consumidor Final sin identificar
-        ADD COLUMN receptor_numero_documento VARCHAR(20),
-        ADD COLUMN receptor_domicilio VARCHAR(255),
-        ADD COLUMN receptor_condicion_iva INT DEFAULT 5; -- 1=RI, 4=Exento, 5=Consumidor Final, 6=Monotributista
-    END IF;
-END $$;
+-- Agregar campos completos del receptor según AFIP
+-- Usar IF NOT EXISTS para ser idempotente (PostgreSQL 9.6+)
 
--- Agregar comentarios
-COMMENT ON COLUMN comprobantes.receptor_tipo_documento IS 'Código AFIP: 80=CUIT, 96=DNI, 99=Sin identificar';
-COMMENT ON COLUMN comprobantes.receptor_condicion_iva IS 'Código AFIP: 1=RI, 4=Exento, 5=CF, 6=Monotributista';
+ALTER TABLE comprobantes 
+ADD COLUMN IF NOT EXISTS receptor_tipo_documento INT DEFAULT 99;
+
+ALTER TABLE comprobantes 
+ADD COLUMN IF NOT EXISTS receptor_numero_documento VARCHAR(20);
+
+ALTER TABLE comprobantes 
+ADD COLUMN IF NOT EXISTS receptor_domicilio VARCHAR(255);
+
+ALTER TABLE comprobantes 
+ADD COLUMN IF NOT EXISTS receptor_condicion_iva INT DEFAULT 5;
 
 -- Índice para búsquedas por CUIT (idempotente)
 CREATE INDEX IF NOT EXISTS idx_comprobantes_receptor_cuit ON comprobantes(receptor_cuit) WHERE receptor_cuit IS NOT NULL;
