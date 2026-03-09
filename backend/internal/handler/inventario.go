@@ -146,15 +146,24 @@ func NewFacturacionHandler(
 }
 
 func (h *FacturacionHandler) ObtenerComprobante(c *gin.Context) {
-	ventaID, err := uuid.Parse(c.Param("venta_id"))
+	rawVentaID := c.Param("venta_id")
+	ventaID, err := uuid.Parse(rawVentaID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, apierror.New("ID invalido"))
 		return
 	}
 	resp, err := h.svc.ObtenerComprobante(c.Request.Context(), ventaID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, apierror.New("Comprobante no encontrado"))
-		return
+		if h.ventaRepo != nil {
+			venta, offlineErr := h.ventaRepo.FindByOfflineID(c.Request.Context(), rawVentaID)
+			if offlineErr == nil && venta != nil {
+				resp, err = h.svc.ObtenerComprobante(c.Request.Context(), venta.ID)
+			}
+		}
+		if err != nil {
+			c.JSON(http.StatusNotFound, apierror.New("Comprobante no encontrado"))
+			return
+		}
 	}
 	c.JSON(http.StatusOK, resp)
 }

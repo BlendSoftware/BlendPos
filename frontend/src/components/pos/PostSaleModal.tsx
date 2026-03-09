@@ -7,7 +7,7 @@ import { CheckCircle, Printer, X, Mail, Receipt, AlertCircle, Info, FileText, Do
 import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { formatARS } from '../../utils/format';
 import { PrintableTicket } from './PrintableTicket';
-import { getComprobante, descargarPDF, type FacturacionResponse } from '../../services/api/facturacion';
+import { getComprobante, descargarPDF, abrirFacturaHTML, type FacturacionResponse } from '../../services/api/facturacion';
 
 const METODO_LABEL: Record<string, string> = {
     efectivo: '💵 Efectivo',
@@ -29,6 +29,7 @@ export function PostSaleModal() {
     const [comprobante, setComprobante] = useState<FacturacionResponse | null>(null);
     const [loadingComprobante, setLoadingComprobante] = useState(false);
     const [downloadingPDF, setDownloadingPDF] = useState(false);
+    const [openingFactura, setOpeningFactura] = useState(false);
     const ticketRef = useRef<HTMLDivElement>(null);
 
     const isFiscal = record && ['factura_a', 'factura_b', 'factura_c'].includes(record.tipoComprobante);
@@ -50,10 +51,17 @@ export function PostSaleModal() {
         checkSMTP();
     }, []);
 
+    const fetchComprobante = async (saleId: string) => {
+        const comp = await getComprobante(saleId);
+        setComprobante(comp);
+        return comp;
+    };
+
     // Load comprobante if this is a fiscal invoice — retry every 3s up to 30s
     useEffect(() => {
         if (!record || !isFiscal || !isOpen) {
             setComprobante(null);
+            setLoadingComprobante(false);
             return;
         }
 
@@ -66,12 +74,13 @@ export function PostSaleModal() {
             for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
                 if (cancelled) return;
                 try {
-                    const comp = await getComprobante(record.id);
+                    const comp = await fetchComprobante(record.id);
                     if (!cancelled) {
-                        setComprobante(comp);
-                        setLoadingComprobante(false);
                         // If still pending, keep polling
-                        if (comp.estado === 'emitido' || comp.estado === 'error') return;
+                        if (comp.estado === 'emitido' || comp.estado === 'error' || comp.estado === 'rechazado') {
+                            setLoadingComprobante(false);
+                            return;
+                        }
                     }
                 } catch {
                     // Comprobante not yet created — keep waiting
@@ -318,6 +327,49 @@ export function PostSaleModal() {
         }
     };
 
+    const handleOpenFactura = async () => {
+        if (!comprobante) return;
+
+        setOpeningFactura(true);
+        try {
+            await abrirFacturaHTML(comprobante.id);
+            notifications.show({
+                title: 'Factura abierta',
+                message: 'Se abrio la factura en una nueva ventana para imprimir o guardar como PDF.',
+                color: 'green',
+                icon: <FileText size={14} />,
+                autoClose: 3000,
+            });
+        } catch (err) {
+            notifications.show({
+                title: 'No se pudo abrir la factura',
+                message: err instanceof Error ? err.message : 'Error desconocido.',
+                color: 'red',
+                autoClose: 5000,
+            });
+        } finally {
+            setOpeningFactura(false);
+        }
+    };
+
+    const handleRefreshComprobante = async () => {
+        if (!record || !isFiscal) return;
+
+        setLoadingComprobante(true);
+        try {
+            await fetchComprobante(record.id);
+        } catch {
+            notifications.show({
+                title: 'Factura aun no disponible',
+                message: 'Todavia no se genero el comprobante fiscal. Reintenta en unos segundos.',
+                color: 'orange',
+                autoClose: 4000,
+            });
+        } finally {
+            setLoadingComprobante(false);
+        }
+    };
+
     const total = record.totalConDescuento || record.total;
     const vuelto = record.vuelto ?? 0;
 
@@ -426,9 +478,9 @@ export function PostSaleModal() {
                         ) : comprobante ? (
                             <Alert 
                                 icon={<FileText size={16} />} 
-                                color={comprobante.estado === 'emitido' ? 'green' : comprobante.estado === 'error' ? 'red' : 'orange'}
+                                color={comprobante.estado === 'emitido' ? 'green' : comprobante.estado === 'error' || comprobante.estado === 'rechazado' ? 'red' : 'orange'}
                                 variant="light"
-                                title={comprobante.estado === 'emitido' ? 'Factura emitida' : comprobante.estado === 'error' ? 'Error en facturación' : 'Factura pendiente'}
+                                title={comprobante.estado === 'emitido' ? 'Factura emitida' : comprobante.estado === 'error' || comprobante.estado === 'rechazado' ? 'Error en facturación' : 'Factura pendiente'}
                             >
                                 <Stack gap={4}>
                                     {comprobante.cae && (
@@ -444,7 +496,7 @@ export function PostSaleModal() {
                                     <Text size="xs" c="dimmed">
                                         {comprobante.estado === 'emitido' 
                                             ? 'La factura fiscal está lista para descargar'
-                                            : comprobante.estado === 'error'
+                                            : comprobante.estado === 'error' || comprobante.estado === 'rechazado'
                                             ? 'Hubo un error al generar la factura'
                                             : 'La factura se está procesando en AFIP'}
                                     </Text>
@@ -492,16 +544,44 @@ export function PostSaleModal() {
                 <Stack gap="sm">
                     {/* Descargar Factura Fiscal (si es factura A/B/C) */}
                     {isFiscal && comprobante && comprobante.estado === 'emitido' && (
+                        <>
+                            <Button
+                                size="lg"
+                                leftSection={<Printer size={18} />}
+                                onClick={handleOpenFactura}
+                                loading={openingFactura}
+                                variant="gradient"
+                                gradient={{ from: 'teal', to: 'lime', deg: 90 }}
+                                fullWidth
+                            >
+                                Abrir Factura para Imprimir
+                            </Button>
+
+                            <Button
+                                size="lg"
+                                leftSection={<FileText size={18} />}
+                                onClick={handleDownloadFactura}
+                                loading={downloadingPDF}
+                                variant="gradient"
+                                gradient={{ from: 'blue', to: 'cyan', deg: 90 }}
+                                fullWidth
+                            >
+                                Descargar Factura Fiscal PDF
+                            </Button>
+                        </>
+                    )}
+
+                    {isFiscal && (!comprobante || comprobante.estado === 'pendiente') && (
                         <Button
-                            size="lg"
-                            leftSection={<FileText size={18} />}
-                            onClick={handleDownloadFactura}
-                            loading={downloadingPDF}
-                            variant="gradient"
-                            gradient={{ from: 'blue', to: 'cyan', deg: 90 }}
+                            size="md"
+                            variant="outline"
+                            color="orange"
+                            leftSection={<FileText size={16} />}
+                            onClick={handleRefreshComprobante}
+                            loading={loadingComprobante}
                             fullWidth
                         >
-                            Descargar Factura Fiscal PDF
+                            Reintentar consultar factura
                         </Button>
                     )}
 
