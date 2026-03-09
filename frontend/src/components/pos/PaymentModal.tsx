@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     Modal, Stack, Text, Group, Button, Divider, Select, NumberInput,
     Badge, Box, Alert, TextInput, Collapse, SegmentedControl
@@ -8,6 +8,7 @@ import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { useCartStore } from '../../store/useCartStore';
 import type { MetodoPago, PagoDetalle } from '../../store/useCartStore';
 import { useSaleStore } from '../../store/useSaleStore';
+import { useConfiguracionFiscal } from '../../hooks/useConfiguracionFiscal';
 import styles from './PaymentModal.module.css';
 
 function formatCurrency(value: number): string {
@@ -21,11 +22,14 @@ function formatCurrency(value: number): string {
 export function PaymentModal() {
     const isOpen = usePOSUIStore((s) => s.isPaymentModalOpen);
     const closePaymentModal = usePOSUIStore((s) => s.closePaymentModal);
+    const tipoComprobanteSeleccionado = usePOSUIStore((s) => s.tipoComprobante);
     const total = useCartStore((s) => s.total);
     const descuentoGlobal = useCartStore((s) => s.descuentoGlobal);
     const totalConDescuento = useCartStore((s) => s.totalConDescuento);
     const cart = useCartStore((s) => s.cart);
     const confirmSale = useSaleStore((s) => s.confirmSale);
+
+    const { config } = useConfiguracionFiscal();
 
     const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
     const [montoRecibido, setMontoRecibido] = useState<number | string>('');
@@ -36,6 +40,47 @@ export function PaymentModal() {
     const [clienteEmail, setClienteEmail] = useState('');
     const [tipoComprobante, setTipoComprobante] = useState<'auto' | 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c'>('auto');
     const [cuitReceptor, setCuitReceptor] = useState('');
+
+    // Map ComprobanteModal selection to PaymentModal format
+    useEffect(() => {
+        if (isOpen) {
+            const mapping: Record<string, 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c'> = {
+                'ticket': 'ticket_interno',
+                'factura_a': 'factura_a',
+                'factura_b': 'factura_b',
+                'factura_c': 'factura_c',
+            };
+            const mappedTipo = mapping[tipoComprobanteSeleccionado];
+            if (mappedTipo) {
+                setTipoComprobante(mappedTipo);
+            }
+        }
+    }, [isOpen, tipoComprobanteSeleccionado]);
+
+    // Determine allowed invoice types based on fiscal condition
+    const opcionesComprobante = useMemo(() => {
+        const baseOptions = [
+            { value: 'auto', label: '⚡ Automático' },
+            { value: 'ticket_interno', label: 'Ticket' },
+            { value: 'factura_c', label: 'Factura C' },
+        ];
+
+        // If no config or Monotributista, only allow auto, ticket, and factura_c
+        if (!config || config.condicion_fiscal === 'Monotributo') {
+            return baseOptions;
+        }
+
+        // If Responsable Inscripto, allow all types
+        if (config.condicion_fiscal === 'Responsable Inscripto') {
+            return [
+                ...baseOptions,
+                { value: 'factura_b', label: 'Factura B' },
+                { value: 'factura_a', label: 'Factura A' },
+            ];
+        }
+
+        return baseOptions;
+    }, [config]);
 
     const isEmailValid = clienteEmail === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clienteEmail);
     const isCuitValid = tipoComprobante !== 'factura_a' || /^\d{11}$/.test(cuitReceptor);
@@ -223,17 +268,18 @@ export function PaymentModal() {
                             <Receipt size={18} />
                             <Text size="sm" fw={600}>Tipo de comprobante</Text>
                         </Group>
+                        {config && config.condicion_fiscal === 'Monotributo' && (
+                            <Alert icon={<AlertCircle size={14} />} color="orange" variant="light" p="xs">
+                                <Text size="xs">
+                                    ⚠️ Como Monotributista, solo podés emitir Tickets internos o Facturas C
+                                </Text>
+                            </Alert>
+                        )}
                         <SegmentedControl
                             fullWidth
                             value={tipoComprobante}
                             onChange={(v) => setTipoComprobante(v as typeof tipoComprobante)}
-                            data={[
-                                { value: 'auto', label: '⚡ Automático' },
-                                { value: 'ticket_interno', label: 'Ticket' },
-                                { value: 'factura_c', label: 'Factura C' },
-                                { value: 'factura_b', label: 'Factura B' },
-                                { value: 'factura_a', label: 'Factura A' },
-                            ]}
+                            data={opcionesComprobante}
                             size="sm"
                         />
                         <Alert icon={<AlertCircle size={14} />} color="blue" variant="light" p="xs">

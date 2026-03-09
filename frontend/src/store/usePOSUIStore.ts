@@ -9,7 +9,7 @@ interface POSUIState {
     isPriceCheckModalOpen: boolean;
     isDiscountModalOpen: boolean;
     discountTargetItemId: string | null;
-    tipoComprobante: 'ticket' | 'factura_b' | 'factura_a';
+    tipoComprobante: 'ticket' | 'factura_b' | 'factura_a' | 'factura_c';
 
     /** Post-sale modal state */
     isPostSaleModalOpen: boolean;
@@ -20,7 +20,7 @@ interface POSUIState {
     closePaymentModal: () => void;
     openComprobanteModal: () => void;
     closeComprobanteModal: () => void;
-    setTipoComprobante: (tipo: 'ticket' | 'factura_b' | 'factura_a') => void;
+    setTipoComprobante: (tipo: 'ticket' | 'factura_b' | 'factura_a' | 'factura_c') => void;
     openPriceCheckModal: () => void;
     closePriceCheckModal: () => void;
     openDiscountModal: () => void;
