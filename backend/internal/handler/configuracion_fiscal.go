@@ -72,6 +72,21 @@ func (h *ConfiguracionFiscalHandler) Actualizar(c *gin.Context) {
 	if iibb := c.PostForm("iibb"); iibb != "" && iibb != "null" {
 		req.IIBB = &iibb
 	}
+	if domicilio := c.PostForm("domicilio_comercial"); domicilio != "" && domicilio != "null" {
+		req.DomicilioComercial = &domicilio
+	}
+	if ciudad := c.PostForm("domicilio_ciudad"); ciudad != "" && ciudad != "null" {
+		req.DomicilioCiudad = &ciudad
+	}
+	if provincia := c.PostForm("domicilio_provincia"); provincia != "" && provincia != "null" {
+		req.DomicilioProvincia = &provincia
+	}
+	if cp := c.PostForm("domicilio_codigo_postal"); cp != "" && cp != "null" {
+		req.DomicilioCodigoPostal = &cp
+	}
+	if logo := c.PostForm("logo_path"); logo != "" && logo != "null" {
+		req.LogoPath = &logo
+	}
 
 	if req.CUITEmsior == "" || req.CondicionFiscal == "" || req.PuntoDeVenta == 0 {
 		c.JSON(http.StatusBadRequest, apierror.New("Faltan campos obligatorios: cuit_emisor, condicion_fiscal, punto_de_venta"))
