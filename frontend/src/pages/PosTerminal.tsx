@@ -263,7 +263,7 @@ export function PosTerminal() {
 
                 case 'F10':
                     e.preventDefault();
-                    if (!anyModalOpen && cart.length > 0) openComprobanteModal();
+                    if (!anyModalOpen && cart.length > 0) openPaymentModal();
                     break;
 
                 case 'Escape':
