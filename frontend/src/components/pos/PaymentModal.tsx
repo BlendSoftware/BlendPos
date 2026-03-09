@@ -77,8 +77,8 @@ export function PaymentModal() {
 
     // Determine allowed invoice types based on fiscal condition
     const opcionesComprobante = useMemo(() => {
-        const baseOptions = [
-            { value: 'auto', label: '⚡ Automático' },
+        const baseOptions: Array<{ value: TipoComprobante; label: string }> = [
+            { value: 'auto', label: 'Automatico' },
             { value: 'ticket_interno', label: 'Ticket' },
             { value: 'factura_c', label: 'Factura C' },
         ];
@@ -301,7 +301,6 @@ export function PaymentModal() {
                             <Receipt size={18} />
                             <Text size="sm" fw={600}>Tipo de comprobante</Text>
                         </Group>
-<<<<<<< HEAD
                         {config && config.condicion_fiscal === 'Monotributo' && (
                             <Alert icon={<AlertCircle size={14} />} color="orange" variant="light" p="xs">
                                 <Text size="xs">
@@ -309,19 +308,12 @@ export function PaymentModal() {
                                 </Text>
                             </Alert>
                         )}
-                        <SegmentedControl
-                            fullWidth
-                            value={tipoComprobante}
-                            onChange={(v) => setTipoComprobante(v as typeof tipoComprobante)}
-                            data={opcionesComprobante}
-=======
                         <Select
                             label="Comprobante"
                             placeholder="Elegi el comprobante"
                             value={tipoComprobante}
                             onChange={(value) => setTipoComprobante((value as TipoComprobante | null) ?? 'auto')}
-                            data={COMPROBANTE_OPTIONS}
->>>>>>> 42fbbd5340296ea11e0de61d9c6ee2636e72f7f3
+                            data={opcionesComprobante}
                             size="sm"
                             comboboxProps={{ position: 'bottom', middlewares: { flip: true, shift: true } }}
                         />
