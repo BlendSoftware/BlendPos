@@ -290,7 +290,19 @@ func GenerateFacturaFiscalPDF(
 
 	// ── LEFT: Logo area + Emisor ──────────────────────────────────────────
 	xL := marginL + 3
-	pdf.SetXY(xL, startY+3)
+	logoRendered := false
+	if config.LogoPath != nil && *config.LogoPath != "" {
+		if _, statErr := os.Stat(*config.LogoPath); statErr == nil {
+			// Logo height proportional, max 18mm, positioned top-left of left column
+			pdf.Image(*config.LogoPath, xL, startY+2, leftW*0.45, 0, false, "", 0, "")
+			logoRendered = true
+		}
+	}
+	textStartY := startY + 3
+	if logoRendered {
+		textStartY = startY + 22 // below logo
+	}
+	pdf.SetXY(xL, textStartY)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.CellFormat(leftW-4, 7, tr(config.RazonSocial), "", 1, "L", false, 0, "")
 
@@ -340,19 +352,22 @@ func GenerateFacturaFiscalPDF(
 	// ── RIGHT: Comprobante fiscal data ────────────────────────────────────
 	xR := marginL + leftW + centerW + 3
 	pdf.SetXY(xR, startY+3)
-	pdf.SetFont("Helvetica", "B", 11)
+	// Line 1: "FACTURA" (label) left + N° right — matches standard AFIP layout
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.CellFormat(20, 6, tr(tipoNombre), "", 0, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "B", 10)
 	numeroFormatted := fmt.Sprintf("N° %04d-%08d", pvDisplay, numeroComprobante)
-	pdf.CellFormat(rightW-4, 6, tr(numeroFormatted), "", 1, "L", false, 0, "")
+	pdf.CellFormat(rightW-24, 6, tr(numeroFormatted), "", 1, "R", false, 0, "")
 
+	// Line 2: "Fecha DD/MM/YYYY" left + "ORIGINAL" right
 	pdf.SetXY(xR, pdf.GetY())
 	pdf.SetFont("Helvetica", "", 9)
-	pdf.CellFormat(22, 5, tr("Fecha"), "", 0, "L", false, 0, "")
+	pdf.CellFormat(14, 5, tr("Fecha"), "", 0, "L", false, 0, "")
+	dateStr := venta.CreatedAt.Format("2/1/2006")
+	dateValW := rightW - 4 - 14 - 22
+	pdf.CellFormat(dateValW, 5, tr(dateStr), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "B", 9)
-	pdf.CellFormat(rightW-26, 5, tr(venta.CreatedAt.Format("2/1/2006")), "", 1, "L", false, 0, "")
-
-	pdf.SetXY(xR, pdf.GetY())
-	pdf.SetFont("Helvetica", "B", 9)
-	pdf.CellFormat(rightW-4, 5, tr("ORIGINAL"), "", 1, "L", false, 0, "")
+	pdf.CellFormat(22, 5, tr("ORIGINAL"), "", 1, "R", false, 0, "")
 
 	// Fiscal metadata on right column
 	pdf.SetXY(xR, pdf.GetY()+1)
@@ -490,8 +505,8 @@ func GenerateFacturaFiscalPDF(
 		}
 		pdf.CellFormat(colCant, rowH2, fmt.Sprintf("%d", item.Cantidad), "LR", 0, "C", false, 0, "")
 		pdf.CellFormat(colDetalle, rowH2, tr(nombre), "LR", 0, "L", false, 0, "")
-		pdf.CellFormat(colPU, rowH2, tr(formatMoney(item.PrecioUnitario)), "LR", 0, "R", false, 0, "")
-		pdf.CellFormat(colPT, rowH2, tr(formatMoney(item.Subtotal)), "LR", 1, "R", false, 0, "")
+		pdf.CellFormat(colPU, rowH2, tr(formatMoneyAFIP(item.PrecioUnitario)), "LR", 0, "R", false, 0, "")
+		pdf.CellFormat(colPT, rowH2, tr(formatMoneyAFIP(item.Subtotal)), "LR", 1, "R", false, 0, "")
 	}
 	// Fill remaining rows to fixed table height (at least 10 empty rows for look)
 	emptyRows := 10 - len(venta.Items)
@@ -529,10 +544,10 @@ func GenerateFacturaFiscalPDF(
 		pdf.SetFont("Helvetica", "", 8)
 		pdf.SetXY(marginL, pdf.GetY())
 		pdf.CellFormat(contentW-colPT, 5, tr("Subtotal gravado:"), "LRB", 0, "R", false, 0, "")
-		pdf.CellFormat(colPT, 5, tr(formatMoney(neto)), "LRB", 1, "R", false, 0, "")
+		pdf.CellFormat(colPT, 5, tr(formatMoneyAFIP(neto)), "LRB", 1, "R", false, 0, "")
 		pdf.SetXY(marginL, pdf.GetY())
 		pdf.CellFormat(contentW-colPT, 5, tr("IVA 21%:"), "LRB", 0, "R", false, 0, "")
-		pdf.CellFormat(colPT, 5, tr(formatMoney(iva)), "LRB", 1, "R", false, 0, "")
+		pdf.CellFormat(colPT, 5, tr(formatMoneyAFIP(iva)), "LRB", 1, "R", false, 0, "")
 	}
 
 	// Son pesos row + Importe total
@@ -552,7 +567,7 @@ func GenerateFacturaFiscalPDF(
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.CellFormat(totalW*0.55, sonPesosH, tr("Importe total"), "1", 0, "R", true, 0, "")
 	pdf.SetFont("Helvetica", "B", 11)
-	pdf.CellFormat(totalW*0.45, sonPesosH, tr(formatMoney(venta.Total)), "1", 1, "R", true, 0, "")
+	pdf.CellFormat(totalW*0.45, sonPesosH, tr(formatMoneyAFIP(venta.Total)), "1", 1, "R", true, 0, "")
 	pdf.SetFillColor(255, 255, 255)
 
 	// ═══════════════════════════════════════════════════════════════════════
@@ -633,6 +648,16 @@ func tipoComprobanteCode(tipo string) int {
 	default:
 		return 0
 	}
+}
+
+// formatMoneyAFIP formats a decimal for AFIP invoices without currency symbol: 1.234,56
+// Per AFIP standard, the $ sign is omitted from item rows and totals in the body.
+func formatMoneyAFIP(amount decimal.Decimal) string {
+	s := formatMoney(amount)
+	if len(s) > 0 && s[0] == '$' {
+		return s[1:]
+	}
+	return s
 }
 
 // formatMoney formats a decimal as Argentine peso string: $1.234,56

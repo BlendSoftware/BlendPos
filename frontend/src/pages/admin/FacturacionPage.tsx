@@ -7,12 +7,13 @@ import { DateInput } from '@mantine/dates';
 import { Printer, Download, ChevronDown, ChevronUp, Search, Ban, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
+import { type SaleRecord, type MetodoPago } from '../../store/useSaleStore';
 import { anularVenta, listarVentas, type VentaListItem } from '../../services/api/ventas';
-import { getComprobante, descargarPDF, getPDFUrl } from '../../services/api/facturacion';
-import { tokenStore } from '../../store/tokenStore';
+import { getComprobante, descargarPDF } from '../../services/api/facturacion';
+import { thermalPrinter } from '../../services/ThermalPrinterService';
+import { usePrinterStore } from '../../store/usePrinterStore';
 import { formatARS } from '../../utils/format';
 import type { IVenta } from '../../types';
-import type { MetodoPago } from '../../store/useSaleStore';
 
 const METODO_COLOR: Record<string, string> = {
     efectivo: 'teal', debito: 'blue', credito: 'violet', transferencia: 'cyan', qr: 'orange',
@@ -45,29 +46,21 @@ export function FacturacionPage() {
     const [loadingVentas, setLoadingVentas] = useState(false);
     const [desde, setDesde] = useState<Date | null>(null);
     const [hasta, setHasta] = useState<Date | null>(null);
-    const [periodo, setPeriodo] = useState<string>('mes');
+    const [periodo, setPeriodo] = useState<string>('todas');
     const ordenarPor = 'fecha';
     const orden = 'desc';
 
-    // Normaliza el valor que devuelve Mantine DateInput a una Date a mediodía local.
-    // - Si Mantine pasa un string 'YYYY-MM-DD' (cuando el usuario tipea), lo parsea como local.
-    // - Si pasa una Date (click de calendario), era UTC midnight → convertimos a local noon
-    //   para que DateInput la muestre en el día correcto (evita desfase UTC-3).
-    function normalizeDateInput(v: Date | string | null): Date | null {
-        if (!v) return null;
-        if (typeof v === 'string') {
-            const s = v.slice(0, 10);
-            const [y, m, d] = s.split('-').map(Number);
-            return new Date(y, m - 1, d, 12, 0, 0);
-        }
-        return new Date(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate(), 12, 0, 0);
-    }
-
-    // Convierte la Date almacenada (mediodía local) a string 'YYYY-MM-DD' para la API.
     const toDateStr = (d: Date | null): string | undefined => {
         if (!d) return undefined;
+        // Mantine v8 DateInput passes:
+        //   - a string 'YYYY-MM-DD' when the user types in the field
+        //   - a native Date at UTC midnight when the user clicks the calendar
         if (typeof (d as unknown) === 'string') return (d as unknown as string).slice(0, 10);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        // UTC midnight Date → must use UTC getters to avoid -3h offset shifting the day back
+        const y = (d as Date).getUTCFullYear();
+        const m = String((d as Date).getUTCMonth() + 1).padStart(2, '0');
+        const day = String((d as Date).getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
     };
 
     const cargarVentas = useCallback(async () => {
@@ -190,37 +183,36 @@ export function FacturacionPage() {
     }, [ventas, anuladas, busqueda, periodo, filtroMetodo, filtroEstado, desde, hasta, sortBy, sortDir]);
 
     const handleReprint = async (v: IVenta) => {
-        // Obtener el comprobante y abrir el PDF en nueva pestaña para imprimir
-        try {
-            const comp = await getComprobante(v.id).catch(() => null);
-            const pdfId = comp?.id ?? v.id;
-            const url = getPDFUrl(pdfId);
-            const token = tokenStore.getAccessToken();
-
-            // Descargar el blob y abrirlo en una nueva pestaña para imprimir
-            const resp = await fetch(url, {
-                headers: token ? { Authorization: `Bearer ${token}` } : {},
-            });
-            if (!resp.ok) throw new Error('PDF no disponible');
-            const blob = await resp.blob();
-            const blobUrl = URL.createObjectURL(blob);
-            const win = window.open(blobUrl, '_blank');
-            if (win) {
-                win.onload = () => {
-                    setTimeout(() => {
-                        win.print();
-                        URL.revokeObjectURL(blobUrl);
-                    }, 500);
-                };
-            }
-        } catch {
-            notifications.show({
-                title: 'Error al imprimir',
-                message: 'No se pudo obtener el PDF del comprobante.',
-                color: 'orange',
-                icon: <Printer size={14} />,
-            });
-        }
+        // Reconstruye un SaleRecord desde IVenta y lo manda a la impresora
+        const saleRecord: SaleRecord = {
+            id: v.id,
+            numeroTicket: v.numeroTicket,
+            fecha: new Date(v.fecha),
+            items: v.items.map((item) => ({
+                id: item.productoId,
+                nombre: item.productoNombre,
+                precio: item.precioUnitario,
+                codigoBarras: item.codigoBarras || '',
+                cantidad: item.cantidad,
+                subtotal: item.subtotal,
+                descuento: item.descuento,
+            })),
+            total: v.total,
+            totalConDescuento: v.total,
+            metodoPago: v.metodoPago as MetodoPago,
+            pagos: v.pagos as SaleRecord['pagos'],
+            vuelto: v.vuelto ?? 0,
+            cajero: v.cajeroNombre,
+            tipoComprobante: 'ticket_interno' as const,
+        };
+        const cfg = usePrinterStore.getState().config;
+        thermalPrinter.printAll(saleRecord, cfg).catch(console.error);
+        notifications.show({
+            title: 'Reimpresión enviada',
+            message: `Ticket #${v.numeroTicket}`,
+            color: 'blue',
+            icon: <Printer size={14} />,
+        });
     };
 
     const handleDownloadPDF = async (v: IVenta) => {
@@ -228,7 +220,7 @@ export function FacturacionPage() {
             // Intentar obtener el id real del comprobante desde el backend
             const comp = await getComprobante(v.id).catch(() => null);
             const pdfId = comp?.id ?? v.id;
-            await descargarPDF(pdfId, `factura_${v.numeroTicket}.pdf`);
+            await descargarPDF(pdfId, `ticket_${v.numeroTicket}.pdf`);
         } catch {
             notifications.show({
                 title: 'PDF no disponible',
@@ -324,14 +316,14 @@ export function FacturacionPage() {
                         <DateInput
                             placeholder="Desde"
                             value={desde}
-                            onChange={(v) => setDesde(normalizeDateInput(v))}
+                            onChange={(v) => setDesde(v as Date | null)}
                             clearable
                             style={{ width: 140 }}
                         />
                         <DateInput
                             placeholder="Hasta"
                             value={hasta}
-                            onChange={(v) => setHasta(normalizeDateInput(v))}
+                            onChange={(v) => setHasta(v as Date | null)}
                             clearable
                             style={{ width: 140 }}
                         />
