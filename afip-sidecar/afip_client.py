@@ -439,11 +439,19 @@ class AFIPClient:
             )
             
             # RG 5616: Condición IVA del receptor (requerido desde 2024)
-            # 5 = Consumidor Final (para tipo_doc=99)
-            # El valor se toma del request; por defecto 5 para doc_tipo=99
+            # 5 = Consumidor Final (para tipo_doc=99 o 96 en Factura B/C)
+            # 1 = IVA Responsable Inscripto (para tipo_doc=80 en Factura A)
+            # El valor se toma del request; por defecto según el tipo de documento
             condicion_iva = getattr(req, 'condicion_iva_receptor_id', None)
             if condicion_iva is None:
-                condicion_iva = 5 if req.tipo_doc_receptor == 99 else 1  # 1=IVA Responsable Inscripto
+                # Para Factura B/C: DNI (96) o Sin Identificar (99) → Consumidor Final (5)
+                # Para Factura A: CUIT (80) → Responsable Inscripto (1)
+                if req.tipo_doc_receptor in (96, 99):
+                    condicion_iva = 5  # Consumidor Final
+                elif req.tipo_doc_receptor == 80:
+                    condicion_iva = 1  # IVA Responsable Inscripto
+                else:
+                    condicion_iva = 5  # Default seguro: Consumidor Final
             
             logger.debug(f"DEBUG: Asignando condicion_iva={condicion_iva} (tipo int)")
             wsfe.factura['condicion_iva_receptor_id'] = int(condicion_iva)
