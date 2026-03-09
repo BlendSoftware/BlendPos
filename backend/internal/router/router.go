@@ -155,13 +155,18 @@ func New(d Deps) *gin.Engine {
 			caja.GET("/historial", middleware.RequireRole("supervisor", "administrador"), cajaH.Historial)
 		}
 
-		fact := v1.Group("/facturacion", middleware.RequireRole("administrador", "supervisor"))
+		// Read-only: cajero can check their own comprobante status and download it
+		factR := v1.Group("/facturacion", middleware.RequireRole("cajero", "supervisor", "administrador"))
 		{
-			fact.GET("/:venta_id", facturacionH.ObtenerComprobante)
-			fact.GET("/pdf/:id", facturacionH.DescargarPDF)
-			fact.DELETE("/:id", facturacionH.AnularComprobante)
-			fact.POST("/:id/reintentar", facturacionH.ReintentarComprobante)
-			fact.POST("/:id/regen-pdf", facturacionH.RegenerarPDF)
+			factR.GET("/:venta_id", facturacionH.ObtenerComprobante)
+			factR.GET("/pdf/:id", facturacionH.DescargarPDF)
+		}
+		// Write operations: admin/supervisor only
+		factW := v1.Group("/facturacion", middleware.RequireRole("administrador", "supervisor"))
+		{
+			factW.DELETE("/:id", facturacionH.AnularComprobante)
+			factW.POST("/:id/reintentar", facturacionH.ReintentarComprobante)
+			factW.POST("/:id/regen-pdf", facturacionH.RegenerarPDF)
 		}
 
 		prov := v1.Group("/proveedores", middleware.RequireRole("administrador"))

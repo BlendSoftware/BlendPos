@@ -50,7 +50,7 @@ export function PostSaleModal() {
         checkSMTP();
     }, []);
 
-    // Load comprobante if this is a fiscal invoice
+    // Load comprobante if this is a fiscal invoice — retry every 3s up to 30s
     useEffect(() => {
         if (!record || !isFiscal || !isOpen) {
             setComprobante(null);
@@ -58,29 +58,33 @@ export function PostSaleModal() {
         }
 
         let cancelled = false;
-        const loadComprobante = async () => {
+        const MAX_POLLS = 10;
+        const POLL_INTERVAL = 3000;
+
+        const poll = async () => {
             setLoadingComprobante(true);
-            try {
-                // Wait a bit for the worker to process
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                const comp = await getComprobante(record.id);
-                if (!cancelled) {
-                    setComprobante(comp);
+            for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
+                if (cancelled) return;
+                try {
+                    const comp = await getComprobante(record.id);
+                    if (!cancelled) {
+                        setComprobante(comp);
+                        setLoadingComprobante(false);
+                        // If still pending, keep polling
+                        if (comp.estado === 'emitido' || comp.estado === 'error') return;
+                    }
+                } catch {
+                    // Comprobante not yet created — keep waiting
                 }
-            } catch (err) {
-                if (!cancelled) {
-                    console.warn('[PostSaleModal] No se pudo cargar comprobante:', err);
-                    setComprobante(null);
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoadingComprobante(false);
-                }
+                // Wait before next attempt
+                await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
             }
+            if (!cancelled) setLoadingComprobante(false);
         };
 
-        loadComprobante();
-        return () => { cancelled = true; };
+        // Kick off first poll after 2s (give worker a head start)
+        const timer = setTimeout(() => { poll(); }, 2000);
+        return () => { cancelled = true; clearTimeout(timer); };
     }, [record, isFiscal, isOpen]);
 
     if (!record) return null;
@@ -416,7 +420,7 @@ export function PostSaleModal() {
                         {loadingComprobante ? (
                             <Alert icon={<Loader size={16} />} color="blue" variant="light">
                                 <Text size="xs">
-                                    Procesando factura AFIP...
+                                    Consultando AFIP, aguardá unos segundos...
                                 </Text>
                             </Alert>
                         ) : comprobante ? (
@@ -449,7 +453,7 @@ export function PostSaleModal() {
                         ) : (
                             <Alert icon={<AlertCircle size={16} />} color="orange" variant="light">
                                 <Text size="xs">
-                                    La factura fiscal se está procesando. Podrás descargarla desde Admin → Facturación en unos minutos.
+                                    La factura fiscal aún se está procesando. Cerrá y volvé a abrir la venta en unos segundos para descargarla.
                                 </Text>
                             </Alert>
                         )}
@@ -468,8 +472,7 @@ export function PostSaleModal() {
                             <Text size="xs">
                                 {smtpConfigured ? (
                                     <>
-                                        El comprobante se enviará a <strong>{record.clienteEmail}</strong> cuando
-                                        la venta se sincronice con el servidor.
+                                        El comprobante se enviará a <strong>{record.clienteEmail}</strong> cuando la factura quede lista.
                                     </>
                                 ) : (
                                     <>

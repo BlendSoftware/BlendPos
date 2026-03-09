@@ -2,6 +2,7 @@ package infra
 
 import (
 	"blendpos/internal/config"
+	"crypto/tls"
 	"fmt"
 	"net/smtp"
 
@@ -27,10 +28,20 @@ func NewMailer(cfg *config.Config) *Mailer {
 	}
 }
 
+// IsConfigured returns false when SMTP credentials are missing.
+func (m *Mailer) IsConfigured() bool {
+	return m.host != "" && m.user != "" && m.password != ""
+}
+
 // SendComprobante sends a PDF receipt to the customer email.
+// Supports Gmail (port 587 STARTTLS / port 465 TLS) and plain SMTP.
 func (m *Mailer) SendComprobante(to, subject, body, pdfPath string) error {
+	if !m.IsConfigured() {
+		return fmt.Errorf("mailer: SMTP not configured")
+	}
+
 	e := email.NewEmail()
-	e.From = m.user
+	e.From = fmt.Sprintf("BlendPOS <%s>", m.user)
 	e.To = []string{to}
 	e.Subject = subject
 	e.Text = []byte(body)
@@ -41,6 +52,16 @@ func (m *Mailer) SendComprobante(to, subject, body, pdfPath string) error {
 		}
 	}
 
+	tlsCfg := &tls.Config{ServerName: m.host}
 	auth := smtp.PlainAuth("", m.user, m.password, m.host)
-	return e.Send(m.addr, auth)
+
+	// Port 465 = implicit TLS (SMTPS); port 587 = STARTTLS; others = plain.
+	switch m.port {
+	case 465:
+		return e.SendWithTLS(m.addr, auth, tlsCfg)
+	case 587:
+		return e.SendWithStartTLS(m.addr, auth, tlsCfg)
+	default:
+		return e.Send(m.addr, auth)
+	}
 }
