@@ -62,16 +62,18 @@ NEW = '''    @inicializar_y_capturar_excepciones
                  'Nro': cbte_asoc['nro']}
                 for cbte_asoc in f['cbtes_asoc']] or None,
             'Tributos': f['tributos'] and [
-                {'Id': tributo['tributo_id'],
-                 'Desc': tributo['desc'],
-                 'BaseImp': tributo['base_imp'],
-                 'Alic': tributo['alic'],
-                 'Importe': tributo['importe']}
+                {'Tributo': {
+                    'Id': tributo['tributo_id'],
+                    'Desc': tributo['desc'],
+                    'BaseImp': tributo['base_imp'],
+                    'Alic': tributo['alic'],
+                    'Importe': tributo['importe']}}
                 for tributo in f['tributos']] or None,
             'Iva': f['iva'] and [
-                {'Id': iva['iva_id'],
-                 'BaseImp': iva['base_imp'],
-                 'Importe': iva['importe']}
+                {'AlicIva': {
+                    'Id': iva['iva_id'],
+                    'BaseImp': iva['base_imp'],
+                    'Importe': iva['importe']}}
                 for iva in f['iva']] or None,
             'Opcionales': f['opcionales'] and [
                 {'Id': opcional['opcional_id'],

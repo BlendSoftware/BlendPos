@@ -459,15 +459,23 @@ class AFIPClient:
             # Debug: verificar estructura de factura antes de agregar IVA
             logger.debug(f"DEBUG factura antes de IVA: iva={wsfe.factura.get('iva')}, condicion_iva_receptor_id={wsfe.factura.get('condicion_iva_receptor_id')}")
             
-            # Agregar IVA si corresponde
-            if req.importe_iva > 0:
-                # Alícuota 21% (código 5 en AFIP)
-                # Otras alícuotas: 3=0%, 4=10.5%, 5=21%, 6=27%
-                wsfe.AgregarIva(
-                    iva_id=5,  # 21%
-                    base_imp=round(req.importe_neto, 2),
-                    importe=round(req.importe_iva, 2)
-                )
+            # Agregar IVA (AFIP requiere declarar alícuota si ImpNeto > 0)
+            # Alícuotas: 3=0% (No Gravado), 4=10.5%, 5=21%, 6=27%
+            if req.importe_neto > 0:
+                if req.tipo_comprobante in (6, 11):
+                    # Factura B/C: Monotributo/Consumidor Final → Alícuota 3 (0% - No Gravado)
+                    wsfe.AgregarIva(
+                        iva_id=3,  # 0% - No Gravado
+                        base_imp=round(req.importe_neto, 2),
+                        importe=0.00
+                    )
+                elif req.importe_iva > 0:
+                    # Factura A con IVA: Responsable Inscripto → Alícuota 5 (21%)
+                    wsfe.AgregarIva(
+                        iva_id=5,  # 21%
+                        base_imp=round(req.importe_neto, 2),
+                        importe=round(req.importe_iva, 2)
+                    )
             
             # Debug: verificar estructura de factura antes de CAESolicitar
             logger.warning(f"DEBUG factura completa antes de CAESolicitar: {wsfe.factura}")
