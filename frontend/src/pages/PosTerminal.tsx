@@ -8,6 +8,7 @@ import { SalesTable } from '../components/pos/SalesTable';
 import { TotalPanel } from '../components/pos/TotalPanel';
 import { HotkeysFooter } from '../components/pos/HotkeysFooter';
 import { PaymentModal } from '../components/pos/PaymentModal';
+import { ComprobanteModal } from '../components/pos/ComprobanteModal';
 import { ProductSearch } from '../components/pos/ProductSearch';
 import { PriceCheckModal } from '../components/pos/PriceCheckModal';
 import { DiscountModal } from '../components/pos/DiscountModal';
@@ -91,8 +92,12 @@ export function PosTerminal() {
     const [cajaModalOpen, setCajaModalOpen] = useState(false);
     useEffect(() => {
         if (isInitializing) return;
-        const shouldOpen = !sesionId;
-        setCajaModalOpen(shouldOpen);
+        // Pequeño delay para evitar condición de carrera
+        const timer = setTimeout(() => {
+            const shouldOpen = !sesionId;
+            setCajaModalOpen(shouldOpen);
+        }, 100);
+        return () => clearTimeout(timer);
     }, [sesionId, isInitializing]);
 
     // Sincronizar catálogo desde el backend en cada apertura del POS.
@@ -396,6 +401,7 @@ export function PosTerminal() {
             <HotkeysFooter />
 
             {/* ── Modales ────────────────────────────────────────── */}
+            <ComprobanteModal />
             <PaymentModal />
             <PriceCheckModal />
             <DiscountModal />

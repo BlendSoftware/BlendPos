@@ -32,10 +32,11 @@ func NewDatabase(dsn string) (*gorm.DB, error) {
 			if sqlErr == nil {
 				if pingErr := sqlDB.Ping(); pingErr == nil {
 					log.Info().Int("attempt", i+1).Msg("database connected")
-					sqlDB.SetMaxOpenConns(25)
-					sqlDB.SetMaxIdleConns(5)
-					sqlDB.SetConnMaxLifetime(5 * time.Minute)
-					sqlDB.SetConnMaxIdleTime(2 * time.Minute)
+				// Optimized connection pool for production workloads
+				sqlDB.SetMaxOpenConns(100)     // Up from 25 - handle more concurrent requests
+				sqlDB.SetMaxIdleConns(25)      // Up from 5 - reduce connection overhead
+				sqlDB.SetConnMaxLifetime(5 * time.Minute)
+				sqlDB.SetConnMaxIdleTime(5 * time.Minute) // Up from 2 - keep connections warm longer
 
 					if err := applyPreMigrationPatches(db); err != nil {
 						return nil, fmt.Errorf("pre-migration patches: %w", err)

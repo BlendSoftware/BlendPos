@@ -89,6 +89,7 @@ func New(d Deps) *gin.Engine {
 	categoriasH := handler.NewCategoriasHandler(d.CategoriaSvc)
 	auditH := handler.NewAuditHandler(d.AuditRepo)
 	configFiscalH := handler.NewConfiguracionFiscalHandler(d.ConfigFiscalSvc)
+	comprasH := handler.NewCompraHandler(d.CompraSvc)
 
 	// ── Routes ───────────────────────────────────────────────────────────────
 
@@ -211,6 +212,15 @@ func New(d Deps) *gin.Engine {
 		{
 			configFiscal.GET("", configFiscalH.Obtener)
 			configFiscal.PUT("", configFiscalH.Actualizar)
+		}
+
+		// Compras — administrador can write, supervisor can read
+		v1.GET("/compras", middleware.RequireRole("supervisor", "administrador"), comprasH.Listar)
+		v1.GET("/compras/:id", middleware.RequireRole("supervisor", "administrador"), comprasH.ObtenerPorID)
+		compras := v1.Group("/compras", middleware.RequireRole("administrador"))
+		{
+			compras.POST("", comprasH.Crear)
+			compras.PATCH(":id/estado", comprasH.ActualizarEstado)
 		}
 	}
 
