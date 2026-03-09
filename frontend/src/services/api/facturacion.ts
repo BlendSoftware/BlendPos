@@ -21,7 +21,7 @@ export interface FacturacionResponse {
     monto_neto: number;
     monto_iva: number;
     monto_total: number;
-    estado: 'pendiente' | 'emitido' | 'error';
+    estado: 'pendiente' | 'emitido' | 'error' | 'rechazado';
     pdf_url: string | null;
     created_at: string;
 }
