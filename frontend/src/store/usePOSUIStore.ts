@@ -46,7 +46,7 @@ export const usePOSUIStore = create<POSUIState>()((set) => ({
 
     openPaymentModal: () => set({ isPaymentModalOpen: true }),
     closePaymentModal: () => set({ isPaymentModalOpen: false }),
-    openComprobanteModal: () => set({ isComprobanteModalOpen: true }),
+    openComprobanteModal: () => set({ isPaymentModalOpen: true }),
     closeComprobanteModal: () => set({ isComprobanteModalOpen: false }),
     setTipoComprobante: (tipo) => set({ tipoComprobante: tipo }),
     openPriceCheckModal: () => set({ isPriceCheckModalOpen: true }),

@@ -67,6 +67,8 @@ type RegistrarVentaRequest struct {
 	TipoDocReceptor *int `json:"tipo_doc_receptor" validate:"omitempty"`
 	// NroDocReceptor: CUIT/DNI del receptor, "0" si ConsumidorFinal
 	NroDocReceptor *string `json:"nro_doc_receptor"  validate:"omitempty"`
+	// ReceptorDomicilio: domicilio del comprador para el comprobante fiscal
+	ReceptorDomicilio *string `json:"receptor_domicilio" validate:"omitempty,max=255"`
 }
 
 type AnularVentaRequest struct {

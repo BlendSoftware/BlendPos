@@ -35,6 +35,20 @@ type FacturacionJobPayload struct {
 	TipoDocReceptor *int `json:"tipo_doc_receptor,omitempty"`
 	// NroDocReceptor: CUIT/DNI del receptor, empty = default to "0"
 	NroDocReceptor *string `json:"nro_doc_receptor,omitempty"`
+	// ReceptorDomicilio: domicilio del comprador para la factura/PDF
+	ReceptorDomicilio *string `json:"receptor_domicilio,omitempty"`
+}
+
+func applyPayloadToComprobante(comp *model.Comprobante, payload *FacturacionJobPayload) {
+	if comp == nil || payload == nil {
+		return
+	}
+	comp.ReceptorTipoDocumento = payload.TipoDocReceptor
+	comp.ReceptorNumeroDocumento = payload.NroDocReceptor
+	comp.ReceptorDomicilio = payload.ReceptorDomicilio
+	if payload.NroDocReceptor != nil && *payload.NroDocReceptor != "" && *payload.NroDocReceptor != "0" {
+		comp.ReceptorCUIT = payload.NroDocReceptor
+	}
 }
 
 // FacturacionWorker processes fiscal billing jobs from QueueFacturacion.
@@ -126,11 +140,13 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 			MontoTotal: venta.Total,
 			Estado:     "pendiente",
 		}
+		applyPayloadToComprobante(comp, &payload)
 		if err := w.comprobanteRepo.Create(ctx, comp); err != nil {
 			log.Error().Err(err).Str("venta_id", payload.VentaID).Msg("facturacion_worker: failed to create comprobante")
 			return
 		}
 	}
+	applyPayloadToComprobante(comp, &payload)
 
 	// 3. For ticket_interno: mark as emitido immediately (no AFIP call needed)
 	if comp.Tipo == "ticket_interno" {

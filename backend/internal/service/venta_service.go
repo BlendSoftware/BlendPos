@@ -329,6 +329,7 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 			ClienteEmail:    req.ClienteEmail,
 			TipoDocReceptor: req.TipoDocReceptor,
 			NroDocReceptor:  req.NroDocReceptor,
+			ReceptorDomicilio: req.ReceptorDomicilio,
 		}
 		if err := s.dispatcher.EnqueueFacturacion(ctx, fiscalPayload); err != nil {
 			log.Error().Err(err).Str("venta_id", venta.ID.String()).
@@ -338,14 +339,18 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 			if s.comprobanteRepo != nil {
 				nextRetry := time.Now().Add(30 * time.Second)
 				comp := &model.Comprobante{
-					VentaID:     venta.ID,
-					Tipo:        tipoComp,
-					MontoNeto:   venta.Total,
-					MontoIVA:    decimal.Zero,
-					MontoTotal:  venta.Total,
-					Estado:      "pendiente",
-					RetryCount:  0,
-					NextRetryAt: &nextRetry,
+					VentaID:              venta.ID,
+					Tipo:                 tipoComp,
+					MontoNeto:            venta.Total,
+					MontoIVA:             decimal.Zero,
+					MontoTotal:           venta.Total,
+					Estado:               "pendiente",
+					ReceptorTipoDocumento: req.TipoDocReceptor,
+					ReceptorNumeroDocumento: req.NroDocReceptor,
+					ReceptorCUIT:         req.NroDocReceptor,
+					ReceptorDomicilio:    req.ReceptorDomicilio,
+					RetryCount:           0,
+					NextRetryAt:          &nextRetry,
 				}
 				if err2 := s.comprobanteRepo.Create(ctx, comp); err2 != nil {
 					log.Error().Err(err2).Str("venta_id", venta.ID.String()).

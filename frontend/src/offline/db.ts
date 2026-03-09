@@ -21,6 +21,12 @@ export interface LocalSale {
     tipoComprobante?: 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c';
     /** CUIT del receptor (requerido para factura_a). */
     cuitReceptor?: string;
+    /** 80=CUIT, 96=DNI, 99=Consumidor Final. */
+    tipoDocReceptor?: number;
+    /** Documento/CUIT del comprador. */
+    nroDocReceptor?: string;
+    /** Domicilio del comprador para comprobantes fiscales. */
+    receptorDomicilio?: string;
     synced: 0 | 1;
 }
 

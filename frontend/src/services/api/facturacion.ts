@@ -21,7 +21,7 @@ export interface FacturacionResponse {
     monto_neto: number;
     monto_iva: number;
     monto_total: number;
-    estado: 'pendiente' | 'emitido' | 'error';
+    estado: 'pendiente' | 'emitido' | 'error' | 'rechazado';
     pdf_url: string | null;
     created_at: string;
 }
@@ -43,6 +43,30 @@ export async function getComprobante(ventaId: string): Promise<FacturacionRespon
 export function getPDFUrl(comprobanteId: string): string {
     const baseUrl = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
     return `${baseUrl}/v1/facturacion/pdf/${comprobanteId}`;
+}
+
+/**
+ * Abre la factura HTML en una nueva pestaña del navegador.
+ * El HTML es autocontenido (logo + barcode en base64) y tiene un botón "Imprimir / Guardar como PDF".
+ */
+export async function abrirFacturaHTML(comprobanteId: string): Promise<void> {
+    const token = tokenStore.getAccessToken();
+    const baseUrl = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
+    const url = `${baseUrl}/v1/facturacion/html/${comprobanteId}`;
+
+    const resp = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    if (!resp.ok) throw new Error(`Factura HTML no disponible: ${resp.status}`);
+
+    const html = await resp.text();
+    const blob = new Blob([html], { type: 'text/html' });
+    const objectUrl = URL.createObjectURL(blob);
+    const win = window.open(objectUrl, '_blank');
+    // Revoke después de que la ventana cargue; 30s es suficiente.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+    if (!win) throw new Error('El navegador bloqueó la ventana emergente. Permití las ventanas emergentes para este sitio.');
 }
 
 /**

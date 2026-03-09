@@ -146,15 +146,24 @@ func NewFacturacionHandler(
 }
 
 func (h *FacturacionHandler) ObtenerComprobante(c *gin.Context) {
-	ventaID, err := uuid.Parse(c.Param("venta_id"))
+	rawVentaID := c.Param("venta_id")
+	ventaID, err := uuid.Parse(rawVentaID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, apierror.New("ID invalido"))
 		return
 	}
 	resp, err := h.svc.ObtenerComprobante(c.Request.Context(), ventaID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, apierror.New("Comprobante no encontrado"))
-		return
+		if h.ventaRepo != nil {
+			venta, offlineErr := h.ventaRepo.FindByOfflineID(c.Request.Context(), rawVentaID)
+			if offlineErr == nil && venta != nil {
+				resp, err = h.svc.ObtenerComprobante(c.Request.Context(), venta.ID)
+			}
+		}
+		if err != nil {
+			c.JSON(http.StatusNotFound, apierror.New("Comprobante no encontrado"))
+			return
+		}
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -327,6 +336,51 @@ func (h *FacturacionHandler) RegenerarPDF(c *gin.Context) {
 
 	log.Info().Str("comprobante_id", id.String()).Str("pdf_path", pdfPath).Msg("RegenerarPDF: PDF fiscal regenerado")
 	c.JSON(http.StatusOK, gin.H{"message": "PDF fiscal regenerado correctamente", "pdf_path": pdfPath})
+}
+
+// ObtenerHTML GET /v1/facturacion/html/:id
+// Devuelve un HTML autocontenido de la factura fiscal lista para imprimir/guardar como PDF desde el navegador.
+func (h *FacturacionHandler) ObtenerHTML(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID inválido"))
+		return
+	}
+
+	ctx := c.Request.Context()
+	claims := middleware.GetClaims(c)
+	if err := h.svc.VerificarAccesoComprobante(ctx, id, claims.Rol, claims.PuntoDeVenta); err != nil {
+		c.JSON(http.StatusForbidden, apierror.New("Acceso denegado"))
+		return
+	}
+
+	comp, err := h.comprobanteRepo.FindByID(ctx, id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, apierror.New("Comprobante no encontrado"))
+		return
+	}
+
+	fiscalCfg, err := h.configFiscalSvc.ObtenerConfiguracionCompleta(ctx)
+	if err != nil || fiscalCfg == nil || fiscalCfg.CUITEmsior == "" {
+		c.JSON(http.StatusServiceUnavailable, apierror.New("Configuración fiscal no disponible"))
+		return
+	}
+
+	venta, err := h.ventaRepo.FindByID(ctx, comp.VentaID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, apierror.New("Venta no encontrada"))
+		return
+	}
+
+	htmlContent, err := infra.GenerateFacturaHTML(venta, comp, fiscalCfg)
+	if err != nil {
+		log.Error().Err(err).Str("comprobante_id", id.String()).Msg("ObtenerHTML: generation failed")
+		c.JSON(http.StatusInternalServerError, apierror.New("Error al generar HTML de la factura"))
+		return
+	}
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, "%s", htmlContent)
 }
 
 type ProveedoresHandler struct{ svc service.ProveedorService }

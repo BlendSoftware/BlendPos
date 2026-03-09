@@ -8,7 +8,6 @@ import { SalesTable } from '../components/pos/SalesTable';
 import { TotalPanel } from '../components/pos/TotalPanel';
 import { HotkeysFooter } from '../components/pos/HotkeysFooter';
 import { PaymentModal } from '../components/pos/PaymentModal';
-import { ComprobanteModal } from '../components/pos/ComprobanteModal';
 import { ProductSearch } from '../components/pos/ProductSearch';
 import { PriceCheckModal } from '../components/pos/PriceCheckModal';
 import { DiscountModal } from '../components/pos/DiscountModal';
@@ -263,7 +262,7 @@ export function PosTerminal() {
 
                 case 'F10':
                     e.preventDefault();
-                    if (!anyModalOpen && cart.length > 0) openComprobanteModal();
+                    if (!anyModalOpen && cart.length > 0) openPaymentModal();
                     break;
 
                 case 'Escape':
@@ -395,7 +394,6 @@ export function PosTerminal() {
             <HotkeysFooter />
 
             {/* ── Modales ────────────────────────────────────────── */}
-            <ComprobanteModal />
             <PaymentModal />
             <PriceCheckModal />
             <DiscountModal />

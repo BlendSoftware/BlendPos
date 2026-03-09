@@ -97,6 +97,8 @@ export interface RegistrarVentaRequest {
     tipo_doc_receptor?: number;
     /** CUIT/DNI del receptor. "0" for ConsumidorFinal */
     nro_doc_receptor?: string;
+    /** Domicilio del comprador para comprobantes fiscales. */
+    receptor_domicilio?: string;
 }
 
 // ── API Calls ─────────────────────────────────────────────────────────────────
@@ -126,6 +128,10 @@ export async function syncSalesBatch(sales: LocalSale[]): Promise<VentaResponse[
         sesion_caja_id: s.sesionCajaId ?? '',
         offline_id: s.id,
         cliente_email: s.clienteEmail || undefined,
+        tipo_comprobante: s.tipoComprobante || undefined,
+        tipo_doc_receptor: s.tipoDocReceptor || (s.cuitReceptor ? 80 : undefined),
+        nro_doc_receptor: s.nroDocReceptor || s.cuitReceptor || undefined,
+        receptor_domicilio: s.receptorDomicilio || undefined,
         items: s.items.map((item) => ({
             producto_id: item.id,
             cantidad: item.cantidad,
