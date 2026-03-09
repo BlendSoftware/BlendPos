@@ -395,7 +395,6 @@ export function PosTerminal() {
             <HotkeysFooter />
 
             {/* ── Modales ────────────────────────────────────────── */}
-            <ComprobanteModal />
             <PaymentModal />
             <PriceCheckModal />
             <DiscountModal />
