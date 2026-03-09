@@ -148,11 +148,11 @@ export function PosHeader() {
                 </Group>
             </Modal>
             <Flex align="center" justify="space-between" h="100%" px="lg">
-                <Group gap="sm">
-                    <Text fw={800} size="xl" c={isDark ? 'white' : 'blue.7'} ff="monospace">
-                        BLEND
+                <Group gap={0}>
+                    <Text fw={800} size="xl" c="blue.4" ff="monospace" style={{ letterSpacing: '-0.5px' }}>
+                        Blend
                     </Text>
-                    <Text fw={300} size="xl" c="dimmed">
+                    <Text fw={800} size="xl" c={isDark ? 'white' : 'dark.7'} ff="monospace" style={{ letterSpacing: '-0.5px' }}>
                         POS
                     </Text>
                 </Group>
