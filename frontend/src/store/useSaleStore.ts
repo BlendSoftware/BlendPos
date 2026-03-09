@@ -46,6 +46,12 @@ export interface SaleRecord {
     tipoComprobante: 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c';
     /** CUIT del receptor (requerido para factura_a). */
     cuitReceptor?: string;
+    /** 80=CUIT, 96=DNI, 99=Consumidor Final. */
+    tipoDocReceptor?: number;
+    /** Documento/CUIT del comprador. */
+    nroDocReceptor?: string;
+    /** Domicilio fiscal/comercial del comprador. */
+    receptorDomicilio?: string;
 }
 
 // ── Lean state — only what belongs here ──────────────────────────────────────
@@ -66,6 +72,12 @@ interface SaleState {
         tipoComprobante?: 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c';
         /** CUIT del receptor (required for factura_a). */
         cuitReceptor?: string;
+        /** 80=CUIT, 96=DNI, 99=Consumidor Final. */
+        tipoDocReceptor?: number;
+        /** Documento/CUIT del comprador. */
+        nroDocReceptor?: string;
+        /** Domicilio del comprador para factura fiscal. */
+        receptorDomicilio?: string;
     }) => SaleRecord;
     setCajero: (nombre: string) => void;
     /** Sync ticket counter with backend's last ticket number */
@@ -116,6 +128,9 @@ export const useSaleStore = create<SaleState>()(
                     clienteEmail: pago.clienteEmail,
                     tipoComprobante: pago.tipoComprobante ?? 'ticket_interno',
                     cuitReceptor: pago.cuitReceptor,
+                    tipoDocReceptor: pago.tipoDocReceptor,
+                    nroDocReceptor: pago.nroDocReceptor,
+                    receptorDomicilio: pago.receptorDomicilio,
                 };
 
                 // 🖨️ Printing is now handled by PostSaleModal (user-initiated).

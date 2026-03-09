@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     Modal, Stack, Text, Group, Button, Divider, Select, NumberInput,
-    Badge, Box, Alert, TextInput, Collapse, SegmentedControl
+    Badge, Box, Alert, TextInput, Collapse
 } from '@mantine/core';
 import { CreditCard, Check, X, Wallet, AlertCircle, Mail, Receipt } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
@@ -17,6 +17,22 @@ function formatCurrency(value: number): string {
         minimumFractionDigits: 2,
     }).format(value);
 }
+
+type TipoComprobante = 'auto' | 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c';
+type TipoDocumentoReceptor = 'dni' | 'cuit';
+
+const COMPROBANTE_OPTIONS: Array<{ value: TipoComprobante; label: string }> = [
+    { value: 'auto', label: 'Automatico' },
+    { value: 'ticket_interno', label: 'Ticket' },
+    { value: 'factura_c', label: 'Factura C' },
+    { value: 'factura_b', label: 'Factura B' },
+    { value: 'factura_a', label: 'Factura A' },
+];
+
+const DOCUMENTO_OPTIONS: Array<{ value: TipoDocumentoReceptor; label: string }> = [
+    { value: 'dni', label: 'DNI' },
+    { value: 'cuit', label: 'CUIT' },
+];
 
 export function PaymentModal() {
     const isOpen = usePOSUIStore((s) => s.isPaymentModalOpen);
@@ -34,11 +50,21 @@ export function PaymentModal() {
     const [mixtoQr, setMixtoQr] = useState<number | string>('');
     const [mixtoTransferencia, setMixtoTransferencia] = useState<number | string>('');
     const [clienteEmail, setClienteEmail] = useState('');
-    const [tipoComprobante, setTipoComprobante] = useState<'auto' | 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c'>('auto');
-    const [cuitReceptor, setCuitReceptor] = useState('');
+    const [tipoComprobante, setTipoComprobante] = useState<TipoComprobante>('auto');
+    const [tipoDocumentoReceptor, setTipoDocumentoReceptor] = useState<TipoDocumentoReceptor>('dni');
+    const [documentoReceptor, setDocumentoReceptor] = useState('');
+    const [domicilioReceptor, setDomicilioReceptor] = useState('');
 
     const isEmailValid = clienteEmail === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clienteEmail);
-    const isCuitValid = tipoComprobante !== 'factura_a' || /^\d{11}$/.test(cuitReceptor);
+    const requiresFiscalBuyerData = tipoComprobante === 'factura_a' || tipoComprobante === 'factura_b' || tipoComprobante === 'factura_c';
+    const resolvedDocType: TipoDocumentoReceptor = tipoComprobante === 'factura_a' ? 'cuit' : tipoDocumentoReceptor;
+    const normalizedDocumento = documentoReceptor.replace(/\D/g, '');
+    const isDocumentoValid = !requiresFiscalBuyerData || (
+        resolvedDocType === 'cuit'
+            ? /^\d{11}$/.test(normalizedDocumento)
+            : /^\d{7,8}$/.test(normalizedDocumento)
+    );
+    const isDomicilioValid = !requiresFiscalBuyerData || domicilioReceptor.trim().length >= 5;
 
     const toNumber = (val: number | string): number =>
         (typeof val === 'string' ? parseFloat(val) || 0 : val) || 0;
@@ -89,7 +115,9 @@ export function PaymentModal() {
             setMixtoTransferencia('');
             setClienteEmail('');
             setTipoComprobante('auto');
-            setCuitReceptor('');
+            setTipoDocumentoReceptor('dni');
+            setDocumentoReceptor('');
+            setDomicilioReceptor('');
         }
     }, [isOpen]);
 
@@ -131,7 +159,12 @@ export function PaymentModal() {
             vuelto: vueltoCalc,
             clienteEmail: clienteEmail.trim() || undefined,
             tipoComprobante: tipoComprobante === 'auto' ? undefined : tipoComprobante,
-            cuitReceptor: cuitReceptor.trim() || undefined,
+            cuitReceptor: requiresFiscalBuyerData && resolvedDocType === 'cuit' ? normalizedDocumento : undefined,
+            tipoDocReceptor: requiresFiscalBuyerData
+                ? (resolvedDocType === 'cuit' ? 80 : 96)
+                : undefined,
+            nroDocReceptor: requiresFiscalBuyerData ? normalizedDocumento : undefined,
+            receptorDomicilio: requiresFiscalBuyerData ? domicilioReceptor.trim() : undefined,
         });
         closePaymentModal();
 
@@ -223,47 +256,71 @@ export function PaymentModal() {
                             <Receipt size={18} />
                             <Text size="sm" fw={600}>Tipo de comprobante</Text>
                         </Group>
-                        <SegmentedControl
-                            fullWidth
+                        <Select
+                            label="Comprobante"
+                            placeholder="Elegi el comprobante"
                             value={tipoComprobante}
-                            onChange={(v) => setTipoComprobante(v as typeof tipoComprobante)}
-                            data={[
-                                { value: 'auto', label: '⚡ Automático' },
-                                { value: 'ticket_interno', label: 'Ticket' },
-                                { value: 'factura_c', label: 'Factura C' },
-                                { value: 'factura_b', label: 'Factura B' },
-                                { value: 'factura_a', label: 'Factura A' },
-                            ]}
+                            onChange={(value) => setTipoComprobante((value as TipoComprobante | null) ?? 'auto')}
+                            data={COMPROBANTE_OPTIONS}
                             size="sm"
+                            comboboxProps={{ position: 'bottom', middlewares: { flip: true, shift: true } }}
                         />
                         <Alert icon={<AlertCircle size={14} />} color="blue" variant="light" p="xs">
                             <Text size="xs">
                                 {tipoComprobante === 'auto' 
-                                    ? '📋 Se determinará según tu condición fiscal. Monotributo → Factura C, Responsable Inscripto → Factura B/A'
+                                    ? 'Se determinara segun tu condicion fiscal. Monotributo/Exento -> Factura C. Responsable Inscripto -> Factura B o A.'
                                     : tipoComprobante === 'ticket_interno'
-                                    ? '🎫 Comprobante no fiscal (sin AFIP). Solo para uso interno'
+                                    ? 'Comprobante no fiscal. Solo para uso interno.'
                                     : tipoComprobante === 'factura_c'
-                                    ? '📄 Para consumidores finales (Monotributo). Sin discriminación de IVA'
+                                    ? 'Factura C para consumidor final o monotributo. Requiere documento y domicilio del comprador.'
                                     : tipoComprobante === 'factura_b'
-                                    ? '📄 Para consumidores finales con CUIT. IVA incluido'
-                                    : '📄 Para Responsables Inscriptos. IVA discriminado (requiere CUIT del receptor)'}
+                                    ? 'Factura B con IVA incluido. Requiere documento y domicilio del comprador.'
+                                    : 'Factura A para Responsable Inscripto. Requiere CUIT y domicilio del comprador.'}
                             </Text>
                         </Alert>
                     </Stack>
                 </Box>
 
-                {/* CUIT/DNI del receptor — solo para Factura A */}
-                <Collapse in={tipoComprobante === 'factura_a'}>
-                    <TextInput
-                        label="CUIT del receptor"
-                        description="11 dígitos sin guiones (requerido para Factura A)"
-                        placeholder="20123456789"
-                        value={cuitReceptor}
-                        onChange={(e) => setCuitReceptor(e.currentTarget.value.replace(/\D/g, '').slice(0, 11))}
-                        error={cuitReceptor && !isCuitValid ? 'El CUIT debe tener 11 dígitos' : undefined}
-                        size="sm"
-                        required={tipoComprobante === 'factura_a'}
-                    />
+                <Collapse in={requiresFiscalBuyerData}>
+                    <Stack gap="sm">
+                        {tipoComprobante !== 'factura_a' && (
+                            <Select
+                                label="Tipo de documento"
+                                value={tipoDocumentoReceptor}
+                                onChange={(value) => setTipoDocumentoReceptor((value as TipoDocumentoReceptor | null) ?? 'dni')}
+                                data={DOCUMENTO_OPTIONS}
+                                size="sm"
+                            />
+                        )}
+
+                        <TextInput
+                            label={resolvedDocType === 'cuit' ? 'CUIT del comprador' : 'DNI del comprador'}
+                            description={resolvedDocType === 'cuit'
+                                ? '11 digitos sin guiones'
+                                : '7 u 8 digitos sin puntos'}
+                            placeholder={resolvedDocType === 'cuit' ? '20123456789' : '30123456'}
+                            value={documentoReceptor}
+                            onChange={(e) => setDocumentoReceptor(e.currentTarget.value.replace(/\D/g, '').slice(0, resolvedDocType === 'cuit' ? 11 : 8))}
+                            error={documentoReceptor && !isDocumentoValid
+                                ? resolvedDocType === 'cuit'
+                                    ? 'El CUIT debe tener 11 digitos'
+                                    : 'El DNI debe tener 7 u 8 digitos'
+                                : undefined}
+                            size="sm"
+                            required
+                        />
+
+                        <TextInput
+                            label="Domicilio del comprador"
+                            description="Se usara en la factura fiscal"
+                            placeholder="Av. Siempre Viva 742, Springfield"
+                            value={domicilioReceptor}
+                            onChange={(e) => setDomicilioReceptor(e.currentTarget.value)}
+                            error={domicilioReceptor && !isDomicilioValid ? 'Ingresa un domicilio valido' : undefined}
+                            size="sm"
+                            required
+                        />
+                    </Stack>
                 </Collapse>
 
                 {/* Método de pago */}
@@ -468,7 +525,7 @@ export function PaymentModal() {
                         size="lg"
                         leftSection={<Check size={18} />}
                         onClick={handleConfirmPayment}
-                        disabled={!canConfirm || !isEmailValid || !isCuitValid}
+                        disabled={!canConfirm || !isEmailValid || !isDocumentoValid || !isDomicilioValid}
                     >
                         Confirmar Pago
                     </Button>

@@ -92,20 +92,46 @@ func processRetries(ctx context.Context, cfg RetryCronConfig) {
 			return
 		}
 
-		// Read CUIT from fiscal config (fallback to empty)
+		// Read fiscal config (fallback to safe defaults)
 		cuitEmisor := ""
+		puntoDeVenta := comp.PuntoDeVenta
 		if cfg.ConfigFiscalSvc != nil {
 			if fiscalCfg, err := cfg.ConfigFiscalSvc.ObtenerConfiguracion(ctx); err == nil && fiscalCfg != nil {
 				cuitEmisor = fiscalCfg.CUITEmsior
+				if puntoDeVenta == 0 {
+					puntoDeVenta = fiscalCfg.PuntoDeVenta
+				}
 			}
+		}
+
+		tipoComprobante := 11
+		switch comp.Tipo {
+		case "factura_a":
+			tipoComprobante = 1
+		case "factura_b":
+			tipoComprobante = 6
+		case "factura_c":
+			tipoComprobante = 11
+		}
+
+		tipoDocReceptor := 99
+		if comp.ReceptorTipoDocumento != nil {
+			tipoDocReceptor = *comp.ReceptorTipoDocumento
+		}
+
+		nroDocReceptor := "0"
+		if comp.ReceptorNumeroDocumento != nil && *comp.ReceptorNumeroDocumento != "" {
+			nroDocReceptor = *comp.ReceptorNumeroDocumento
+		} else if comp.ReceptorCUIT != nil && *comp.ReceptorCUIT != "" {
+			nroDocReceptor = *comp.ReceptorCUIT
 		}
 
 		afipPayload := infra.AFIPPayload{
 		CUITEmisor:       cuitEmisor,
-		PuntoDeVenta:     comp.PuntoDeVenta,
-		TipoComprobante:  11,
-		TipoDocReceptor:  99,
-		NroDocReceptor:   "0",
+		PuntoDeVenta:     puntoDeVenta,
+		TipoComprobante:  tipoComprobante,
+		TipoDocReceptor:  tipoDocReceptor,
+		NroDocReceptor:   nroDocReceptor,
 		Concepto:         1,
 		ImporteNeto:      comp.MontoNeto.StringFixed(2),
 		ImporteExento:    decimal.Zero.StringFixed(2),

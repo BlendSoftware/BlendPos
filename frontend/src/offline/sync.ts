@@ -34,6 +34,9 @@ function toLocalSale(sale: SaleRecord): LocalSale {
         clienteEmail: sale.clienteEmail,
         tipoComprobante: sale.tipoComprobante,
         cuitReceptor: sale.cuitReceptor,
+        tipoDocReceptor: sale.tipoDocReceptor,
+        nroDocReceptor: sale.nroDocReceptor,
+        receptorDomicilio: sale.receptorDomicilio,
         synced: 0,
     };
 }
