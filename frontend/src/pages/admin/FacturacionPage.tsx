@@ -4,12 +4,12 @@ import {
     Tooltip, TextInput, Modal, Button, Select, Alert, UnstyledButton,
 } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
-import { Printer, Download, ChevronDown, ChevronUp, Search, Ban, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
+import { Printer, Download, FileText, ChevronDown, ChevronUp, Search, Ban, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
 import { type SaleRecord, type MetodoPago } from '../../store/useSaleStore';
 import { anularVenta, listarVentas, type VentaListItem } from '../../services/api/ventas';
-import { getComprobante, descargarPDF } from '../../services/api/facturacion';
+import { getComprobante, descargarPDF, abrirFacturaHTML } from '../../services/api/facturacion';
 import { thermalPrinter } from '../../services/ThermalPrinterService';
 import { usePrinterStore } from '../../store/usePrinterStore';
 import { formatARS } from '../../utils/format';
@@ -217,7 +217,6 @@ export function FacturacionPage() {
 
     const handleDownloadPDF = async (v: IVenta) => {
         try {
-            // Intentar obtener el id real del comprobante desde el backend
             const comp = await getComprobante(v.id).catch(() => null);
             const pdfId = comp?.id ?? v.id;
             await descargarPDF(pdfId, `ticket_${v.numeroTicket}.pdf`);
@@ -227,6 +226,28 @@ export function FacturacionPage() {
                 message: 'El comprobante aún no fue generado o el backend no está conectado.',
                 color: 'orange',
                 icon: <Download size={14} />,
+            });
+        }
+    };
+
+    const handleVerFactura = async (v: IVenta) => {
+        try {
+            const comp = await getComprobante(v.id).catch(() => null);
+            if (!comp) {
+                notifications.show({
+                    title: 'Sin comprobante fiscal',
+                    message: 'Esta venta no tiene comprobante fiscal registrado.',
+                    color: 'orange',
+                });
+                return;
+            }
+            await abrirFacturaHTML(comp.id);
+        } catch (e: unknown) {
+            notifications.show({
+                title: 'No se pudo abrir la factura',
+                message: e instanceof Error ? e.message : 'Error desconocido.',
+                color: 'red',
+                icon: <FileText size={14} />,
             });
         }
     };
@@ -434,6 +455,11 @@ export function FacturacionPage() {
                                             <Tooltip label="Reimprimir" withArrow>
                                                 <ActionIcon variant="subtle" color="blue" onClick={() => handleReprint(v)} disabled={v.anulada}>
                                                     <Printer size={15} />
+                                                </ActionIcon>
+                                            </Tooltip>
+                                            <Tooltip label="Ver factura" withArrow>
+                                                <ActionIcon variant="subtle" color="teal" onClick={() => handleVerFactura(v)}>
+                                                    <FileText size={15} />
                                                 </ActionIcon>
                                             </Tooltip>
                                             <Tooltip label="Descargar PDF" withArrow>

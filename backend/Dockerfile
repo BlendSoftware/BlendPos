@@ -31,6 +31,7 @@ RUN adduser -D -u 1001 blendpos
 COPY --from=builder /blendpos /blendpos
 COPY --from=builder /usr/local/bin/migrate /usr/local/bin/migrate
 COPY --chown=blendpos:blendpos backend/migrations /migrations
+COPY --chown=blendpos:blendpos backend/static /app/static
 
 # Entrypoint script: run migrations then start server
 COPY --chown=blendpos:blendpos backend/entrypoint.sh /entrypoint.sh

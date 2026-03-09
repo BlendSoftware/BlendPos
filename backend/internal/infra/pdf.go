@@ -291,12 +291,14 @@ func GenerateFacturaFiscalPDF(
 	// ── LEFT: Logo area + Emisor ──────────────────────────────────────────
 	xL := marginL + 3
 	logoRendered := false
+	logoFilePDF := "/app/static/logo.png"
 	if config.LogoPath != nil && *config.LogoPath != "" {
-		if _, statErr := os.Stat(*config.LogoPath); statErr == nil {
-			// Logo height proportional, max 18mm, positioned top-left of left column
-			pdf.Image(*config.LogoPath, xL, startY+2, leftW*0.45, 0, false, "", 0, "")
-			logoRendered = true
-		}
+		logoFilePDF = *config.LogoPath
+	}
+	if _, statErr := os.Stat(logoFilePDF); statErr == nil {
+		// Logo height proportional, max 18mm, positioned top-left of left column
+		pdf.Image(logoFilePDF, xL, startY+2, leftW*0.45, 0, false, "", 0, "")
+		logoRendered = true
 	}
 	textStartY := startY + 3
 	if logoRendered {
@@ -446,12 +448,12 @@ func GenerateFacturaFiscalPDF(
 	pdf.SetFont("Helvetica", "", 8)
 	pdf.CellFormat(rightW-25, 5, tr(docNum), "", 1, "L", false, 0, "")
 
-	// CONDICIÓN DE PAGO row
+	// CONDICIÓN DE PAGO row — label cell widened to 58mm to avoid text overflow
 	condPagoY := recY + recH - 7
 	pdf.Line(marginL, condPagoY, marginL+contentW, condPagoY)
 	pdf.SetXY(marginL+3, condPagoY+1.5)
 	pdf.SetFont("Helvetica", "B", 7.5)
-	pdf.CellFormat(40, 4, tr("CONDICIÓN Y FORMA DE PAGO:"), "", 0, "L", false, 0, "")
+	pdf.CellFormat(58, 4, tr("CONDICIÓN Y FORMA DE PAGO:"), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 7.5)
 	condPago := "Contado"
 	if len(venta.Pagos) > 0 {
@@ -574,9 +576,9 @@ func GenerateFacturaFiscalPDF(
 	// CAE + BARCODE FOOTER
 	// ═══════════════════════════════════════════════════════════════════════
 	caeY := pdf.GetY()
-	pdf.Line(marginL, caeY, marginL+contentW, caeY+28)
-	pdf.Line(marginL, caeY+28, marginL+contentW, caeY+28)
-	pdf.Line(marginL+contentW*0.5, caeY, marginL+contentW*0.5, caeY+28)
+	pdf.Line(marginL, caeY, marginL+contentW, caeY)          // top border (horizontal)
+	pdf.Line(marginL, caeY+28, marginL+contentW, caeY+28)    // bottom border
+	pdf.Line(marginL+contentW*0.5, caeY, marginL+contentW*0.5, caeY+28) // vertical divider
 
 	// Left: CAE text
 	pdf.SetXY(marginL+3, caeY+2)

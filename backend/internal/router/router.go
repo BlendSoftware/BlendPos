@@ -160,6 +160,7 @@ func New(d Deps) *gin.Engine {
 		{
 			factR.GET("/:venta_id", facturacionH.ObtenerComprobante)
 			factR.GET("/pdf/:id", facturacionH.DescargarPDF)
+			factR.GET("/html/:id", facturacionH.ObtenerHTML)
 		}
 		// Write operations: admin/supervisor only
 		factW := v1.Group("/facturacion", middleware.RequireRole("administrador", "supervisor"))
