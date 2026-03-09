@@ -609,8 +609,11 @@ func GenerateFacturaFiscalPDF(
 						if encErr := png.Encode(f, scaledBarcode); encErr == nil {
 							f.Close()
 							barcodeX := marginL + contentW*0.5 + 3
-							barcodeY := caeY + 4
+							barcodeY := caeY + 3
 							pdf.Image(tmpBarcode, barcodeX, barcodeY, contentW*0.5-6, 0, false, "", 0, "")
+							pdf.SetXY(barcodeX, caeY+21)
+							pdf.SetFont("Helvetica", "", 6.5)
+							pdf.CellFormat(contentW*0.5-6, 3.5, tr(barcodeData), "", 0, "C", false, 0, "")
 						} else {
 							f.Close()
 						}

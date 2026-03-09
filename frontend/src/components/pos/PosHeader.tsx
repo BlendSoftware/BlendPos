@@ -146,7 +146,7 @@ export function PosHeader() {
             </Modal>
 
             <Flex align="center" justify="space-between" h="100%" px="lg">
-                <Text className={styles.brand}>blendPOS</Text>
+                <Text className={styles.brand}>BlendPOS</Text>
 
                 <Group gap="xs">
                     <User size={18} color="#909296" />

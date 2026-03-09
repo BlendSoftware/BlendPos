@@ -80,6 +80,7 @@ type facturaHTMLData struct {
 	CAE            string
 	CAEVencimiento string
 	BarcodeDataURL template.URL // "data:image/png;base64,..." or ""
+	BarcodeText    string
 }
 
 // ─── Template (raw string) ────────────────────────────────────────────────────
@@ -182,8 +183,12 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     .cae-left { padding: 6px 10px; border-right: 1px solid #000; }
     .cae-title { font-weight: bold; font-size: 9.5px; margin-bottom: 3px; }
     .cae-data  { font-size: 8.5px; margin-bottom: 2px; }
-    .cae-right { padding: 6px 10px; display: flex; align-items: center; justify-content: center; }
+		.cae-right {
+			padding: 6px 10px; display: flex; flex-direction: column;
+			align-items: center; justify-content: center; gap: 3px;
+		}
     .barcode-img { max-height: 48px; max-width: 100%; }
+		.barcode-text { font-size: 8px; letter-spacing: 0.8px; line-height: 1; text-align: center; }
 
     /* === LEGAL === */
     .legal { padding: 4px 10px; border-top: 1px solid #000; font-size: 7px; font-style: italic; color: #444; line-height: 1.5; }
@@ -310,6 +315,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       </div>
       <div class="cae-right">
         {{if .BarcodeDataURL}}<img class="barcode-img" src="{{.BarcodeDataURL}}" alt="C&#243;digo de barras CAE">{{end}}
+				{{if .BarcodeText}}<div class="barcode-text">{{.BarcodeText}}</div>{{end}}
       </div>
     </div>
 
@@ -485,10 +491,12 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 
 	// ── Barcode inline base64 ─────────────────────────────────────────────
 	barcodeDataURL := template.URL("")
+	barcodeText := ""
 	if cae != "" {
 		cuitClean := strings.ReplaceAll(config.CUITEmsior, "-", "")
 		if len(cuitClean) == 11 {
 			barcodeStr := fmt.Sprintf("%s%02d%04d%s", cuitClean, tipoCodigo, pvDisplay, cae)
+			barcodeText = barcodeStr
 			if barcodeImg, bcErr := code128.Encode(barcodeStr); bcErr == nil {
 				if scaled, scErr := barcode.Scale(barcodeImg, 600, 60); scErr == nil {
 					var buf bytes.Buffer
@@ -526,6 +534,7 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 		CAE:               cae,
 		CAEVencimiento:    caeVencimiento,
 		BarcodeDataURL:    barcodeDataURL,
+		BarcodeText:       barcodeText,
 	}
 
 	var buf bytes.Buffer
