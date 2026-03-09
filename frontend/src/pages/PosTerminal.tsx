@@ -8,7 +8,6 @@ import { SalesTable } from '../components/pos/SalesTable';
 import { TotalPanel } from '../components/pos/TotalPanel';
 import { HotkeysFooter } from '../components/pos/HotkeysFooter';
 import { PaymentModal } from '../components/pos/PaymentModal';
-import { ComprobanteModal } from '../components/pos/ComprobanteModal';
 import { ProductSearch } from '../components/pos/ProductSearch';
 import { PriceCheckModal } from '../components/pos/PriceCheckModal';
 import { DiscountModal } from '../components/pos/DiscountModal';

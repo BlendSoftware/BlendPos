@@ -1,6 +1,6 @@
 import { useEffect, useState, memo } from 'react';
 import { Group, Text, Badge, Flex, Tooltip, ActionIcon, Modal, Button, useMantineColorScheme } from '@mantine/core';
-import { Wifi, WifiOff, User, Printer, PanelLeftOpen, Settings, LogOut, Bug } from 'lucide-react';
+import { Wifi, WifiOff, User, Printer, PanelLeftOpen, Settings, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -9,11 +9,9 @@ import { useSyncStatus } from '../../hooks/useSyncStatus';
 import { usePrinterStore } from '../../store/usePrinterStore';
 import { useCajaStore } from '../../store/useCajaStore';
 import { PrinterSettingsModal } from './PrinterSettingsModal';
-import { DebugInfoModal } from './DebugInfoModal';
 import { ThemeToggle } from '../ThemeToggle';
 import styles from './PosHeader.module.css';
 
-// ── Isolated Clock — only this component re-renders every second ─────────────
 const Clock = memo(function Clock() {
     const [time, setTime] = useState(new Date());
     const { colorScheme } = useMantineColorScheme();
@@ -53,7 +51,6 @@ export function PosHeader() {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [printerConnected, setPrinterConnected] = useState(thermalPrinter.isConnected);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [debugOpen, setDebugOpen] = useState(false);
     const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
     const { pending: syncPending, syncState } = useSyncStatus();
 
@@ -65,7 +62,6 @@ export function PosHeader() {
     const isDark = colorScheme === 'dark';
 
     useEffect(() => {
-        // Auto-reconexión a puertos ya autorizados (no requiere click)
         thermalPrinter.autoConnectIfPossible(printerConfig.baudRate)
             .then((ok) => setPrinterConnected(ok))
             .catch(() => setPrinterConnected(false));
@@ -92,34 +88,35 @@ export function PosHeader() {
                 color: 'gray',
                 icon: <Printer size={14} />,
             });
-        } else {
-            const ok = await thermalPrinter.connect(printerConfig.baudRate);
-            setPrinterConnected(ok);
-            if (ok) {
-                notifications.show({
-                    title: 'Impresora conectada',
-                    message: 'Lista para imprimir tickets ESC/POS.',
-                    color: 'teal',
-                    icon: <Printer size={14} />,
-                });
-            } else {
-                notifications.show({
-                    title: 'No se pudo conectar',
-                    message: 'El navegador no soporta Web Serial o el usuario canceló. Los tickets se mostrarán en consola.',
-                    color: 'orange',
-                    icon: <Printer size={14} />,
-                    autoClose: 5000,
-                });
-            }
+            return;
         }
+
+        const ok = await thermalPrinter.connect(printerConfig.baudRate);
+        setPrinterConnected(ok);
+
+        if (ok) {
+            notifications.show({
+                title: 'Impresora conectada',
+                message: 'Lista para imprimir tickets ESC/POS.',
+                color: 'teal',
+                icon: <Printer size={14} />,
+            });
+            return;
+        }
+
+        notifications.show({
+            title: 'No se pudo conectar',
+            message: 'El navegador no soporta Web Serial o el usuario canceló. Los tickets se mostrarán en consola.',
+            color: 'orange',
+            icon: <Printer size={14} />,
+            autoClose: 5000,
+        });
     };
 
     return (
         <header className={styles.header}>
             <PrinterSettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} />
-            <DebugInfoModal opened={debugOpen} onClose={() => setDebugOpen(false)} />
 
-            {/* Logout confirmation modal */}
             <Modal
                 opened={logoutConfirmOpen}
                 onClose={() => setLogoutConfirmOpen(false)}
@@ -147,6 +144,7 @@ export function PosHeader() {
                     </Button>
                 </Group>
             </Modal>
+
             <Flex align="center" justify="space-between" h="100%" px="lg">
                 <Text className={styles.brand}>blendPOS</Text>
 
@@ -173,7 +171,6 @@ export function PosHeader() {
                 </Group>
 
                 <Group gap="md">
-                    {/* Printer connect button */}
                     <Tooltip
                         label={printerConnected ? 'Desconectar impresora' : 'Conectar impresora térmica'}
                         withArrow
@@ -188,7 +185,6 @@ export function PosHeader() {
                         </ActionIcon>
                     </Tooltip>
 
-                    {/* Printer settings button */}
                     <Tooltip label="Configuración de impresora" withArrow>
                         <ActionIcon
                             variant="subtle"
@@ -200,21 +196,6 @@ export function PosHeader() {
                         </ActionIcon>
                     </Tooltip>
 
-                    {/* Debug info button - Admin/Supervisor only */}
-                    {hasRole(['admin', 'supervisor']) && (
-                        <Tooltip label="Debug & Diagnóstico" withArrow>
-                            <ActionIcon
-                                variant="subtle"
-                                color="violet"
-                                size="md"
-                                onClick={() => setDebugOpen(true)}
-                            >
-                                <Bug size={16} />
-                            </ActionIcon>
-                        </Tooltip>
-                    )}
-
-                    {/* Admin panel link (only for admin/supervisor) */}
                     {hasRole(['admin', 'supervisor']) && (
                         <Tooltip label="Panel Admin" withArrow>
                             <ActionIcon
@@ -228,10 +209,8 @@ export function PosHeader() {
                         </Tooltip>
                     )}
 
-                    {/* Theme toggle */}
                     <ThemeToggle size="md" />
 
-                    {/* Logout button — visually separated, requires confirmation */}
                     <div style={{ width: 1, height: 24, background: 'var(--mantine-color-default-border)', margin: '0 8px' }} />
                     <Tooltip label="Cerrar sesión" withArrow>
                         <ActionIcon
@@ -253,11 +232,7 @@ export function PosHeader() {
                             }
                             withArrow
                         >
-                            <Badge
-                                color="yellow"
-                                size="lg"
-                                variant="light"
-                            >
+                            <Badge color="yellow" size="lg" variant="light">
                                 <Group gap={6}>
                                     <span>{syncState === 'syncing' ? '⟳ Sync' : 'Sync'}</span>
                                     <span>{syncPending}</span>
