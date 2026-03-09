@@ -141,6 +141,77 @@ func GenerateTicketPDF(venta *model.Venta, storagePath string) (string, error) {
 	return filePath, nil
 }
 
+// amountToWords converts a decimal amount to Spanish words (simplified, for Argentine invoices).
+func amountToWords(amount decimal.Decimal) string {
+	units := []string{"", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve",
+		"diez", "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve",
+		"veinte", "veintiuno", "veintidós", "veintitrés", "veinticuatro", "veinticinco", "veintiséis", "veintisiete", "veintiocho", "veintinueve"}
+	tens := []string{"", "", "veinte", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"}
+	hundreds := []string{"", "ciento", "doscientos", "trescientos", "cuatrocientos", "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos"}
+
+	intPart := amount.Floor().IntPart()
+	centsPart := amount.Sub(decimal.NewFromInt(intPart)).Mul(decimal.NewFromInt(100)).Round(0).IntPart()
+
+	var intWords string
+	if intPart == 0 {
+		intWords = "cero"
+	} else if intPart == 100 {
+		intWords = "cien"
+	} else if intPart < 30 {
+		intWords = units[intPart]
+	} else if intPart < 100 {
+		t := intPart / 10
+		u := intPart % 10
+		if u == 0 {
+			intWords = tens[t]
+		} else {
+			intWords = tens[t] + " y " + units[u]
+		}
+	} else if intPart < 1000 {
+		h := intPart / 100
+		rest := intPart % 100
+		if rest == 0 {
+			intWords = hundreds[h]
+		} else if rest < 30 {
+			intWords = hundreds[h] + " " + units[rest]
+		} else {
+			t := rest / 10
+			u := rest % 10
+			if u == 0 {
+				intWords = hundreds[h] + " " + tens[t]
+			} else {
+				intWords = hundreds[h] + " " + tens[t] + " y " + units[u]
+			}
+		}
+	} else if intPart < 1000000 {
+		thousands := intPart / 1000
+		rest := intPart % 1000
+		var tStr string
+		if thousands == 1 {
+			tStr = "mil"
+		} else if thousands < 30 {
+			tStr = units[thousands] + " mil"
+		} else {
+			tStr = fmt.Sprintf("%d mil", thousands)
+		}
+		if rest == 0 {
+			intWords = tStr
+		} else if rest < 100 {
+			if rest < 30 {
+				intWords = tStr + " " + units[rest]
+			} else {
+				intWords = tStr + " " + fmt.Sprintf("%d", rest)
+			}
+		} else {
+			intWords = tStr + " " + fmt.Sprintf("%d", rest)
+		}
+	} else {
+		intWords = fmt.Sprintf("%d", intPart)
+	}
+
+	return fmt.Sprintf("%s con %02d/100", strings.ToUpper(intWords[:1])+intWords[1:], centsPart)
+}
+
 // GenerateFacturaFiscalPDF generates an AFIP-compliant professional invoice PDF (A4 format).
 // Includes CAE, barcode, full fiscal data, and tax breakdown according to AFIP regulations.
 // Generates facturas tipo A, B, or C depending on the fiscal condition and client type.
@@ -160,22 +231,19 @@ func GenerateFacturaFiscalPDF(
 	switch comp.Tipo {
 	case "factura_a":
 		tipoLetra = "A"
-		tipoNombre = "FACTURA A"
+		tipoNombre = "FACTURA"
 	case "factura_b":
 		tipoLetra = "B"
-		tipoNombre = "FACTURA B"
+		tipoNombre = "FACTURA"
 	case "factura_c":
 		tipoLetra = "C"
-		tipoNombre = "FACTURA C"
+		tipoNombre = "FACTURA"
 	}
 
-	// Dereference Numero pointer safely
 	var numeroComprobante int64
 	if comp.Numero != nil {
 		numeroComprobante = *comp.Numero
 	}
-
-	// Use fiscal config PuntoDeVenta
 	pvDisplay := comp.PuntoDeVenta
 	if pvDisplay == 0 {
 		pvDisplay = config.PuntoDeVenta
@@ -184,43 +252,60 @@ func GenerateFacturaFiscalPDF(
 	fileName := fmt.Sprintf("factura_%s_%04d_%08d.pdf", tipoLetra, pvDisplay, numeroComprobante)
 	filePath := filepath.Join(storagePath, fileName)
 
-	// ═══════════════════════════════════════════════════════════════════════
-	// SETUP PDF (A4)
-	// ═══════════════════════════════════════════════════════════════════════
 	pdf := fpdf.New("P", "mm", "A4", "")
-	pdf.SetMargins(12, 12, 12)
+	pdf.SetMargins(10, 10, 10)
 	pdf.AddPage()
-
 	tr := pdf.UnicodeTranslatorFromDescriptor("")
-	pageW, _ := pdf.GetPageSize()
-	contentW := pageW - 24 // both margins
+
+	pageW, pageH := pdf.GetPageSize()
+	marginL := 10.0
+	marginR := 10.0
+	contentW := pageW - marginL - marginR
+	_ = pageH
 
 	// ═══════════════════════════════════════════════════════════════════════
-	// HEADER SECTION: Emisor + Tipo Comprobante Box + Número
+	// OUTER BORDER (entire invoice)
 	// ═══════════════════════════════════════════════════════════════════════
-	leftColW := contentW * 0.42
-	centerBoxW := contentW * 0.16
-	rightColW := contentW * 0.42
+	pdf.SetDrawColor(0, 0, 0)
+	pdf.SetLineWidth(0.5)
+	pdf.Rect(marginL, 10, contentW, 267, "D")
 
-	startY := pdf.GetY()
+	// ═══════════════════════════════════════════════════════════════════════
+	// HEADER: two columns split by center box
+	// Left 42% = emisor | Center 16% = tipo | Right 42% = datos comprobante
+	// ═══════════════════════════════════════════════════════════════════════
+	headerH := 42.0
+	leftW := contentW * 0.42
+	centerW := contentW * 0.16
+	rightW := contentW * 0.42
+	startY := 10.0
 
-	// ─── LEFT: Emisor Data ───────────────────────────────────────────────
-	pdf.SetFont("Helvetica", "B", 12)
-	pdf.CellFormat(leftColW, 6, tr(config.RazonSocial), "", 1, "L", false, 0, "")
-	
-	pdf.SetFont("Helvetica", "", 9)
-	// Domicilio
+	// Left border
+	pdf.SetLineWidth(0.3)
+	pdf.Line(marginL+leftW, startY, marginL+leftW, startY+headerH)
+	// Right border of center box
+	pdf.Line(marginL+leftW+centerW, startY, marginL+leftW+centerW, startY+headerH)
+	// Bottom of header
+	pdf.Line(marginL, startY+headerH, marginL+contentW, startY+headerH)
+
+	// ── LEFT: Logo area + Emisor ──────────────────────────────────────────
+	xL := marginL + 3
+	pdf.SetXY(xL, startY+3)
+	pdf.SetFont("Helvetica", "B", 14)
+	pdf.CellFormat(leftW-4, 7, tr(config.RazonSocial), "", 1, "L", false, 0, "")
+
+	pdf.SetXY(xL, pdf.GetY())
+	pdf.SetFont("Helvetica", "", 8)
 	if config.DomicilioComercial != nil && *config.DomicilioComercial != "" {
-		pdf.CellFormat(leftColW, 4, tr(*config.DomicilioComercial), "", 1, "L", false, 0, "")
+		pdf.CellFormat(leftW-4, 4.5, tr(*config.DomicilioComercial), "", 1, "L", false, 0, "")
 	}
-	// Ciudad, Provincia, CP
 	var localidad string
 	if config.DomicilioCiudad != nil && *config.DomicilioCiudad != "" {
 		localidad = *config.DomicilioCiudad
 	}
 	if config.DomicilioProvincia != nil && *config.DomicilioProvincia != "" {
 		if localidad != "" {
-			localidad += ", " + *config.DomicilioProvincia
+			localidad += " - " + *config.DomicilioProvincia
 		} else {
 			localidad = *config.DomicilioProvincia
 		}
@@ -228,259 +313,287 @@ func GenerateFacturaFiscalPDF(
 	if config.DomicilioCodigoPostal != nil && *config.DomicilioCodigoPostal != "" {
 		if localidad != "" {
 			localidad += " (" + *config.DomicilioCodigoPostal + ")"
-		} else {
-			localidad = "CP " + *config.DomicilioCodigoPostal
 		}
 	}
 	if localidad != "" {
-		pdf.CellFormat(leftColW, 4, tr(localidad), "", 1, "L", false, 0, "")
+		pdf.SetXY(xL, pdf.GetY())
+		pdf.CellFormat(leftW-4, 4.5, tr(localidad), "", 1, "L", false, 0, "")
 	}
 
+	condFiscal := config.CondicionFiscal
+	pdf.SetXY(xL, pdf.GetY()+1)
 	pdf.SetFont("Helvetica", "B", 8)
-	pdf.CellFormat(leftColW, 4, tr("CUIT: "+config.CUITEmsior), "", 1, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 8)
-	pdf.CellFormat(leftColW, 4, tr(config.CondicionFiscal), "", 1, "L", false, 0, "")
-	
-	// Fecha inicio actividades
-	if config.FechaInicioActividades != nil {
-		pdf.CellFormat(leftColW, 4, tr("Inicio Act: "+config.FechaInicioActividades.Format("02/01/2006")), "", 1, "L", false, 0, "")
-	}
-	
-	// IIBB
-	if config.IIBB != nil && *config.IIBB != "" {
-		pdf.CellFormat(leftColW, 4, tr("IIBB: "+*config.IIBB), "", 1, "L", false, 0, "")
-	}
+	pdf.CellFormat(leftW-4, 4.5, tr(condFiscal), "", 1, "L", false, 0, "")
 
-	// ─── CENTER: Tipo Comprobante Box (large letter) ─────────────────────
-	boxX := 12 + leftColW
-	boxY := startY
-	boxH := 35.0
-
-	pdf.SetXY(boxX, boxY)
-	pdf.SetDrawColor(0, 0, 0)
-	pdf.SetLineWidth(1.2)
-	pdf.Rect(boxX, boxY, centerBoxW, boxH, "D")
-	
-	// Big letter in center
-	pdf.SetXY(boxX, boxY+10)
-	pdf.SetFont("Helvetica", "B", 52)
-	pdf.CellFormat(centerBoxW, 18, tipoLetra, "", 1, "C", false, 0, "")
-	
-	// Código below
-	pdf.SetXY(boxX, boxY+28)
+	// ── CENTER: Large tipo letter ─────────────────────────────────────────
+	boxX := marginL + leftW
+	pdf.SetXY(boxX, startY+1)
+	pdf.SetFont("Helvetica", "B", 7)
+	pdf.CellFormat(centerW, 4, tr(tipoNombre), "", 1, "C", false, 0, "")
+	pdf.SetXY(boxX, startY+5)
+	pdf.SetFont("Helvetica", "B", 48)
+	pdf.CellFormat(centerW, 22, tipoLetra, "", 1, "C", false, 0, "")
+	pdf.SetXY(boxX, startY+27)
 	pdf.SetFont("Helvetica", "", 7)
-	pdf.CellFormat(centerBoxW, 3, tr("COD. "+fmt.Sprintf("%02d", tipoComprobanteCode(comp.Tipo))), "", 1, "C", false, 0, "")
+	pdf.CellFormat(centerW, 4, tr(fmt.Sprintf("COD. %02d", tipoComprobanteCode(comp.Tipo))), "", 1, "C", false, 0, "")
 
-	// ─── RIGHT: Comprobante Info ─────────────────────────────────────────
-	rightX := boxX + centerBoxW
-	pdf.SetXY(rightX, startY)
+	// ── RIGHT: Comprobante fiscal data ────────────────────────────────────
+	xR := marginL + leftW + centerW + 3
+	pdf.SetXY(xR, startY+3)
 	pdf.SetFont("Helvetica", "B", 11)
-	pdf.CellFormat(rightColW, 6, tr(tipoNombre), "", 1, "L", false, 0, "")
-	
-	pdf.SetXY(rightX, startY+6)
-	pdf.SetFont("Helvetica", "", 9)
-	// Número de 12 dígitos: 4 PV + 8 número
-	numeroFormatted := fmt.Sprintf("%04d-%08d", pvDisplay, numeroComprobante)
-	pdf.CellFormat(rightColW, 5, tr("N°: "+numeroFormatted), "", 1, "L", false, 0, "")
-	
-	pdf.SetXY(rightX, startY+11)
-	pdf.CellFormat(rightColW, 5, tr("Fecha: "+venta.CreatedAt.Format("02/01/2006")), "", 1, "L", false, 0, "")
-	
-	// Original / Duplicado
-	pdf.SetXY(rightX, startY+16)
-	pdf.SetFont("Helvetica", "B", 8)
-	pdf.CellFormat(rightColW, 4, tr("ORIGINAL"), "", 1, "L", false, 0, "")
+	numeroFormatted := fmt.Sprintf("N° %04d-%08d", pvDisplay, numeroComprobante)
+	pdf.CellFormat(rightW-4, 6, tr(numeroFormatted), "", 1, "L", false, 0, "")
 
-	pdf.SetY(startY + boxH + 3)
-	pdf.Line(12, pdf.GetY(), pageW-12, pdf.GetY())
-	pdf.Ln(4)
+	pdf.SetXY(xR, pdf.GetY())
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.CellFormat(22, 5, tr("Fecha"), "", 0, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.CellFormat(rightW-26, 5, tr(venta.CreatedAt.Format("2/1/2006")), "", 1, "L", false, 0, "")
+
+	pdf.SetXY(xR, pdf.GetY())
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.CellFormat(rightW-4, 5, tr("ORIGINAL"), "", 1, "L", false, 0, "")
+
+	// Fiscal metadata on right column
+	pdf.SetXY(xR, pdf.GetY()+1)
+	pdf.SetFont("Helvetica", "", 7.5)
+	rowH := 4.5
+
+	pdf.CellFormat(26, rowH, tr("CUIT:"), "", 0, "L", false, 0, "")
+	pdf.CellFormat(rightW-28, rowH, tr(config.CUITEmsior), "", 1, "L", false, 0, "")
+
+	if config.IIBB != nil && *config.IIBB != "" {
+		pdf.SetXY(xR, pdf.GetY())
+		pdf.CellFormat(26, rowH, tr("ING. BRUTOS:"), "", 0, "L", false, 0, "")
+		pdf.CellFormat(rightW-28, rowH, tr(*config.IIBB), "", 1, "L", false, 0, "")
+	}
+
+	if config.FechaInicioActividades != nil {
+		pdf.SetXY(xR, pdf.GetY())
+		pdf.CellFormat(26, rowH, tr("INICIO ACT.:"), "", 0, "L", false, 0, "")
+		pdf.CellFormat(rightW-28, rowH, tr(config.FechaInicioActividades.Format("02/01/06")), "", 1, "L", false, 0, "")
+	}
 
 	// ═══════════════════════════════════════════════════════════════════════
 	// RECEPTOR SECTION
 	// ═══════════════════════════════════════════════════════════════════════
-	pdf.SetFont("Helvetica", "B", 9)
-	pdf.CellFormat(30, 5, tr("CLIENTE:"), "B", 0, "L", false, 0, "")
+	recY := startY + headerH
+	recH := 22.0
+	pdf.Line(marginL, recY+recH, marginL+contentW, recY+recH)
+
+	// NOMBRE row
+	pdf.SetXY(marginL+3, recY+2)
+	pdf.SetFont("Helvetica", "B", 8)
+	pdf.CellFormat(20, 5, tr("NOMBRE:"), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 9)
-	
 	receptorNombre := "CONSUMIDOR FINAL"
 	if comp.ReceptorNombre != nil && *comp.ReceptorNombre != "" {
-		receptorNombre = *comp.ReceptorNombre
+		receptorNombre = strings.ToUpper(*comp.ReceptorNombre)
 	}
-	pdf.CellFormat(contentW-30, 5, tr(receptorNombre), "B", 1, "L", false, 0, "")
-	
-	// Documento y domicilio en segunda línea
+	// Right of nombre: put receptor condition
+	halfW := contentW/2 - 23
+	pdf.CellFormat(halfW, 5, tr(receptorNombre), "", 0, "L", false, 0, "")
+
+	// Vertical divider in receptor section
+	midX := marginL + contentW/2
+	pdf.Line(midX, recY, midX, recY+recH)
+
+	// Right side: show receptor CUIT/DNI if available  
+	xRecR := midX + 3
+	pdf.SetXY(xRecR, recY+2)
 	pdf.SetFont("Helvetica", "", 8)
-	docInfo := ""
-	if comp.ReceptorCUIT != nil && *comp.ReceptorCUIT != "" && *comp.ReceptorCUIT != "0" {
-		docTipo := "CUIT"
-		if comp.ReceptorTipoDocumento != nil {
-			switch *comp.ReceptorTipoDocumento {
-			case 96:
-				docTipo = "DNI"
-			case 99:
-				docTipo = "CONSUMIDOR FINAL"
-			}
-		}
-		if docTipo != "CONSUMIDOR FINAL" {
-			docInfo = docTipo + ": " + *comp.ReceptorCUIT
-		}
-	}
-	
-	domInfo := ""
+
+	// DOMICILIO row
+	pdf.SetXY(marginL+3, recY+8)
+	pdf.SetFont("Helvetica", "B", 8)
+	pdf.CellFormat(20, 5, tr("DOMICILIO:"), "", 0, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 8)
+	domReceptor := ""
 	if comp.ReceptorDomicilio != nil && *comp.ReceptorDomicilio != "" {
-		domInfo = *comp.ReceptorDomicilio
+		domReceptor = *comp.ReceptorDomicilio
 	}
-	
-	if docInfo != "" && domInfo != "" {
-		pdf.CellFormat(contentW, 4, tr(docInfo+"  |  "+domInfo), "", 1, "L", false, 0, "")
-	} else if docInfo != "" {
-		pdf.CellFormat(contentW, 4, tr(docInfo), "", 1, "L", false, 0, "")
-	} else if domInfo != "" {
-		pdf.CellFormat(contentW, 4, tr(domInfo), "", 1, "L", false, 0, "")
+	pdf.CellFormat(halfW, 5, tr(domReceptor), "", 0, "L", false, 0, "")
+
+	// DOCUMENTO (right side)
+	pdf.SetXY(xRecR, recY+8)
+	pdf.SetFont("Helvetica", "B", 8)
+	docTipoLabel := "DOCUMENTO:"
+	docNum := ""
+	if comp.ReceptorCUIT != nil && *comp.ReceptorCUIT != "" && *comp.ReceptorCUIT != "0" {
+		if comp.ReceptorTipoDocumento != nil && *comp.ReceptorTipoDocumento == 80 {
+			docTipoLabel = "CUIT:"
+		} else if comp.ReceptorTipoDocumento != nil && *comp.ReceptorTipoDocumento == 96 {
+			docTipoLabel = "DNI:"
+		}
+		docNum = *comp.ReceptorCUIT
 	}
-	
-	// Condición de pago
+	pdf.CellFormat(22, 5, tr(docTipoLabel), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 8)
+	pdf.CellFormat(rightW-25, 5, tr(docNum), "", 1, "L", false, 0, "")
+
+	// CONDICIÓN DE PAGO row
+	condPagoY := recY + recH - 7
+	pdf.Line(marginL, condPagoY, marginL+contentW, condPagoY)
+	pdf.SetXY(marginL+3, condPagoY+1.5)
+	pdf.SetFont("Helvetica", "B", 7.5)
+	pdf.CellFormat(40, 4, tr("CONDICIÓN Y FORMA DE PAGO:"), "", 0, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 7.5)
 	condPago := "Contado"
 	if len(venta.Pagos) > 0 {
-		condPago = "Contado - " + strings.Title(venta.Pagos[0].Metodo)
+		metodo := venta.Pagos[0].Metodo
+		switch metodo {
+		case "efectivo":
+			metodo = "Efectivo"
+		case "debito":
+			metodo = "Tarjeta de Débito"
+		case "credito":
+			metodo = "Tarjeta de Crédito"
+		case "transferencia":
+			metodo = "Transferencia"
+		case "qr":
+			metodo = "QR / Billetera Virtual"
+		}
+		condPago = "Contado - " + metodo
 	}
-	pdf.CellFormat(contentW, 4, tr("CONDICIÓN Y FORMA DE PAGO: "+condPago), "", 1, "L", false, 0, "")
-	
-	pdf.Ln(3)
+	pdf.CellFormat(contentW-44, 4, tr(condPago), "", 1, "L", false, 0, "")
 
 	// ═══════════════════════════════════════════════════════════════════════
 	// ITEMS TABLE
 	// ═══════════════════════════════════════════════════════════════════════
-	pdf.SetFillColor(240, 240, 240)
-	pdf.SetFont("Helvetica", "B", 8)
-	
-	colCant := contentW * 0.08
-	colDetalle := contentW * 0.50
-	colPrecio := contentW * 0.18
-	colSubtotal := contentW * 0.24
-	
-	pdf.CellFormat(colCant, 5, tr("Cant"), "1", 0, "C", true, 0, "")
-	pdf.CellFormat(colDetalle, 5, tr("Detalle"), "1", 0, "L", true, 0, "")
-	pdf.CellFormat(colPrecio, 5, tr("Precio Unit."), "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colSubtotal, 5, tr("Precio Total"), "1", 1, "R", true, 0, "")
+	tableY := recY + recH
+	pdf.SetXY(marginL, tableY)
 
-	pdf.SetFont("Helvetica", "", 8)
+	colCant := 14.0
+	colDetalle := contentW - colCant - 38 - 38
+	colPU := 38.0
+	colPT := 38.0
+
+	// Table header
+	pdf.SetFillColor(50, 50, 50)
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFont("Helvetica", "B", 8)
+	hRowH := 6.0
+	pdf.CellFormat(colCant, hRowH, tr("Cantidad"), "1", 0, "C", true, 0, "")
+	pdf.CellFormat(colDetalle, hRowH, tr("Detalle"), "1", 0, "L", true, 0, "")
+	pdf.CellFormat(colPU, hRowH, tr("Precio Unitario"), "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colPT, hRowH, tr("Precio total"), "1", 1, "R", true, 0, "")
+
+	pdf.SetTextColor(0, 0, 0)
 	pdf.SetFillColor(255, 255, 255)
-	
+	pdf.SetFont("Helvetica", "", 8.5)
+
+	rowH2 := 6.0
 	for _, item := range venta.Items {
 		nombre := "Producto"
 		if item.Producto != nil {
 			nombre = item.Producto.Nombre
 		}
-
-		pdf.CellFormat(colCant, 5, fmt.Sprintf("%d", item.Cantidad), "LR", 0, "C", false, 0, "")
-		pdf.CellFormat(colDetalle, 5, tr(nombre), "LR", 0, "L", false, 0, "")
-		pdf.CellFormat(colPrecio, 5, "$"+item.PrecioUnitario.StringFixed(2), "LR", 0, "R", false, 0, "")
-		pdf.CellFormat(colSubtotal, 5, "$"+item.Subtotal.StringFixed(2), "LR", 1, "R", false, 0, "")
+		pdf.CellFormat(colCant, rowH2, fmt.Sprintf("%d", item.Cantidad), "LR", 0, "C", false, 0, "")
+		pdf.CellFormat(colDetalle, rowH2, tr(nombre), "LR", 0, "L", false, 0, "")
+		pdf.CellFormat(colPU, rowH2, tr(formatMoney(item.PrecioUnitario)), "LR", 0, "R", false, 0, "")
+		pdf.CellFormat(colPT, rowH2, tr(formatMoney(item.Subtotal)), "LR", 1, "R", false, 0, "")
 	}
-	
-	// Bottom border for table
+	// Fill remaining rows to fixed table height (at least 10 empty rows for look)
+	emptyRows := 10 - len(venta.Items)
+	if emptyRows < 0 {
+		emptyRows = 0
+	}
+	pdf.SetFont("Helvetica", "", 8.5)
+	for i := 0; i < emptyRows; i++ {
+		pdf.CellFormat(colCant, rowH2, "", "LR", 0, "C", false, 0, "")
+		pdf.CellFormat(colDetalle, rowH2, "", "LR", 0, "L", false, 0, "")
+		pdf.CellFormat(colPU, rowH2, "", "LR", 0, "R", false, 0, "")
+		pdf.CellFormat(colPT, rowH2, "", "LR", 1, "R", false, 0, "")
+	}
+	// Close table bottom
 	pdf.CellFormat(contentW, 0, "", "T", 1, "", false, 0, "")
-	
-	pdf.Ln(2)
 
 	// ═══════════════════════════════════════════════════════════════════════
-	// TOTALS SECTION
+	// SON PESOS + IMPORTE TOTAL row
 	// ═══════════════════════════════════════════════════════════════════════
-	totalsX := pageW - 12 - 70
-	
-	// Calculate amounts based on invoice type
+	isRI := strings.Contains(config.CondicionFiscal, "Responsable Inscripto")
 	neto := decimal.Zero
 	iva := decimal.Zero
-	
-	isRI := strings.Contains(config.CondicionFiscal, "Responsable Inscripto")
-	
 	if isRI && tipoLetra == "A" {
-		// Factura A: discriminate IVA
 		neto = venta.Total.Div(decimal.NewFromFloat(1.21))
 		iva = venta.Total.Sub(neto)
 	} else if tipoLetra == "B" {
-		// Factura B: IVA included
 		neto = venta.Total.Div(decimal.NewFromFloat(1.21))
 		iva = venta.Total.Sub(neto)
 	} else {
-		// Factura C: no IVA
 		neto = venta.Total
 	}
 
-	pdf.SetFont("Helvetica", "", 9)
-	
-	if !venta.DescuentoTotal.IsZero() {
-		pdf.SetX(totalsX)
-		pdf.CellFormat(40, 5, tr("Descuento:"), "", 0, "L", false, 0, "")
-		pdf.CellFormat(30, 5, "-$"+venta.DescuentoTotal.StringFixed(2), "", 1, "R", false, 0, "")
-	}
-
-		// Show subtotal/neto
+	// IVA subtotal rows (only when applicable)
 	if !iva.IsZero() {
-		pdf.SetX(totalsX)
-		pdf.CellFormat(40, 5, tr("Subtotal (Neto):"), "", 0, "L", false, 0, "")
-		pdf.CellFormat(30, 5, "$"+neto.StringFixed(2), "", 1, "R", false, 0, "")
-		
-		pdf.SetX(totalsX)
-		pdf.CellFormat(40, 5, tr("IVA (21%):"), "", 0, "L", false, 0, "")
-		pdf.CellFormat(30, 5, "$"+iva.StringFixed(2), "", 1, "R", false, 0, "")
+		pdf.SetFont("Helvetica", "", 8)
+		pdf.SetXY(marginL, pdf.GetY())
+		pdf.CellFormat(contentW-colPT, 5, tr("Subtotal gravado:"), "LRB", 0, "R", false, 0, "")
+		pdf.CellFormat(colPT, 5, tr(formatMoney(neto)), "LRB", 1, "R", false, 0, "")
+		pdf.SetXY(marginL, pdf.GetY())
+		pdf.CellFormat(contentW-colPT, 5, tr("IVA 21%:"), "LRB", 0, "R", false, 0, "")
+		pdf.CellFormat(colPT, 5, tr(formatMoney(iva)), "LRB", 1, "R", false, 0, "")
 	}
 
-	pdf.SetX(totalsX)
+	// Son pesos row + Importe total
+	sonPesosW := contentW - 76.0
+	totalW := 76.0
+	sonPesosH := 7.0
+	currentY := pdf.GetY()
+
+	pdf.SetXY(marginL, currentY)
+	pdf.SetFont("Helvetica", "", 7.5)
+	pdf.CellFormat(18, sonPesosH, tr("Son pesos:"), "1", 0, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "I", 7.5)
+	inWords := amountToWords(venta.Total)
+	pdf.CellFormat(sonPesosW-18, sonPesosH, tr(inWords), "1", 0, "L", false, 0, "")
+
+	pdf.SetFillColor(240, 240, 240)
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(totalW*0.55, sonPesosH, tr("Importe total"), "1", 0, "R", true, 0, "")
 	pdf.SetFont("Helvetica", "B", 11)
-	pdf.CellFormat(40, 7, tr("Importe total"), "T", 0, "L", false, 0, "")
-	pdf.CellFormat(30, 7, "$"+venta.Total.StringFixed(2), "T", 1, "R", false, 0, "")
-
-	pdf.Ln(5)
+	pdf.CellFormat(totalW*0.45, sonPesosH, tr(formatMoney(venta.Total)), "1", 1, "R", true, 0, "")
+	pdf.SetFillColor(255, 255, 255)
 
 	// ═══════════════════════════════════════════════════════════════════════
-	// CAE + BARCODE SECTION
+	// CAE + BARCODE FOOTER
 	// ═══════════════════════════════════════════════════════════════════════
+	caeY := pdf.GetY()
+	pdf.Line(marginL, caeY, marginL+contentW, caeY+28)
+	pdf.Line(marginL, caeY+28, marginL+contentW, caeY+28)
+	pdf.Line(marginL+contentW*0.5, caeY, marginL+contentW*0.5, caeY+28)
+
+	// Left: CAE text
+	pdf.SetXY(marginL+3, caeY+2)
+	pdf.SetFont("Helvetica", "B", 8.5)
+	pdf.CellFormat(contentW*0.5-6, 5, tr("Comprobante autorizado"), "", 1, "L", false, 0, "")
+
 	if comp.CAE != nil && *comp.CAE != "" {
-		pdf.SetDrawColor(0, 0, 0)
-		pdf.SetLineWidth(0.5)
-		pdf.Rect(12, pdf.GetY(), contentW, 30, "D")
-		
-		caeBoxY := pdf.GetY()
-		pdf.SetXY(14, caeBoxY+2)
-		
-		pdf.SetFont("Helvetica", "B", 9)
-		pdf.CellFormat(40, 5, tr("Comprobante autorizado"), "", 1, "L", false, 0, "")
-		
-		pdf.SetX(14)
+		pdf.SetXY(marginL+3, pdf.GetY())
 		pdf.SetFont("Helvetica", "", 8)
-		pdf.CellFormat(100, 4, tr("CAE N°: "+*comp.CAE), "", 1, "L", false, 0, "")
-		
+		pdf.CellFormat(contentW*0.5-6, 4.5, tr("CAE N°:  "+*comp.CAE), "", 1, "L", false, 0, "")
 		if comp.CAEVencimiento != nil {
-			pdf.SetX(14)
-			pdf.CellFormat(100, 4, tr("Vencimiento CAE: "+comp.CAEVencimiento.Format("02/01/2006")), "", 1, "L", false, 0, "")
+			pdf.SetXY(marginL+3, pdf.GetY())
+			pdf.CellFormat(contentW*0.5-6, 4.5, tr("Vencimiento:  "+comp.CAEVencimiento.Format("02/01/2006")), "", 1, "L", false, 0, "")
 		}
 
-		// Generate and insert barcode
+		// Right: barcode
 		cuitClean := strings.ReplaceAll(config.CUITEmsior, "-", "")
 		if len(cuitClean) == 11 {
-			barcodeData := fmt.Sprintf("%s%02d%04d%s",
-				cuitClean,
-				tipoComprobanteCode(comp.Tipo),
-				pvDisplay,
-				*comp.CAE,
-			)
-
+			barcodeData := fmt.Sprintf("%s%02d%04d%s", cuitClean, tipoComprobanteCode(comp.Tipo), pvDisplay, *comp.CAE)
 			barcodeImg, err := code128.Encode(barcodeData)
 			if err == nil {
-				scaledBarcode, err := barcode.Scale(barcodeImg, 500, 60)
+				scaledBarcode, err := barcode.Scale(barcodeImg, 560, 56)
 				if err == nil {
-					tmpBarcode := filepath.Join(storagePath, ".tmp_barcode_"+comp.ID.String()+".png")
+					tmpBarcode := filepath.Join(storagePath, ".tmp_bc_"+comp.ID.String()+".png")
 					f, err := os.Create(tmpBarcode)
 					if err == nil {
 						defer os.Remove(tmpBarcode)
-						if err := png.Encode(f, scaledBarcode); err == nil {
+						if encErr := png.Encode(f, scaledBarcode); encErr == nil {
 							f.Close()
-							barcodeX := pageW - 12 - 80
-							barcodeY := caeBoxY + 5
-							pdf.Image(tmpBarcode, barcodeX, barcodeY, 75, 0, false, "", 0, "")
+							barcodeX := marginL + contentW*0.5 + 3
+							barcodeY := caeY + 4
+							pdf.Image(tmpBarcode, barcodeX, barcodeY, contentW*0.5-6, 0, false, "", 0, "")
 						} else {
 							f.Close()
 						}
@@ -488,19 +601,18 @@ func GenerateFacturaFiscalPDF(
 				}
 			}
 		}
-		
-		pdf.SetY(caeBoxY + 32)
 	}
+
+	pdf.SetXY(marginL, pdf.GetY())
 
 	// ═══════════════════════════════════════════════════════════════════════
 	// LEGAL FOOTER
 	// ═══════════════════════════════════════════════════════════════════════
-	pdf.Ln(5)
-	pdf.SetFont("Helvetica", "I", 7)
-	legalText := "Esta Administración Federal no se responsabiliza por los datos ingresados en el detalle de la operación.\n"
-	legalText += "Comprobante autorizado según Resolución General AFIP.\n"
-	legalText += "Para verificar el comprobante ingresar a www.afip.gob.ar/genericos/consultaCAE"
-	pdf.MultiCell(contentW, 3, tr(legalText), "", "L", false)
+	pdf.SetXY(marginL+3, caeY+30)
+	pdf.SetFont("Helvetica", "I", 6.5)
+	legal := "Esta Administración Federal no se responsabiliza por los datos ingresados en el detalle de la operación.\n"
+	legal += "Comprobante autorizado según Resolución General AFIP.    Para verificar: www.afip.gob.ar/genericos/consultaCAE"
+	pdf.MultiCell(contentW-6, 3.5, tr(legal), "", "L", false)
 
 	if err := pdf.OutputFileAndClose(filePath); err != nil {
 		return "", fmt.Errorf("pdf: write file: %w", err)
@@ -523,3 +635,18 @@ func tipoComprobanteCode(tipo string) int {
 	}
 }
 
+// formatMoney formats a decimal as Argentine peso string: $1.234,56
+func formatMoney(amount decimal.Decimal) string {
+	intVal := amount.IntPart()
+	cents := amount.Sub(decimal.NewFromInt(intVal)).Mul(decimal.NewFromInt(100)).Abs().IntPart()
+	s := fmt.Sprintf("%d", intVal)
+	n := len(s)
+	var b strings.Builder
+	for i, c := range s {
+		if i > 0 && (n-i)%3 == 0 {
+			b.WriteRune('.')
+		}
+		b.WriteRune(c)
+	}
+	return fmt.Sprintf("$%s,%02d", b.String(), cents)
+}
