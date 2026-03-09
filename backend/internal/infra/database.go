@@ -316,6 +316,18 @@ func applySchemaPatches(db *gorm.DB) error {
 		        ON historial_precios (producto_id);
 		  END IF;
 		END $$`,
+		// migration 000021/000023: campos de domicilio completo en configuracion_fiscal
+		`ALTER TABLE configuracion_fiscal ADD COLUMN IF NOT EXISTS domicilio_comercial VARCHAR(255)`,
+		`ALTER TABLE configuracion_fiscal ADD COLUMN IF NOT EXISTS domicilio_ciudad VARCHAR(100)`,
+		`ALTER TABLE configuracion_fiscal ADD COLUMN IF NOT EXISTS domicilio_provincia VARCHAR(100)`,
+		`ALTER TABLE configuracion_fiscal ADD COLUMN IF NOT EXISTS domicilio_codigo_postal VARCHAR(10)`,
+		`ALTER TABLE configuracion_fiscal ADD COLUMN IF NOT EXISTS logo_path VARCHAR(255)`,
+		// migration 000022/000024: campos del receptor en comprobantes (datos del cliente según AFIP)
+		`ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS receptor_tipo_documento INT DEFAULT 99`,
+		`ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS receptor_numero_documento VARCHAR(20)`,
+		`ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS receptor_domicilio VARCHAR(255)`,
+		`ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS receptor_condicion_iva INT DEFAULT 5`,
+		`CREATE INDEX IF NOT EXISTS idx_comprobantes_receptor_cuit ON comprobantes(receptor_cuit) WHERE receptor_cuit IS NOT NULL`,
 	}
 
 	for _, sql := range patches {
