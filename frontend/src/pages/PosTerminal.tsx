@@ -73,7 +73,9 @@ export function PosTerminal() {
     // Al montar, sincronizar sesión de caja con el backend (limpia localStorage obsoleto)
     useEffect(() => {
         restaurar()
-            .catch(() => { })
+            .catch((err) => {
+                console.warn('Error al restaurar sesión de caja:', err);
+            })
             .finally(() => setIsInitializing(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -89,8 +91,8 @@ export function PosTerminal() {
     const [cajaModalOpen, setCajaModalOpen] = useState(false);
     useEffect(() => {
         if (isInitializing) return;
-        if (!sesionId) setCajaModalOpen(true);
-        else setCajaModalOpen(false);
+        const shouldOpen = !sesionId;
+        setCajaModalOpen(shouldOpen);
     }, [sesionId, isInitializing]);
 
     // Sincronizar catálogo desde el backend en cada apertura del POS.

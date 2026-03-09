@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -100,7 +101,10 @@ func (c *afipClientImpl) Facturar(ctx context.Context, payload AFIPPayload) (*AF
 		return nil, fmt.Errorf("afip: sidecar rechazó la solicitud (token interno inválido)")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("afip: sidecar returned %d", resp.StatusCode)
+		// Read error details from response body
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyStr := string(bodyBytes)
+		return nil, fmt.Errorf("afip: sidecar returned %d: %s", resp.StatusCode, bodyStr)
 	}
 
 	var result AFIPResponse
