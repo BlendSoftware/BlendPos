@@ -7,6 +7,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -154,10 +155,27 @@ func processRetries(ctx context.Context, cfg RetryCronConfig) {
 		})
 
 		if cbErr != nil {
-			// Failure — increment retry count, schedule next attempt
-			comp.RetryCount++
 			errMsg := cbErr.Error()
 			comp.LastError = &errMsg
+
+			// Error permanente (datos inválidos 4xx) — no tiene sentido reintentar
+			var validationErr *infra.AFIPValidationError
+			if errors.As(cbErr, &validationErr) {
+				comp.Estado = "error"
+				comp.NextRetryAt = nil
+				log.Error().
+					Str("comprobante_id", comp.ID.String()).
+					Str("venta_id", comp.VentaID.String()).
+					Str("detail", validationErr.Detail).
+					Msg("retry_cron: error permanente de validación — no se reintentará")
+				if err := cfg.ComprobanteRepo.Update(ctx, comp); err != nil {
+					log.Error().Err(err).Str("comprobante_id", comp.ID.String()).Msg("retry_cron: failed to persist comprobante after validation error")
+				}
+				continue
+			}
+
+			// Error transitorio — incrementar contador y programar siguiente intento
+			comp.RetryCount++
 			nextRetry := time.Now().Add(computeRetryBackoff(comp.RetryCount))
 			comp.NextRetryAt = &nextRetry
 
