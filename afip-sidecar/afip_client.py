@@ -12,6 +12,9 @@ Flujo:
 # IMPORTANTE: Importar py3_compat PRIMERO para monkey-patch hashlib
 import py3_compat
 
+# IMPORTANTE: Importar patch para __analizar_errores ANTES de usar WSFEv1
+import patch_analizar_errores
+
 import os
 import logging
 from datetime import datetime, timedelta
@@ -505,7 +508,17 @@ class AFIPClient:
                 # Error técnico - construir mensaje de error
                 error_msg = wsfe.ErrMsg if wsfe.ErrMsg else ""
                 
-                # Si ErrMsg está vacío, revisar observaciones
+                # Si ErrMsg está vacío, revisar errores capturados por pyafipws
+                if not error_msg and hasattr(wsfe, 'errores') and wsfe.errores:
+                    error_list = []
+                    for err in wsfe.errores:
+                        if isinstance(err, dict):
+                            error_list.append(f"[{err.get('codigo')}] {err.get('mensaje')}")
+                        else:
+                            error_list.append(str(err))
+                    error_msg = " | ".join(error_list) if error_list else "Sin detalles"
+                
+                # Si aún está vacío, revisar observaciones
                 if not error_msg and wsfe.Obs:
                     obs_list = []
                     for obs in wsfe.Observaciones:
