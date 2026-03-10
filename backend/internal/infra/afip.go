@@ -46,6 +46,17 @@ type AFIPResponse struct {
 	} `json:"observaciones"`
 }
 
+// AFIPValidationError is returned when the sidecar responds with a 4xx status code.
+// These errors are permanent (bad input data) and must NOT be retried.
+type AFIPValidationError struct {
+	StatusCode int
+	Detail     string
+}
+
+func (e *AFIPValidationError) Error() string {
+	return fmt.Sprintf("afip: datos inválidos (%d): %s", e.StatusCode, e.Detail)
+}
+
 // AFIPClient is an HTTP client that delegates AFIP communication to the Python Sidecar.
 // This decoupling isolates AFIP failures from the core Go backend (ADR-001).
 type AFIPClient interface {
@@ -100,8 +111,13 @@ func (c *afipClientImpl) Facturar(ctx context.Context, payload AFIPPayload) (*AF
 	if resp.StatusCode == http.StatusForbidden {
 		return nil, fmt.Errorf("afip: sidecar rechazó la solicitud (token interno inválido)")
 	}
+	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		// 4xx = error permanente de datos — no reintentar
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, &AFIPValidationError{StatusCode: resp.StatusCode, Detail: string(bodyBytes)}
+	}
 	if resp.StatusCode != http.StatusOK {
-		// Read error details from response body
+		// 5xx u otro = error transitorio — se puede reintentar
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		bodyStr := string(bodyBytes)
 		return nil, fmt.Errorf("afip: sidecar returned %d: %s", resp.StatusCode, bodyStr)

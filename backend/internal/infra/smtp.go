@@ -1,21 +1,25 @@
 package infra
 
 import (
-	"blendpos/internal/config"
+	"bytes"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
+	"net"
 	"net/smtp"
+	"os"
+	"path/filepath"
 
-	"github.com/jordan-wright/email"
+	"blendpos/internal/config"
 )
 
-// Mailer wraps SMTP configuration for sending emails with PDF attachments.
+// Mailer sends emails via SMTP (Gmail-compatible).
+// Use port 465 (implicit TLS/SMTPS) on Railway — port 587 is blocked.
 type Mailer struct {
 	host     string
 	port     int
 	user     string
 	password string
-	addr     string
 }
 
 func NewMailer(cfg *config.Config) *Mailer {
@@ -24,7 +28,6 @@ func NewMailer(cfg *config.Config) *Mailer {
 		port:     cfg.SMTPPort,
 		user:     cfg.SMTPUser,
 		password: cfg.SMTPPassword,
-		addr:     fmt.Sprintf("%s:%d", cfg.SMTPHost, cfg.SMTPPort),
 	}
 }
 
@@ -33,35 +36,119 @@ func (m *Mailer) IsConfigured() bool {
 	return m.host != "" && m.user != "" && m.password != ""
 }
 
-// SendComprobante sends a PDF receipt to the customer email.
-// Supports Gmail (port 587 STARTTLS / port 465 TLS) and plain SMTP.
+// SendComprobante sends a receipt email, optionally attaching a PDF.
+// Port 465 → implicit TLS (recommended on Railway).
+// Port 587 → STARTTLS.
 func (m *Mailer) SendComprobante(to, subject, body, pdfPath string) error {
 	if !m.IsConfigured() {
-		return fmt.Errorf("mailer: SMTP not configured")
+		return fmt.Errorf("mailer: SMTP no configurado")
 	}
 
-	e := email.NewEmail()
-	e.From = fmt.Sprintf("BlendPOS <%s>", m.user)
-	e.To = []string{to}
-	e.Subject = subject
-	e.Text = []byte(body)
+	msg, err := buildMessage(m.user, to, subject, body, pdfPath)
+	if err != nil {
+		return err
+	}
 
-	if pdfPath != "" {
-		if _, err := e.AttachFile(pdfPath); err != nil {
-			return fmt.Errorf("mailer: attach PDF: %w", err)
+	addr := fmt.Sprintf("%s:%d", m.host, m.port)
+	auth := smtp.PlainAuth("", m.user, m.password, m.host)
+	tlsCfg := &tls.Config{ServerName: m.host}
+
+	if m.port == 465 {
+		// Implicit TLS — no STARTTLS handshake needed
+		conn, err := tls.Dial("tcp", addr, tlsCfg)
+		if err != nil {
+			return fmt.Errorf("mailer: tls dial: %w", err)
+		}
+		client, err := smtp.NewClient(conn, m.host)
+		if err != nil {
+			return fmt.Errorf("mailer: smtp client: %w", err)
+		}
+		defer client.Close()
+		if err = client.Auth(auth); err != nil {
+			return fmt.Errorf("mailer: auth: %w", err)
+		}
+		return sendViaClient(client, m.user, to, msg)
+	}
+
+	// Port 587 or other — STARTTLS
+	rawConn, err := net.Dial("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("mailer: dial: %w", err)
+	}
+	client, err := smtp.NewClient(rawConn, m.host)
+	if err != nil {
+		return fmt.Errorf("mailer: smtp client: %w", err)
+	}
+	defer client.Close()
+	if ok, _ := client.Extension("STARTTLS"); ok {
+		if err = client.StartTLS(tlsCfg); err != nil {
+			return fmt.Errorf("mailer: starttls: %w", err)
 		}
 	}
-
-	tlsCfg := &tls.Config{ServerName: m.host}
-	auth := smtp.PlainAuth("", m.user, m.password, m.host)
-
-	// Port 465 = implicit TLS (SMTPS); port 587 = STARTTLS; others = plain.
-	switch m.port {
-	case 465:
-		return e.SendWithTLS(m.addr, auth, tlsCfg)
-	case 587:
-		return e.SendWithStartTLS(m.addr, auth, tlsCfg)
-	default:
-		return e.Send(m.addr, auth)
+	if err = client.Auth(auth); err != nil {
+		return fmt.Errorf("mailer: auth: %w", err)
 	}
+	return sendViaClient(client, m.user, to, msg)
 }
+
+func sendViaClient(client *smtp.Client, from, to string, msg []byte) error {
+	if err := client.Mail(from); err != nil {
+		return fmt.Errorf("mailer: MAIL FROM: %w", err)
+	}
+	if err := client.Rcpt(to); err != nil {
+		return fmt.Errorf("mailer: RCPT TO: %w", err)
+	}
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("mailer: DATA: %w", err)
+	}
+	if _, err = w.Write(msg); err != nil {
+		return fmt.Errorf("mailer: write: %w", err)
+	}
+	return w.Close()
+}
+
+// buildMessage constructs a MIME email. If pdfPath is set, attaches it.
+func buildMessage(from, to, subject, body, pdfPath string) ([]byte, error) {
+	var buf bytes.Buffer
+
+	if pdfPath == "" {
+		fmt.Fprintf(&buf, "From: BlendPOS <%s>\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s", from, to, subject, body)
+		return buf.Bytes(), nil
+	}
+
+	pdfData, err := os.ReadFile(pdfPath)
+	if err != nil {
+		return nil, fmt.Errorf("mailer: leer PDF: %w", err)
+	}
+
+	boundary := "==BlendPOS_Boundary=="
+	fmt.Fprintf(&buf, "From: BlendPOS <%s>\r\n", from)
+	fmt.Fprintf(&buf, "To: %s\r\n", to)
+	fmt.Fprintf(&buf, "Subject: %s\r\n", subject)
+	fmt.Fprintf(&buf, "MIME-Version: 1.0\r\n")
+	fmt.Fprintf(&buf, "Content-Type: multipart/mixed; boundary=%q\r\n\r\n", boundary)
+
+	// Texto
+	fmt.Fprintf(&buf, "--%s\r\n", boundary)
+	fmt.Fprintf(&buf, "Content-Type: text/plain; charset=UTF-8\r\n\r\n")
+	fmt.Fprintf(&buf, "%s\r\n\r\n", body)
+
+	// PDF adjunto
+	fmt.Fprintf(&buf, "--%s\r\n", boundary)
+	fmt.Fprintf(&buf, "Content-Type: application/pdf\r\n")
+	fmt.Fprintf(&buf, "Content-Disposition: attachment; filename=%q\r\n", filepath.Base(pdfPath))
+	fmt.Fprintf(&buf, "Content-Transfer-Encoding: base64\r\n\r\n")
+	encoded := base64.StdEncoding.EncodeToString(pdfData)
+	for i := 0; i < len(encoded); i += 76 {
+		end := i + 76
+		if end > len(encoded) {
+			end = len(encoded)
+		}
+		fmt.Fprintf(&buf, "%s\r\n", encoded[i:end])
+	}
+	fmt.Fprintf(&buf, "--%s--\r\n", boundary)
+
+	return buf.Bytes(), nil
+}
+

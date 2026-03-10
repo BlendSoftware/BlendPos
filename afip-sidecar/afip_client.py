@@ -29,6 +29,26 @@ from schemas import FacturarRequest, FacturarResponse, ObservacionAFIP
 logger = logging.getLogger("afip_client")
 
 
+def _validar_cuit(cuit: str) -> bool:
+    """
+    Valida el dígito verificador de un CUIT/CUIL argentino.
+    Retorna True si el CUIT es válido, False si no.
+    """
+    cuit = str(cuit).strip()
+    if len(cuit) != 11 or not cuit.isdigit():
+        return False
+    pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
+    total = sum(int(cuit[i]) * pesos[i] for i in range(10))
+    resto = total % 11
+    if resto == 0:
+        verificador = 0
+    elif resto == 1:
+        return False  # CUIT inválido por definición
+    else:
+        verificador = 11 - resto
+    return verificador == int(cuit[10])
+
+
 class AFIPClient:
     """
     Cliente AFIP que maneja autenticación (WSAA) y facturación electrónica (WSFEV1).
@@ -419,6 +439,24 @@ class AFIPClient:
                 _imp_tot_conc = 0.00
                 _imp_op_ex    = round(req.importe_exento, 2)
 
+            # Validar que el receptor no sea el propio emisor (AFIP error 10069)
+            if (
+                req.tipo_doc_receptor == 80
+                and str(req.nro_doc_receptor).strip() == str(self.cuit_emisor).strip()
+            ):
+                raise ValueError(
+                    f"El CUIT del receptor ({req.nro_doc_receptor}) no puede ser igual al CUIT del emisor. "
+                    "Verifique los datos del cliente."
+                )
+
+            # Validar dígito verificador del CUIT/CUIL receptor (AFIP error 10015)
+            if req.tipo_doc_receptor in (80, 86):
+                if not _validar_cuit(req.nro_doc_receptor):
+                    raise ValueError(
+                        f"El CUIT/CUIL del receptor ({req.nro_doc_receptor}) es inválido. "
+                        "Verifique el número ingresado."
+                    )
+
             wsfe.CrearFactura(
                 concepto=req.concepto,
                 tipo_doc=req.tipo_doc_receptor,
@@ -587,6 +625,8 @@ class AFIPClient:
             
             return response
             
+        except ValueError:
+            raise
         except Exception as e:
             logger.exception("Error fatal al facturar: %s", e)
             raise Exception(f"Error al solicitar CAE: {str(e)}")

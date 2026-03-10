@@ -174,6 +174,7 @@ func New(d Deps) *gin.Engine {
 			factW.DELETE("/:id", facturacionH.AnularComprobante)
 			factW.POST("/:id/reintentar", facturacionH.ReintentarComprobante)
 			factW.POST("/:id/regen-pdf", facturacionH.RegenerarPDF)
+			factW.POST("/cancelar-pendientes", middleware.RequireRole("administrador"), facturacionH.CancelarPendientes)
 		}
 
 		prov := v1.Group("/proveedores", middleware.RequireRole("administrador"))
