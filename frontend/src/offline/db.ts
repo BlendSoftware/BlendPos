@@ -25,6 +25,8 @@ export interface LocalSale {
     tipoDocReceptor?: number;
     /** Documento/CUIT del comprador. */
     nroDocReceptor?: string;
+    /** Nombre/Razón Social del receptor. */
+    receptorNombre?: string;
     /** Domicilio del comprador para comprobantes fiscales. */
     receptorDomicilio?: string;
     synced: 0 | 1;

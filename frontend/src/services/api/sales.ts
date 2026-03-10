@@ -54,6 +54,9 @@ function toRegistrarVentaRequest(sale: LocalSale): Record<string, unknown> {
     // Include fiscal comprobante fields if present
     const tipoComp = sale.tipoComprobante ?? 'ticket_interno';
     payload.tipo_comprobante = tipoComp;
+    if (sale.receptorNombre && sale.receptorNombre.trim() !== '') {
+        payload.receptor_nombre = sale.receptorNombre.trim();
+    }
     if (sale.receptorDomicilio && sale.receptorDomicilio.trim() !== '') {
         payload.receptor_domicilio = sale.receptorDomicilio.trim();
     }

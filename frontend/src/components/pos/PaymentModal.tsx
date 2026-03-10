@@ -211,8 +211,8 @@ export function PaymentModal() {
             efectivoRecibido: efectivoRecibidoToSave,
             vuelto: vueltoCalc,
             clienteEmail: clienteEmail.trim() || undefined,
-            tipoCompNombre: requiresFiscalBuyerData ? nombreReceptor.trim() : undefined,
-            receptorrobante: tipoComprobante === 'auto' ? undefined : tipoComprobante,
+            receptorNombre: requiresFiscalBuyerData ? nombreReceptor.trim() : undefined,
+            tipoComprobante: tipoComprobante === 'auto' ? undefined : tipoComprobante,
             cuitReceptor: requiresFiscalBuyerData && resolvedDocType === 'cuit' ? normalizedDocumento : undefined,
             tipoDocReceptor: requiresFiscalBuyerData
                 ? (resolvedDocType === 'cuit' ? 80 : 96)

@@ -36,6 +36,7 @@ function toLocalSale(sale: SaleRecord): LocalSale {
         cuitReceptor: sale.cuitReceptor,
         tipoDocReceptor: sale.tipoDocReceptor,
         nroDocReceptor: sale.nroDocReceptor,
+        receptorNombre: sale.receptorNombre,
         receptorDomicilio: sale.receptorDomicilio,
         synced: 0,
     };
