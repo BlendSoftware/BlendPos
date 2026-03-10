@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-    Modal, Stack, Text, Group, Button, Divider, Badge, ThemeIcon, Box, Alert, Loader,
+    Modal, Stack, Text, Group, Button, Divider, Badge, ThemeIcon, Box, Alert, Loader, TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { CheckCircle, Printer, X, Mail, Receipt, AlertCircle, Info, FileText, Download } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { formatARS } from '../../utils/format';
 import { PrintableTicket } from './PrintableTicket';
-import { getComprobante, descargarPDF, abrirFacturaHTML, type FacturacionResponse } from '../../services/api/facturacion';
+import { getComprobante, descargarPDF, abrirFacturaHTML, enviarEmailComprobante, type FacturacionResponse } from '../../services/api/facturacion';
 
 const METODO_LABEL: Record<string, string> = {
     efectivo: '💵 Efectivo',
@@ -30,6 +30,8 @@ export function PostSaleModal() {
     const [loadingComprobante, setLoadingComprobante] = useState(false);
     const [downloadingPDF, setDownloadingPDF] = useState(false);
     const [openingFactura, setOpeningFactura] = useState(false);
+    const [emailCliente, setEmailCliente] = useState('');
+    const [sendingEmail, setSendingEmail] = useState(false);
     const ticketRef = useRef<HTMLDivElement>(null);
 
     const isFiscal = record && ['factura_a', 'factura_b', 'factura_c'].includes(record.tipoComprobante);
@@ -50,6 +52,16 @@ export function PostSaleModal() {
         };
         checkSMTP();
     }, []);
+
+    // Reset email field when modal opens/closes
+    useEffect(() => {
+        if (isOpen) {
+            // Pre-fill with cliente email if it was provided during sale
+            setEmailCliente(record?.clienteEmail || '');
+        } else {
+            setEmailCliente('');
+        }
+    }, [isOpen, record]);
 
     const fetchComprobante = async (saleId: string) => {
         const comp = await getComprobante(saleId);
@@ -370,6 +382,45 @@ export function PostSaleModal() {
         }
     };
 
+    const handleEnviarEmail = async () => {
+        if (!comprobante || !emailCliente.trim()) return;
+
+        // Validar formato de email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(emailCliente.trim())) {
+            notifications.show({
+                title: 'Email inválido',
+                message: 'Por favor ingresá un email válido.',
+                color: 'red',
+                autoClose: 4000,
+            });
+            return;
+        }
+
+        setSendingEmail(true);
+        try {
+            await enviarEmailComprobante(comprobante.id, emailCliente.trim());
+            notifications.show({
+                title: '✅ Email enviado',
+                message: `El comprobante se enviará a ${emailCliente.trim()}`,
+                color: 'green',
+                icon: <Mail size={14} />,
+                autoClose: 5000,
+            });
+            setEmailCliente(''); // Limpiar campo después de enviar
+        } catch (err) {
+            console.error('[PostSaleModal] Error enviando email:', err);
+            notifications.show({
+                title: 'Error al enviar email',
+                message: err instanceof Error ? err.message : 'No se pudo encolar el email. Intenta nuevamente.',
+                color: 'red',
+                autoClose: 5000,
+            });
+        } finally {
+            setSendingEmail(false);
+        }
+    };
+
     const total = record.totalConDescuento || record.total;
     const vuelto = record.vuelto ?? 0;
 
@@ -535,6 +586,49 @@ export function PostSaleModal() {
                                 )}
                             </Text>
                         </Alert>
+                    </>
+                )}
+
+                {/* Enviar factura por email */}
+                {comprobante && comprobante.estado === 'emitido' && smtpConfigured && (
+                    <>
+                        <Divider />
+                        <Stack gap="xs">
+                            <Text size="sm" fw={600} c="dimmed">
+                                <Group gap={4}>
+                                    <Mail size={14} />
+                                    Enviar comprobante por email
+                                </Group>
+                            </Text>
+                            <Group align="flex-end">
+                                <TextInput
+                                    placeholder="cliente@ejemplo.com"
+                                    value={emailCliente}
+                                    onChange={(e) => setEmailCliente(e.currentTarget.value)}
+                                    style={{ flex: 1 }}
+                                    leftSection={<Mail size={16} />}
+                                    disabled={sendingEmail}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && emailCliente.trim()) {
+                                            handleEnviarEmail();
+                                        }
+                                    }}
+                                />
+                                <Button
+                                    onClick={handleEnviarEmail}
+                                    loading={sendingEmail}
+                                    disabled={!emailCliente.trim()}
+                                    leftSection={<Mail size={16} />}
+                                    variant="light"
+                                    color="blue"
+                                >
+                                    Enviar
+                                </Button>
+                            </Group>
+                            <Text size="xs" c="dimmed">
+                                Se enviará el PDF de la factura al email ingresado
+                            </Text>
+                        </Stack>
                     </>
                 )}
 

@@ -92,3 +92,11 @@ export async function descargarPDF(comprobanteId: string, nombreArchivo?: string
     document.body.removeChild(a);
     URL.revokeObjectURL(objectUrl);
 }
+
+/**
+ * POST /v1/facturacion/:id/enviar-email
+ * Envía el comprobante por email a la dirección indicada.
+ */
+export async function enviarEmailComprobante(comprobanteId: string, email: string): Promise<{ message: string; email: string }> {
+    return apiClient.post<{ message: string; email: string }>(`/v1/facturacion/${comprobanteId}/enviar-email`, { email });
+}
