@@ -159,7 +159,7 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 		}
 		// Still generate PDF + email for internal tickets
 		pdfPath := w.generatePDF(ctx, venta, comp, payload.VentaID)
-		if payload.ClienteEmail != nil && *payload.ClienteEmail != "" && pdfPath != "" {
+		if payload.ClienteEmail != nil && *payload.ClienteEmail != "" {
 			w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath)
 		}
 		return
@@ -175,7 +175,7 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 	pdfPath := w.generatePDF(ctx, venta, comp, payload.VentaID)
 
 	// 6. Async email if customer email was provided (AC-06.5)
-	if payload.ClienteEmail != nil && *payload.ClienteEmail != "" && pdfPath != "" {
+	if payload.ClienteEmail != nil && *payload.ClienteEmail != "" {
 		w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath)
 	}
 }
