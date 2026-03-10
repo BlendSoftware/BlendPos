@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -127,6 +128,7 @@ type FacturacionHandler struct {
 	comprobanteRepo repository.ComprobanteRepository
 	ventaRepo       repository.VentaRepository
 	configFiscalSvc service.ConfiguracionFiscalService
+	dispatcher      interface{} // interface{} para evitar import circular
 }
 
 func NewFacturacionHandler(
@@ -381,6 +383,101 @@ func (h *FacturacionHandler) ObtenerHTML(c *gin.Context) {
 
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.String(http.StatusOK, "%s", htmlContent)
+}
+
+// SetDispatcher inyecta el dispatcher después de la construcción para enviar emails.
+// Se usa para evitar imports circulares.
+func (h *FacturacionHandler) SetDispatcher(dispatcher interface{}) {
+	h.dispatcher = dispatcher
+}
+
+// EnviarEmailComprobante POST /v1/facturacion/:id/enviar-email
+// Encola un job de email para enviar el comprobante a la dirección indicada.
+func (h *FacturacionHandler) EnviarEmailComprobante(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierror.New("ID inválido"))
+		return
+	}
+
+	var body struct {
+		Email string `json:"email" validate:"required,email"`
+	}
+	if !bindAndValidate(c, &body) {
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Access check
+	claims := middleware.GetClaims(c)
+	if err := h.svc.VerificarAccesoComprobante(ctx, id, claims.Rol, claims.PuntoDeVenta); err != nil {
+		c.JSON(http.StatusForbidden, apierror.New("Acceso denegado"))
+		return
+	}
+
+	// Get comprobante
+	comp, err := h.comprobanteRepo.FindByID(ctx, id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, apierror.New("Comprobante no encontrado"))
+		return
+	}
+
+	// Get venta for email content
+	venta, err := h.ventaRepo.FindByID(ctx, comp.VentaID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, apierror.New("Venta no encontrada"))
+		return
+	}
+
+	// Prepare PDF path (may be empty if not yet generated)
+	pdfPath := ""
+	if comp.PDFPath != nil {
+		pdfPath = *comp.PDFPath
+	}
+
+	// Build email payload
+	emailPayload := map[string]interface{}{
+		"to_email": body.Email,
+		"subject":  fmt.Sprintf("Comprobante BlendPOS — Ticket #%d", venta.NumeroTicket),
+		"body": func() string {
+			if pdfPath != "" {
+				return fmt.Sprintf("Adjunto encontrarás tu comprobante de compra.\nTotal: $%.2f\n\nGracias por tu compra.", venta.Total.InexactFloat64())
+			}
+			return fmt.Sprintf("Comprobante de tu compra.\nTotal: $%.2f\n\nTicket #%d\n\nPuedes solicitar una copia impresa en nuestro local.\nGracias por tu compra.", venta.Total.InexactFloat64(), venta.NumeroTicket)
+		}(),
+		"pdf_path": pdfPath,
+	}
+
+	// Enqueue email job using dispatcher
+	if h.dispatcher == nil {
+		c.JSON(http.StatusServiceUnavailable, apierror.New("Servicio de email no configurado"))
+		return
+	}
+
+	// Type assertion para acceder al método EnqueueEmail
+	type emailDispatcher interface {
+		EnqueueEmail(ctx context.Context, payload interface{}) error
+	}
+
+	dispatcher, ok := h.dispatcher.(emailDispatcher)
+	if !ok {
+		log.Error().Msg("EnviarEmailComprobante: dispatcher no implementa EnqueueEmail")
+		c.JSON(http.StatusInternalServerError, apierror.New("Error interno de configuración"))
+		return
+	}
+
+	if err := dispatcher.EnqueueEmail(ctx, emailPayload); err != nil {
+		log.Error().Err(err).Str("email", body.Email).Msg("EnviarEmailComprobante: failed to enqueue email")
+		c.JSON(http.StatusInternalServerError, apierror.New("Error al encolar el email"))
+		return
+	}
+
+	log.Info().Str("email", body.Email).Str("comprobante_id", id.String()).Msg("EnviarEmailComprobante: email job enqueued")
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Email encolado correctamente",
+		"email":   body.Email,
+	})
 }
 
 type ProveedoresHandler struct{ svc service.ProveedorService }

@@ -166,6 +166,7 @@ func main() {
 		AuditRepo:           auditRepo,
 		ComprobanteRepo:     comprobanteRepo,
 		VentaRepo:           ventaRepo,
+		Dispatcher:          dispatcher,
 	})
 
 	srv := &http.Server{

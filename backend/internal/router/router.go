@@ -49,6 +49,9 @@ type Deps struct {
 	AuditRepo           repository.AuditRepository
 	ComprobanteRepo     repository.ComprobanteRepository
 	VentaRepo           repository.VentaRepository
+
+	// Worker dispatcher for email/facturacion jobs
+	Dispatcher interface{}
 }
 
 // New wires handlers and registers routes. It does NOT create infrastructure,
@@ -82,6 +85,7 @@ func New(d Deps) *gin.Engine {
 	ventasH := handler.NewVentasHandler(d.VentaSvc)
 	cajaH := handler.NewCajaHandler(d.CajaSvc)
 	facturacionH := handler.NewFacturacionHandler(d.FacturacionSvc, cfg.PDFStoragePath, d.ComprobanteRepo, d.VentaRepo, d.ConfigFiscalSvc)
+	facturacionH.SetDispatcher(d.Dispatcher) // Inyectar dispatcher para envío de emails
 	proveedoresH := handler.NewProveedoresHandler(d.ProveedorSvc)
 	usuariosH := handler.NewUsuariosHandler(d.AuthSvc)
 	consultaH := handler.NewConsultaPreciosHandler(d.ProductoRepo, d.RDB)
@@ -162,6 +166,7 @@ func New(d Deps) *gin.Engine {
 			factR.GET("/:venta_id", facturacionH.ObtenerComprobante)
 			factR.GET("/pdf/:id", facturacionH.DescargarPDF)
 			factR.GET("/html/:id", facturacionH.ObtenerHTML)
+			factR.POST("/:id/enviar-email", facturacionH.EnviarEmailComprobante)
 		}
 		// Write operations: admin/supervisor only
 		factW := v1.Group("/facturacion", middleware.RequireRole("administrador", "supervisor"))

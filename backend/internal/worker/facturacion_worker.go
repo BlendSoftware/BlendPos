@@ -159,7 +159,8 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 		}
 		// Still generate PDF + email for internal tickets
 		pdfPath := w.generatePDF(ctx, venta, comp, payload.VentaID)
-		if payload.ClienteEmail != nil && *payload.ClienteEmail != "" && pdfPath != "" {
+		// Send email even if PDF generation failed (user still wants the receipt)
+		if payload.ClienteEmail != nil && *payload.ClienteEmail != "" {
 			w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath)
 		}
 		return
@@ -175,7 +176,8 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 	pdfPath := w.generatePDF(ctx, venta, comp, payload.VentaID)
 
 	// 6. Async email if customer email was provided (AC-06.5)
-	if payload.ClienteEmail != nil && *payload.ClienteEmail != "" && pdfPath != "" {
+	// Send email even if PDF generation failed (user still wants the receipt)
+	if payload.ClienteEmail != nil && *payload.ClienteEmail != "" {
 		w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath)
 	}
 }
@@ -385,16 +387,25 @@ func (w *FacturacionWorker) generatePDF(ctx context.Context, venta *model.Venta,
 }
 
 func (w *FacturacionWorker) enqueueEmail(ctx context.Context, venta *model.Venta, email, pdfPath string) {
+	// Build email body with appropriate message
+	var body string
+	if pdfPath != "" {
+		body = fmt.Sprintf("Adjunto encontrarás tu comprobante de compra.\nTotal: $%.2f\n\nGracias por tu compra.", venta.Total.InexactFloat64())
+	} else {
+		body = fmt.Sprintf("Comprobante de tu compra.\nTotal: $%.2f\n\nTicket #%d\n\nPuedes solicitar una copia impresa en nuestro local.\nGracias por tu compra.", venta.Total.InexactFloat64(), venta.NumeroTicket)
+		log.Warn().Str("email", email).Msg("facturacion_worker: sending email without PDF attachment")
+	}
+
 	emailJob := EmailJobPayload{
 		ToEmail: email,
 		Subject: fmt.Sprintf("Comprobante BlendPOS — Ticket #%d", venta.NumeroTicket),
-		Body:    fmt.Sprintf("Adjunto encontrarás tu comprobante de compra.\nTotal: $%.2f", venta.Total.InexactFloat64()),
+		Body:    body,
 		PDFPath: pdfPath,
 	}
 	if err := w.dispatcher.EnqueueEmail(ctx, emailJob); err != nil {
 		log.Warn().Err(err).Str("email", email).Msg("facturacion_worker: failed to enqueue email")
 	} else {
-		log.Info().Str("email", email).Msg("facturacion_worker: email job enqueued")
+		log.Info().Str("email", email).Bool("with_pdf", pdfPath != "").Msg("facturacion_worker: email job enqueued")
 	}
 }
 
