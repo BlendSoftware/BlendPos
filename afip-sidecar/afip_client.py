@@ -502,10 +502,22 @@ class AFIPClient:
             resultado = wsfe.CAESolicitar()
             
             if not resultado:
-                # Error técnico
-                error_msg = f"AFIP error técnico: {wsfe.ErrMsg}"
-                logger.error(error_msg)
-                raise Exception(error_msg)
+                # Error técnico - construir mensaje de error
+                error_msg = wsfe.ErrMsg if wsfe.ErrMsg else ""
+                
+                # Si ErrMsg está vacío, revisar observaciones
+                if not error_msg and wsfe.Obs:
+                    obs_list = []
+                    for obs in wsfe.Observaciones:
+                        if isinstance(obs, dict):
+                            obs_list.append(f"[{obs.get('Code')}] {obs.get('Msg')}")
+                        elif isinstance(obs, str):
+                            obs_list.append(obs)
+                    error_msg = " | ".join(obs_list) if obs_list else "Sin detalles"
+                
+                full_error = f"AFIP error técnico: {error_msg}"
+                logger.error(full_error)
+                raise Exception(full_error)
             
             # Extraer resultado
             cae = wsfe.CAE
