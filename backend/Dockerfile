@@ -6,10 +6,10 @@ RUN apk --no-cache add ca-certificates git tzdata curl
 WORKDIR /app
 
 # Download deps before copying source — maximizes Docker layer cache hits
-COPY backend/go.mod backend/go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
 
-COPY backend/ .
+COPY . .
 
 # CGO_ENABLED=0 produces a fully static binary (no libc dependency)
 # Results in a ~15MB final image from scratch/alpine
@@ -30,11 +30,11 @@ RUN adduser -D -u 1001 blendpos
 
 COPY --from=builder /blendpos /blendpos
 COPY --from=builder /usr/local/bin/migrate /usr/local/bin/migrate
-COPY --chown=blendpos:blendpos backend/migrations /migrations
-COPY --chown=blendpos:blendpos backend/static /app/static
+COPY --chown=blendpos:blendpos migrations /migrations
+COPY --chown=blendpos:blendpos static /app/static
 
 # Entrypoint script: run migrations then start server
-COPY --chown=blendpos:blendpos backend/entrypoint.sh /entrypoint.sh
+COPY --chown=blendpos:blendpos entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 USER blendpos

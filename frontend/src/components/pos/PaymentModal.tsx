@@ -22,14 +22,6 @@ function formatCurrency(value: number): string {
 type TipoComprobante = 'auto' | 'ticket_interno' | 'factura_a' | 'factura_b' | 'factura_c';
 type TipoDocumentoReceptor = 'dni' | 'cuit';
 
-const COMPROBANTE_OPTIONS: Array<{ value: TipoComprobante; label: string }> = [
-    { value: 'auto', label: 'Automatico' },
-    { value: 'ticket_interno', label: 'Ticket' },
-    { value: 'factura_c', label: 'Factura C' },
-    { value: 'factura_b', label: 'Factura B' },
-    { value: 'factura_a', label: 'Factura A' },
-];
-
 const DOCUMENTO_OPTIONS: Array<{ value: TipoDocumentoReceptor; label: string }> = [
     { value: 'dni', label: 'DNI' },
     { value: 'cuit', label: 'CUIT' },
@@ -342,7 +334,9 @@ export function PaymentModal() {
                     </Stack>
                 </Box>
 
-                <Collaps<Alert icon={<AlertCircle size={14} />} color="cyan" variant="light" p="xs">
+                <Collapse in={requiresFiscalBuyerData}>
+                    <Stack gap="sm">
+                        <Alert icon={<AlertCircle size={14} />} color="cyan" variant="light" p="xs">
                             <Text size="xs" fw={600}>
                                 📋 Datos obligatorios del comprador según ARCA (ex-AFIP)
                             </Text>
@@ -392,9 +386,7 @@ export function PaymentModal() {
                             placeholder="Av. Siempre Viva 742, Springfield"
                             value={domicilioReceptor}
                             onChange={(e) => setDomicilioReceptor(e.currentTarget.value)}
-                            error={domicilioReceptor && !isDomicilioValid ? 'Ingresa un domicilio valido (minimo 5 caracteres)
-                            onChange={(e) => setDomicilioReceptor(e.currentTarget.value)}
-                            error={domicilioReceptor && !isDomicilioValid ? 'Ingresa un domicilio valido' : undefined}
+                            error={domicilioReceptor && !isDomicilioValid ? 'Ingresa un domicilio valido (minimo 5 caracteres)' : undefined}
                             size="sm"
                             required
                         />
