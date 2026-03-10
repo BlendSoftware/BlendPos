@@ -195,7 +195,7 @@ export function ComprasPage() {
                                             const saldo = totalConIva - pagado;
                                             return saldo > 0.005
                                                 ? <Text size="sm" fw={600} c="orange">{fmt(saldo)}</Text>
-                                                : <Text size="sm" c="dimmed">—</Text>;
+                                                : <Text size="sm" c="teal" fw={500}>{fmt(0)}</Text>;
                                         })()}
                                     </Table.Td>
                                     <Table.Td>

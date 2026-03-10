@@ -14,6 +14,34 @@ export default defineConfig({
     host: true,
     port: 5173,
   },
+  build: {
+    // Optimizaciones de rendimiento
+    target: 'esnext',
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true, // Eliminar console.log en producción
+        drop_debugger: true,
+      },
+    },
+    rollupOptions: {
+      output: {
+        // Mejor estrategia de chunking para reducir tiempos de carga
+        manualChunks: {
+          // Vendor principal
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          // Mantine UI separado
+          'mantine': ['@mantine/core', '@mantine/hooks', '@mantine/notifications'],
+          // Iconos separados
+          'icons': ['lucide-react'],
+          // Zustand store
+          'store': ['zustand'],
+        },
+      },
+    },
+    // Aumentar el límite de chunk warning
+    chunkSizeWarningLimit: 1000,
+  },
   optimizeDeps: {
     // Pre-bundle workbox packages so Vite doesn't trigger a full reload
     // when it discovers them at runtime during PWA service-worker registration.
@@ -23,6 +51,12 @@ export default defineConfig({
       'workbox-routing',
       'workbox-strategies',
       'workbox-core',
+      'react',
+      'react-dom',
+      'react-router-dom',
+      '@mantine/core',
+      '@mantine/hooks',
+      'zustand',
     ],
   },
   plugins: [

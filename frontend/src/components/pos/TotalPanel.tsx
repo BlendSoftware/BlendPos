@@ -18,7 +18,7 @@ export function TotalPanel() {
     const descuentoGlobal = useCartStore((s) => s.descuentoGlobal);
     const totalConDescuento = useCartStore((s) => s.totalConDescuento);
     const cart = useCartStore((s) => s.cart);
-    const openComprobanteModal = usePOSUIStore((s) => s.openComprobanteModal);
+    const openPaymentModal = usePOSUIStore((s) => s.openPaymentModal);
     const clearCart = useCartStore((s) => s.clearCart);
     const openDiscountModal = usePOSUIStore((s) => s.openDiscountModal);
 
@@ -75,7 +75,7 @@ export function TotalPanel() {
                     color="green"
                     leftSection={<CreditCard size={22} />}
                     fullWidth
-                    onClick={openComprobanteModal}
+                    onClick={openPaymentModal}
                     disabled={cart.length === 0}
                     className={styles.actionButton}
                 >

@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect, lazy, Suspense, startTransition } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Center, Loader } from '@mantine/core';
 
@@ -20,16 +20,16 @@ import { ConsultaPreciosPage } from './pages/admin/ConsultaPreciosPage';
 // POS Terminal — siempre cargado (ruta principal del cajero)
 import { PosTerminal } from './pages/PosTerminal';
 
-// Admin pages — lazy loaded (solo se descargan al navegar)
-const DashboardPage = lazy(() => import('./pages/admin/DashboardPage').then(m => ({ default: m.DashboardPage })));
-const GestionProductosPage = lazy(() => import('./pages/admin/GestionProductosPage').then(m => ({ default: m.GestionProductosPage })));
+// Admin pages — lazy loaded con prefetch optimizado
+const DashboardPage = lazy(() => import(/* webpackPrefetch: true */ './pages/admin/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const GestionProductosPage = lazy(() => import(/* webpackPrefetch: true */ './pages/admin/GestionProductosPage').then(m => ({ default: m.GestionProductosPage })));
 const InventarioPage = lazy(() => import('./pages/admin/InventarioPage').then(m => ({ default: m.InventarioPage })));
 const ProveedoresPage = lazy(() => import('./pages/admin/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })));
 const FacturacionPage = lazy(() => import('./pages/admin/FacturacionPage').then(m => ({ default: m.FacturacionPage })));
 const CierreCajaPage = lazy(() => import('./pages/admin/CierreCajaPage').then(m => ({ default: m.CierreCajaPage })));
 const UsuariosPage = lazy(() => import('./pages/admin/UsuariosPage').then(m => ({ default: m.UsuariosPage })));
 const CategoriasPage = lazy(() => import('./pages/admin/CategoriasPage').then(m => ({ default: m.CategoriasPage })));
-const ComprasPage = lazy(() => import('./pages/admin/ComprasPage').then(m => ({ default: m.ComprasPage })));
+const ComprasPage = lazy(() => import(/* webpackPrefetch: true */ './pages/admin/ComprasPage').then(m => ({ default: m.ComprasPage })));
 const NuevaCompraPage = lazy(() => import('./pages/admin/NuevaCompraPage').then(m => ({ default: m.NuevaCompraPage })));
 const DetalleCompraPage = lazy(() => import('./pages/admin/DetalleCompraPage').then(m => ({ default: m.DetalleCompraPage })));
 const GuiaAfipPage = lazy(() => import('./pages/admin/GuiaAfipPage').then(m => ({ default: m.GuiaAfipPage })));
