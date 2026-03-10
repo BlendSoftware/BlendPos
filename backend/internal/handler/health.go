@@ -44,11 +44,13 @@ func Health(db *gorm.DB, rdb *redis.Client, afipCB *infra.CircuitBreaker, cfg *c
 		}
 
 		c.JSON(status, gin.H{
-			"ok":      status == http.StatusOK,
-			"db":      dbStatus,
-			"redis":   redisStatus,
-			"afip_cb": cbState,
-			"smtp":    cfg.IsSMTPConfigured(),
+			"ok":        status == http.StatusOK,
+			"db":        dbStatus,
+			"redis":     redisStatus,
+			"afip_cb":   cbState,
+			"smtp":      cfg.IsSMTPConfigured(),
+			"smtp_host": cfg.SMTPHost,
+			"smtp_port": cfg.SMTPPort,
 		})
 	}
 }
