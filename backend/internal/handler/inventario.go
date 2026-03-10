@@ -269,6 +269,22 @@ func (h *FacturacionHandler) ReintentarComprobante(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// CancelarPendientes POST /v1/facturacion/cancelar-pendientes
+// Marca como 'error' todos los comprobantes pendientes con next_retry_at activo.
+// Solo administradores. Útil para limpiar reintentos con datos incorrectos.
+func (h *FacturacionHandler) CancelarPendientes(c *gin.Context) {
+	cancelados, err := h.comprobanteRepo.CancelarPendientes(
+		c.Request.Context(),
+		"Cancelado manualmente por administrador",
+	)
+	if err != nil {
+		log.Error().Err(err).Msg("CancelarPendientes: DB error")
+		c.JSON(http.StatusInternalServerError, apierror.New("Error al cancelar comprobantes pendientes"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"cancelados": cancelados})
+}
+
 // RegenerarPDF POST /v1/facturacion/:id/regen-pdf
 // Regenera el PDF fiscal (A4) de un comprobante que ya tiene CAE.
 // Útil para comprobantes que fueron generados como ticket por falta de config fiscal.
