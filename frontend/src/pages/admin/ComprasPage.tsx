@@ -190,6 +190,15 @@ export function ComprasPage() {
                                     </Table.Td>
                                     <Table.Td style={{ textAlign: 'right' }}>
                                         {(() => {
+                                            // Si el estado es "pagada", mostrar $0 independientemente del saldo real
+                                            if (c.estado === 'pagada') {
+                                                return <Text size="sm" c="teal" fw={500}>{fmt(0)}</Text>;
+                                            }
+                                            // Si está anulada, no mostrar saldo
+                                            if (c.estado === 'anulada') {
+                                                return <Text size="sm" c="dimmed">—</Text>;
+                                            }
+                                            // Calcular saldo pendiente para estado "pendiente"
                                             const totalConIva = (c.items ?? []).reduce((s, i) => s + Number(i.total), 0);
                                             const pagado = (c.pagos ?? []).reduce((s, p) => s + Number(p.monto), 0);
                                             const saldo = totalConIva - pagado;

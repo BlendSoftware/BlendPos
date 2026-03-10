@@ -50,6 +50,8 @@ export interface SaleRecord {
     tipoDocReceptor?: number;
     /** Documento/CUIT del comprador. */
     nroDocReceptor?: string;
+    /** Nombre/Razon Social del receptor (obligatorio para facturas A/B/C). */
+    receptorNombre?: string;
     /** Domicilio fiscal/comercial del comprador. */
     receptorDomicilio?: string;
 }
@@ -76,6 +78,8 @@ interface SaleState {
         tipoDocReceptor?: number;
         /** Documento/CUIT del comprador. */
         nroDocReceptor?: string;
+        /** Nombre/Razon Social del receptor. */
+        receptorNombre?: string;
         /** Domicilio del comprador para factura fiscal. */
         receptorDomicilio?: string;
     }) => SaleRecord;
@@ -130,6 +134,7 @@ export const useSaleStore = create<SaleState>()(
                     cuitReceptor: pago.cuitReceptor,
                     tipoDocReceptor: pago.tipoDocReceptor,
                     nroDocReceptor: pago.nroDocReceptor,
+                    receptorNombre: pago.receptorNombre,
                     receptorDomicilio: pago.receptorDomicilio,
                 };
 

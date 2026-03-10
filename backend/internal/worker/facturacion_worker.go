@@ -35,6 +35,8 @@ type FacturacionJobPayload struct {
 	TipoDocReceptor *int `json:"tipo_doc_receptor,omitempty"`
 	// NroDocReceptor: CUIT/DNI del receptor, empty = default to "0"
 	NroDocReceptor *string `json:"nro_doc_receptor,omitempty"`
+	// ReceptorNombre: Nombre/Razón Social del receptor (obligatorio para facturas A/B/C)
+	ReceptorNombre *string `json:"receptor_nombre,omitempty"`
 	// ReceptorDomicilio: domicilio del comprador para la factura/PDF
 	ReceptorDomicilio *string `json:"receptor_domicilio,omitempty"`
 }
@@ -45,6 +47,7 @@ func applyPayloadToComprobante(comp *model.Comprobante, payload *FacturacionJobP
 	}
 	comp.ReceptorTipoDocumento = payload.TipoDocReceptor
 	comp.ReceptorNumeroDocumento = payload.NroDocReceptor
+	comp.ReceptorNombre = payload.ReceptorNombre
 	comp.ReceptorDomicilio = payload.ReceptorDomicilio
 	if payload.NroDocReceptor != nil && *payload.NroDocReceptor != "" && *payload.NroDocReceptor != "0" {
 		comp.ReceptorCUIT = payload.NroDocReceptor

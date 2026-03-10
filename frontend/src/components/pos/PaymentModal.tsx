@@ -57,6 +57,7 @@ export function PaymentModal() {
     const [tipoComprobante, setTipoComprobante] = useState<TipoComprobante>('auto');
     const [tipoDocumentoReceptor, setTipoDocumentoReceptor] = useState<TipoDocumentoReceptor>('dni');
     const [documentoReceptor, setDocumentoReceptor] = useState('');
+    const [nombreReceptor, setNombreReceptor] = useState('');
     const [domicilioReceptor, setDomicilioReceptor] = useState('');
 
     // Map ComprobanteModal selection to PaymentModal format
@@ -109,6 +110,7 @@ export function PaymentModal() {
             ? /^\d{11}$/.test(normalizedDocumento)
             : /^\d{7,8}$/.test(normalizedDocumento)
     );
+    const isNombreValid = !requiresFiscalBuyerData || nombreReceptor.trim().length >= 3;
     const isDomicilioValid = !requiresFiscalBuyerData || domicilioReceptor.trim().length >= 5;
 
     const toNumber = (val: number | string): number =>
@@ -140,6 +142,11 @@ export function PaymentModal() {
             : null;
 
     const canConfirm = (() => {
+        // Validar datos fiscales del receptor si es factura A/B/C
+        if (requiresFiscalBuyerData && (!isDocumentoValid || !isNombreValid || !isDomicilioValid)) {
+            return false;
+        }
+        
         if (metodoPago === 'efectivo') return efectivoRecibido >= finalTotal;
         if (metodoPago !== 'mixto') return true;
 
@@ -157,6 +164,7 @@ export function PaymentModal() {
             setMixtoDebito('');
             setMixtoCredito('');
             setMixtoQr('');
+            setNombreReceptor('');
             setMixtoTransferencia('');
             setClienteEmail('');
             setTipoComprobante('auto');
@@ -203,7 +211,8 @@ export function PaymentModal() {
             efectivoRecibido: efectivoRecibidoToSave,
             vuelto: vueltoCalc,
             clienteEmail: clienteEmail.trim() || undefined,
-            tipoComprobante: tipoComprobante === 'auto' ? undefined : tipoComprobante,
+            tipoCompNombre: requiresFiscalBuyerData ? nombreReceptor.trim() : undefined,
+            receptorrobante: tipoComprobante === 'auto' ? undefined : tipoComprobante,
             cuitReceptor: requiresFiscalBuyerData && resolvedDocType === 'cuit' ? normalizedDocumento : undefined,
             tipoDocReceptor: requiresFiscalBuyerData
                 ? (resolvedDocType === 'cuit' ? 80 : 96)
@@ -333,8 +342,12 @@ export function PaymentModal() {
                     </Stack>
                 </Box>
 
-                <Collapse in={requiresFiscalBuyerData}>
-                    <Stack gap="sm">
+                <Collaps<Alert icon={<AlertCircle size={14} />} color="cyan" variant="light" p="xs">
+                            <Text size="xs" fw={600}>
+                                📋 Datos obligatorios del comprador según ARCA (ex-AFIP)
+                            </Text>
+                        </Alert>
+
                         {tipoComprobante !== 'factura_a' && (
                             <Select
                                 label="Tipo de documento"
@@ -363,10 +376,23 @@ export function PaymentModal() {
                         />
 
                         <TextInput
+                            label={resolvedDocType === 'cuit' ? 'Razón Social' : 'Nombre completo del comprador'}
+                            description="Nombre/apellido o razón social como aparece en ARCA"
+                            placeholder={resolvedDocType === 'cuit' ? 'EMPRESA SA' : 'Juan Pérez'}
+                            value={nombreReceptor}
+                            onChange={(e) => setNombreReceptor(e.currentTarget.value)}
+                            error={nombreReceptor && !isNombreValid ? 'Ingresa un nombre valido (minimo 3 caracteres)' : undefined}
+                            size="sm"
+                            required
+                        />
+
+                        <TextInput
                             label="Domicilio del comprador"
-                            description="Se usara en la factura fiscal"
+                            description="Domicilio fiscal completo"
                             placeholder="Av. Siempre Viva 742, Springfield"
                             value={domicilioReceptor}
+                            onChange={(e) => setDomicilioReceptor(e.currentTarget.value)}
+                            error={domicilioReceptor && !isDomicilioValid ? 'Ingresa un domicilio valido (minimo 5 caracteres)
                             onChange={(e) => setDomicilioReceptor(e.currentTarget.value)}
                             error={domicilioReceptor && !isDomicilioValid ? 'Ingresa un domicilio valido' : undefined}
                             size="sm"

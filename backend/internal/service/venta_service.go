@@ -329,6 +329,7 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 			ClienteEmail:    req.ClienteEmail,
 			TipoDocReceptor: req.TipoDocReceptor,
 			NroDocReceptor:  req.NroDocReceptor,
+			ReceptorNombre:  req.ReceptorNombre,
 			ReceptorDomicilio: req.ReceptorDomicilio,
 		}
 		if err := s.dispatcher.EnqueueFacturacion(ctx, fiscalPayload); err != nil {
@@ -348,6 +349,7 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 					ReceptorTipoDocumento: req.TipoDocReceptor,
 					ReceptorNumeroDocumento: req.NroDocReceptor,
 					ReceptorCUIT:         req.NroDocReceptor,
+					ReceptorNombre:       req.ReceptorNombre,
 					ReceptorDomicilio:    req.ReceptorDomicilio,
 					RetryCount:           0,
 					NextRetryAt:          &nextRetry,
