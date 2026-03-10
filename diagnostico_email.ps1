@@ -84,13 +84,27 @@ Write-Host '   → Puerto bloqueado, usa 587' -ForegroundColor Yellow
 
 Write-Host "`n🚀 SOLUCIÓN MÁS PROBABLE" -ForegroundColor Cyan
 Write-Host "========================" -ForegroundColor Cyan
-Write-Host "Railway suele bloquear el puerto 465.`n" -ForegroundColor White
+Write-Host "Railway BLOQUEA las conexiones SMTP salientes a Gmail.`n" -ForegroundColor White
 
-Write-Host "Cambia en Railway:" -ForegroundColor Yellow
-Write-Host "  SMTP_PORT = 587  (en vez de 465)`n" -ForegroundColor White
+Write-Host "Error típico en logs:" -ForegroundColor Yellow
+Write-Host '  "mailer: dial: connect: connection timed out"' -ForegroundColor Red
+Write-Host '  "mailer: dial: i/o timeout"`n' -ForegroundColor Red
 
-Write-Host "El código ya soporta ambos puertos automáticamente." -ForegroundColor Green
-Write-Host "Después del cambio, el email se enviará correctamente.`n" -ForegroundColor Green
+Write-Host "✅ SOLUCIÓN: Usar SendGrid (gratis)" -ForegroundColor Green
+Write-Host "-----------------------------------" -ForegroundColor Gray
+Write-Host "1. Crear cuenta: https://signup.sendgrid.com/" -ForegroundColor White
+Write-Host "2. Verificar sender (tu email)" -ForegroundColor White
+Write-Host "3. Crear API Key" -ForegroundColor White
+Write-Host "4. En Railway, cambiar:" -ForegroundColor White
+Write-Host ""
+Write-Host "   SMTP_HOST = smtp.sendgrid.net" -ForegroundColor Cyan
+Write-Host "   SMTP_PORT = 587" -ForegroundColor Cyan
+Write-Host "   SMTP_USER = apikey" -ForegroundColor Cyan
+Write-Host "   SMTP_PASSWORD = SG.tu_api_key" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "5. Guardar y esperar redeploy (2 min)" -ForegroundColor White
+Write-Host ""
+Write-Host "📚 Guía completa: Ver SETUP_SENDGRID.md`n" -ForegroundColor Yellow
 
 Write-Host "📞 Soporte Adicional" -ForegroundColor Cyan
 Write-Host "-------------------" -ForegroundColor Gray

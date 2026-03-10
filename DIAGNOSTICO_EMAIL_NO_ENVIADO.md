@@ -1,8 +1,32 @@
-# 🔍 Script de Diagnóstico - Email No Enviado
+# 🔍 Diagnóstico - Email No Enviado
 
-## Problema Reportado
+## ✅ Problema CONFIRMADO
 
-La factura se emite correctamente (CAE: 86100017191437) pero el email **NO se envía** a `juanisarmientoomartinez@gmail.com`.
+```
+ERROR: email_worker: failed to send email 
+error="mailer: dial: dial tcp 172.217.78.109:587: connect: connection timed out"
+to=juanisarmientoomartinez@gmail.com
+```
+
+## 🚨 Causa Raíz
+
+**Railway bloquea TODAS las conexiones SMTP salientes** (puertos 25, 465, 587) para prevenir spam.
+
+- ❌ Tu código está **PERFECTO**
+- ❌ Gmail está **BIEN CONFIGURADO**
+- ❌ El problema es **INFRAESTRUCTURA DE RAILWAY**
+
+## ✅ Solución
+
+Usar SendGrid/Resend/Mailgun - Railway **NO los bloquea**.
+
+Ver: [CONFIGURAR_SENDGRID.md](CONFIGURAR_SENDGRID.md) para configuración paso a paso.
+
+---
+
+## Diagnóstico Original (antes de confirmar el problema)
+
+La factura se emite correctamente pero el email **NO se envía**.
 
 ## Variables Verificadas ✅
 
