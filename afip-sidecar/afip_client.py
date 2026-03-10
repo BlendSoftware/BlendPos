@@ -459,22 +459,40 @@ class AFIPClient:
             # Debug: verificar estructura de factura antes de agregar IVA
             logger.debug(f"DEBUG factura antes de IVA: iva={wsfe.factura.get('iva')}, condicion_iva_receptor_id={wsfe.factura.get('condicion_iva_receptor_id')}")
             
-            # Agregar IVA (AFIP requiere declarar alícuota si ImpNeto > 0)
-            # Alícuotas: 3=0% (No Gravado), 4=10.5%, 5=21%, 6=27%
-            if req.importe_neto > 0:
-                if req.tipo_comprobante in (6, 11):
-                    # Factura B/C: Monotributo/Consumidor Final → Alícuota 3 (0% - No Gravado)
+            # Agregar IVA según tipo de comprobante (especificación AFIP):
+            # - Factura A (tipo 1): SIEMPRE debe llevar array IVA con discriminación
+            # - Factura B (tipo 6): Puede llevar IVA con alícuota 0% (no discriminado)
+            # - Factura C (tipo 11): NO debe llevar array IVA (monotributistas)
+            # Alícuotas AFIP: 3=0% (No Gravado), 4=10.5%, 5=21%, 6=27%
+            
+            if req.tipo_comprobante == 11:
+                # Factura C (Monotributo): NO enviar array IVA
+                # AFIP error 10071: "Para comprobantes tipo C el objeto IVA no debe informarse"
+                pass
+            elif req.tipo_comprobante == 6:
+                # Factura B: IVA incluido, no discriminado (alícuota 0%)
+                if req.importe_neto > 0:
                     wsfe.AgregarIva(
-                        iva_id=3,  # 0% - No Gravado
+                        iva_id=3,  # 0% - No Gravado / IVA incluido
                         base_imp=round(req.importe_neto, 2),
                         importe=0.00
                     )
-                elif req.importe_iva > 0:
-                    # Factura A con IVA: Responsable Inscripto → Alícuota 5 (21%)
+            elif req.tipo_comprobante == 1:
+                # Factura A: DEBE discriminar IVA (obligatorio según AFIP error 10070)
+                if req.importe_iva > 0:
+                    # Factura A con IVA al 21%
                     wsfe.AgregarIva(
                         iva_id=5,  # 21%
                         base_imp=round(req.importe_neto, 2),
                         importe=round(req.importe_iva, 2)
+                    )
+                else:
+                    # Factura A sin IVA (productos exentos o gravados 0%)
+                    # AFIP requiere informar el array IVA aunque sea con alícuota 0%
+                    wsfe.AgregarIva(
+                        iva_id=3,  # 0% - Exento / No Gravado
+                        base_imp=round(req.importe_neto, 2),
+                        importe=0.00
                     )
             
             # Debug: verificar estructura de factura antes de CAESolicitar
@@ -500,12 +518,22 @@ class AFIPClient:
                 obs_afip = wsfe.ObtenerTagXml('Observaciones')
                 logger.warning("Observaciones AFIP: %s", obs_afip)
                 
-                # pyafipws devuelve observaciones como lista de diccionarios
+                # pyafipws devuelve observaciones como lista de diccionarios o strings
                 for obs in wsfe.Observaciones:
-                    observaciones.append(ObservacionAFIP(
-                        codigo=int(obs.get('Code', 0)),
-                        mensaje=obs.get('Msg', 'Sin descripción')
-                    ))
+                    # Manejar tanto dicts como strings (AFIP inconsistente)
+                    if isinstance(obs, dict):
+                        observaciones.append(ObservacionAFIP(
+                            codigo=int(obs.get('Code', 0)),
+                            mensaje=obs.get('Msg', 'Sin descripción')
+                        ))
+                    elif isinstance(obs, str):
+                        # Fallback: observación como string plano
+                        observaciones.append(ObservacionAFIP(
+                            codigo=0,
+                            mensaje=obs
+                        ))
+                    else:
+                        logger.warning(f"Observación AFIP con formato inesperado: {type(obs)} - {obs}")
             
             # Construir respuesta
             response = FacturarResponse(

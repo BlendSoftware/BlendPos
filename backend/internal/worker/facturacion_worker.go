@@ -236,21 +236,28 @@ func (w *FacturacionWorker) buildAFIPPayload(ctx context.Context, venta *model.V
 	}
 
 	// ── IVA calculation ───────────────────────────────────────────────────────
-	// Monotributo / Exento: total sin discriminar IVA (importe_exento = total)
-	// Responsable Inscripto: desglosar 21% IVA
+	// El cálculo de IVA depende del TIPO DE COMPROBANTE final, no de la condición fiscal:
+	// - Factura A (tipo 1): DEBE discriminar IVA 21% (neto + iva = total)
+	// - Factura B (tipo 6): IVA incluido, no discriminado (total = neto, iva = 0)
+	// - Factura C (tipo 11): Sin IVA, monotributista (total = neto, iva = 0)
 	var importeNeto, importeIVA, importeExento decimal.Decimal
 	total := venta.Total
 
-	switch condicionFiscal {
-	case "Responsable Inscripto":
+	switch tipoComprobante {
+	case 1: // Factura A - Discriminar IVA 21%
 		// neto = total / 1.21 ; iva = total - neto
 		divisor := decimal.NewFromFloat(1.21)
 		importeNeto = total.Div(divisor).RoundBank(2)
 		importeIVA = total.Sub(importeNeto).RoundBank(2)
 		importeExento = decimal.Zero
-	default: // Monotributo, Exento
-		// Factura C: el total va íntegramente en imp_neto.
-		// AFIP requiere ImpTotal = ImpNeto + ImpTrib, e ImpTotConc = 0 para tipo C.
+	case 6, 11: // Factura B y C - IVA incluido o sin IVA
+		// Para B y C: el total va íntegramente en imp_neto, sin discriminar IVA
+		// AFIP requiere ImpTotal = ImpNeto + ImpTrib para estos tipos
+		importeNeto = total
+		importeIVA = decimal.Zero
+		importeExento = decimal.Zero
+	default:
+		// Fallback seguro (tipo desconocido → ticket interno)
 		importeNeto = total
 		importeIVA = decimal.Zero
 		importeExento = decimal.Zero
