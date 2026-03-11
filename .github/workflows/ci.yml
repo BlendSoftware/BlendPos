@@ -104,3 +104,22 @@ jobs:
 
       - name: Build frontend image
         run: docker build -t blendpos-frontend ./frontend --build-arg VITE_API_URL=http://localhost:8080
+
+  deploy-vps:
+    name: Deploy to VPS
+    needs: [backend-test, frontend-lint, docker-build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Executing remote SSH commands
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ~/blendpos
+            git pull origin master
+            docker compose -f docker-compose.vps.yml build frontend backend
+            docker compose -f docker-compose.vps.yml up -d --remove-orphans
