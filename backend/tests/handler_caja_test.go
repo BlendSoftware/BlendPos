@@ -92,7 +92,7 @@ func (s *stubCajaServiceHTTP) FindSesionAbierta(_ context.Context, sesionID uuid
 	return nil
 }
 
-func (s *stubCajaServiceHTTP) GetActiva(_ context.Context, usuarioID uuid.UUID, _ *int) (*dto.ReporteCajaResponse, error) {
+func (s *stubCajaServiceHTTP) GetActiva(_ context.Context, usuarioID uuid.UUID) (*dto.ReporteCajaResponse, error) {
 	if s.activeSesion == nil {
 		return nil, nil
 	}

@@ -5,7 +5,7 @@ import {
 } from '@mantine/core';
 import {
     ArrowLeft, AlertTriangle, Key, ShieldCheck, ExternalLink, Check,
-    Terminal, FileBadge, BookOpen, ChevronRight, Info, Wrench,
+    Terminal, FileBadge, BookOpen, Info, Wrench,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 

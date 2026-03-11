@@ -93,6 +93,10 @@ func (r *stubComprobanteRepo) ListPendingRetries(_ context.Context, _ time.Time,
 	return results, nil
 }
 
+func (r *stubComprobanteRepo) CancelarPendientes(_ context.Context, _ string) (int64, error) {
+	return 0, nil
+}
+
 // compile-time interface check
 var _ repository.ComprobanteRepository = (*stubComprobanteRepo)(nil)
 

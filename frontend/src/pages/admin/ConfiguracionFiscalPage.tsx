@@ -2,19 +2,18 @@ import { useState, useEffect, useRef } from 'react';
 import {
     Stack, Title, Text, Group, Paper, Badge, Button, TextInput,
     Select, Alert, Loader, Divider, Box, ThemeIcon, SimpleGrid,
-    Card, Tooltip, Anchor,
+    Card, Anchor,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import {
     ShieldCheck, AlertTriangle, Check, Upload, FileKey, FileBadge,
-    RefreshCw, ExternalLink, BookOpen, Save,
+    ExternalLink, BookOpen, Save,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
     getConfiguracionFiscal,
     updateConfiguracionFiscal,
-    type ConfiguracionFiscalResponse,
 } from '../../services/api/configuracion_fiscal';
 
 // ─────────────────────────────────────────────────────────────────────────────

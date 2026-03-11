@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense, startTransition } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Center, Loader } from '@mantine/core';
 

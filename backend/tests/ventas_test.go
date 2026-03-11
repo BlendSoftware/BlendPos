@@ -119,7 +119,7 @@ func (s *stubCajaService) FindSesionAbierta(_ context.Context, _ uuid.UUID) erro
 	return nil
 }
 
-func (s *stubCajaService) GetActiva(_ context.Context, _ uuid.UUID, _ *int) (*dto.ReporteCajaResponse, error) {
+func (s *stubCajaService) GetActiva(_ context.Context, _ uuid.UUID) (*dto.ReporteCajaResponse, error) {
 	return nil, nil
 }
 
