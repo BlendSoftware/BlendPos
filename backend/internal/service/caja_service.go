@@ -40,9 +40,9 @@ func NewCajaService(repo repository.CajaRepository) CajaService {
 // AC-04.1 / AC-04.2
 
 func (s *cajaService) Abrir(ctx context.Context, usuarioID uuid.UUID, req dto.AbrirCajaRequest) (*dto.ReporteCajaResponse, error) {
-	// Guard: no duplicate open session per punto_de_venta
+	// Guard: no duplicate open session per punto_de_venta — idempotent: return existing session
 	if existing, err := s.repo.FindSesionAbiertaPorPDV(ctx, req.PuntoDeVenta); err == nil && existing != nil {
-		return nil, errors.New("Ya existe una caja abierta en este punto de venta")
+		return s.buildReporte(ctx, existing)
 	}
 
 	sesion := &model.SesionCaja{
