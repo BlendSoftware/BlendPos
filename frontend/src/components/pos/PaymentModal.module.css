@@ -19,6 +19,19 @@
     font-variant-numeric: tabular-nums;
 }
 
+.comprobanteBox {
+    background: var(--mantine-color-dark-7);
+    border-radius: var(--mantine-radius-md);
+    padding: var(--mantine-spacing-md);
+    border: 1px solid var(--mantine-color-dark-4);
+}
+
+/* Light mode */
+:global([data-mantine-color-scheme='light']) .comprobanteBox {
+    background: var(--mantine-color-gray-0);
+    border: 1px solid var(--mantine-color-gray-3);
+}
+
 .vueltoBox {
     background-color: rgba(18, 184, 134, 0.12);
     border: 1px solid rgba(18, 184, 134, 0.3);

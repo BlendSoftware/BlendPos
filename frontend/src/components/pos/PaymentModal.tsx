@@ -289,14 +289,7 @@ export function PaymentModal() {
                 </div>
 
                 {/* Tipo de comprobante */}
-                <Box
-                    style={{
-                        background: 'var(--mantine-color-dark-7)',
-                        borderRadius: 'var(--mantine-radius-md)',
-                        padding: 'var(--mantine-spacing-md)',
-                        border: '1px solid var(--mantine-color-dark-4)',
-                    }}
-                >
+                <Box className={styles.comprobanteBox}>
                     <Stack gap="sm">
                         <Group gap="xs">
                             <Receipt size={18} />
