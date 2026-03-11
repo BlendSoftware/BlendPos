@@ -183,7 +183,7 @@ func buildVentaSvc(sesionAbierta bool) (service.VentaService, *stubVentaRepo, *s
 	cajaSvc := &stubCajaService{sesionAbierta: sesionAbierta}
 	inventarioSvc := service.NewInventarioService(productoRepo, nil)
 
-	svc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, nil, nil)
+	svc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, nil, nil, nil)
 	return svc, ventaRepo, productoRepo, cajaRepo
 }
 
@@ -342,7 +342,7 @@ func TestRegistrarVenta_ConDesarme(t *testing.T) {
 
 	inventarioSvc := service.NewInventarioService(productoRepo, nil)
 	cajaSvc := &stubCajaService{sesionAbierta: true}
-	svc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, nil, nil)
+	svc := service.NewVentaService(ventaRepo, inventarioSvc, cajaSvc, cajaRepo, productoRepo, nil, nil, nil)
 
 	// Sell 4 latas (hijo stock = 0, needs auto-desarme of 1 pack → 6 units)
 	resp, err := svc.RegistrarVenta(context.Background(), uuid.New(), dto.RegistrarVentaRequest{
