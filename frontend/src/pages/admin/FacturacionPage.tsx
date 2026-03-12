@@ -7,11 +7,9 @@ import { DateInput } from '@mantine/dates';
 import { Printer, Download, FileText, ChevronDown, ChevronUp, Search, Ban, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
-import { type SaleRecord, type MetodoPago } from '../../store/useSaleStore';
+import { type MetodoPago } from '../../store/useSaleStore';
 import { anularVenta, listarVentas, type VentaListItem } from '../../services/api/ventas';
 import { getComprobante, descargarPDF, abrirFacturaHTML } from '../../services/api/facturacion';
-import { thermalPrinter } from '../../services/ThermalPrinterService';
-import { usePrinterStore } from '../../store/usePrinterStore';
 import { formatARS } from '../../utils/format';
 import type { IVenta } from '../../types';
 
@@ -183,36 +181,32 @@ export function FacturacionPage() {
     }, [ventas, anuladas, busqueda, periodo, filtroMetodo, filtroEstado, desde, hasta, sortBy, sortDir]);
 
     const handleReprint = async (v: IVenta) => {
-        // Reconstruye un SaleRecord desde IVenta y lo manda a la impresora
-        const saleRecord: SaleRecord = {
-            id: v.id,
-            numeroTicket: v.numeroTicket,
-            fecha: new Date(v.fecha),
-            items: v.items.map((item) => ({
-                id: item.productoId,
-                nombre: item.productoNombre,
-                precio: item.precioUnitario,
-                codigoBarras: item.codigoBarras || '',
-                cantidad: item.cantidad,
-                subtotal: item.subtotal,
-                descuento: item.descuento,
-            })),
-            total: v.total,
-            totalConDescuento: v.total,
-            metodoPago: v.metodoPago as MetodoPago,
-            pagos: v.pagos as SaleRecord['pagos'],
-            vuelto: v.vuelto ?? 0,
-            cajero: v.cajeroNombre,
-            tipoComprobante: 'ticket_interno' as const,
-        };
-        const cfg = usePrinterStore.getState().config;
-        thermalPrinter.printAll(saleRecord, cfg).catch(console.error);
-        notifications.show({
-            title: 'Reimpresión enviada',
-            message: `Ticket #${v.numeroTicket}`,
-            color: 'blue',
-            icon: <Printer size={14} />,
-        });
+        try {
+            const comp = await getComprobante(v.id).catch(() => null);
+            if (!comp) {
+                notifications.show({
+                    title: 'Sin comprobante',
+                    message: 'No se encontró el comprobante para esta venta.',
+                    color: 'orange',
+                });
+                return;
+            }
+            // Abrir el HTML con auto-impresión activada
+            await abrirFacturaHTML(comp.id, true);
+            notifications.show({
+                title: 'Reimpresión iniciada',
+                message: `Ticket #${v.numeroTicket}`,
+                color: 'blue',
+                icon: <Printer size={14} />,
+            });
+        } catch (e: unknown) {
+            notifications.show({
+                title: 'No se pudo reimprimir',
+                message: e instanceof Error ? e.message : 'Error desconocido.',
+                color: 'red',
+                icon: <Printer size={14} />,
+            });
+        }
     };
 
     const handleDownloadPDF = async (v: IVenta) => {
