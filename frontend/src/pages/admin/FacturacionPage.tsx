@@ -9,7 +9,7 @@ import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
 import { type MetodoPago } from '../../store/useSaleStore';
 import { anularVenta, listarVentas, type VentaListItem } from '../../services/api/ventas';
-import { getComprobante, descargarPDF, abrirFacturaHTML } from '../../services/api/facturacion';
+import { getComprobante, descargarPDF, fetchFacturaHTML, regenerarPDF } from '../../services/api/facturacion';
 import { formatARS } from '../../utils/format';
 import type { IVenta } from '../../types';
 
@@ -284,21 +284,19 @@ export function FacturacionPage() {
             ${v.anulada ? '<p style="color: red; font-weight: bold; margin-top: 10px;">*** ANULADA ***</p>' : ''}
         </div>
     </div>
-    
-    <script>
-        // Auto-ejecutar impresión al cargar
-        window.addEventListener('load', function() {
-            setTimeout(function() {
-                window.print();
-            }, 500);
-        });
-    </script>
 </body>
 </html>`;
 
             // Escribir el HTML en la ventana nueva
             printWindow.document.write(ticketHTML);
             printWindow.document.close();
+
+            // Disparar impresión desde la ventana padre (más confiable que window.print() en los scripts embebidos)
+            printWindow.onload = () => {
+                printWindow.focus();
+                printWindow.print();
+                setTimeout(() => printWindow.close(), 100);
+            };
             
             notifications.show({
                 title: 'Reimpresión iniciada',
@@ -328,7 +326,23 @@ export function FacturacionPage() {
                 });
                 return;
             }
-            await descargarPDF(comp.id, `ticket_${v.numeroTicket}.pdf`);
+            const fileName = `ticket_${v.numeroTicket}.pdf`;
+            try {
+                await descargarPDF(comp.id, fileName);
+            } catch (firstErr) {
+                // Si el archivo no está en disco (404), intentar regenerarlo y reintentar
+                const is404 = firstErr instanceof Error && firstErr.message.includes('404');
+                if (!is404) throw firstErr;
+
+                notifications.show({
+                    title: 'Regenerando PDF…',
+                    message: 'El archivo no se encontró en disco. Regenerando…',
+                    color: 'blue',
+                    icon: <RefreshCw size={14} />,
+                });
+                await regenerarPDF(comp.id);
+                await descargarPDF(comp.id, fileName);
+            }
             notifications.show({
                 title: 'PDF descargado',
                 message: `Ticket #${v.numeroTicket}`,
@@ -337,23 +351,33 @@ export function FacturacionPage() {
             });
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? e.message : 'Error desconocido.';
-            // Si es un error 404, probablemente el PDF aún no se generó
-            const isNotReady = errorMsg.includes('404') || errorMsg.includes('no disponible');
             notifications.show({
-                title: isNotReady ? 'PDF aún no disponible' : 'Error al descargar PDF',
-                message: isNotReady 
-                    ? 'El PDF se está generando. Espera unos segundos e intenta nuevamente.' 
+                title: 'Error al descargar PDF',
+                message: errorMsg.includes('CAE')
+                    ? 'Este ticket no tiene factura electrónica (sin CAE). Usá "Reimprimir" para obtener el comprobante.'
                     : errorMsg,
-                color: isNotReady ? 'orange' : 'red',
+                color: 'red',
                 icon: <Download size={14} />,
             });
         }
     };
 
     const handleVerFactura = async (v: IVenta) => {
+        // Abrir ventana ANTES del await — evita que el popup blocker la bloquee
+        const win = window.open('', '_blank', 'width=900,height=700');
+        if (!win) {
+            notifications.show({
+                title: 'Popups bloqueados',
+                message: 'Permite las ventanas emergentes en este sitio e intenta de nuevo.',
+                color: 'red',
+                icon: <FileText size={14} />,
+            });
+            return;
+        }
         try {
             const comp = await getComprobante(v.id).catch(() => null);
             if (!comp) {
+                win.close();
                 notifications.show({
                     title: 'Sin comprobante fiscal',
                     message: 'Esta venta no tiene comprobante fiscal registrado.',
@@ -361,8 +385,12 @@ export function FacturacionPage() {
                 });
                 return;
             }
-            await abrirFacturaHTML(comp.id);
+            const html = await fetchFacturaHTML(comp.id);
+            win.document.open();
+            win.document.write(html);
+            win.document.close();
         } catch (e: unknown) {
+            win.close();
             notifications.show({
                 title: 'No se pudo abrir la factura',
                 message: e instanceof Error ? e.message : 'Error desconocido.',
@@ -373,9 +401,21 @@ export function FacturacionPage() {
     };
 
     const handleImprimirFactura = async (v: IVenta) => {
+        // Abrir ventana ANTES del await — evita que el popup blocker la bloquee
+        const printWindow = window.open('', '_blank', 'width=900,height=700');
+        if (!printWindow) {
+            notifications.show({
+                title: 'Popups bloqueados',
+                message: 'Permite las ventanas emergentes en este sitio e intenta de nuevo.',
+                color: 'red',
+                icon: <Printer size={14} />,
+            });
+            return;
+        }
         try {
             const comp = await getComprobante(v.id).catch(() => null);
             if (!comp) {
+                printWindow.close();
                 notifications.show({
                     title: 'Sin comprobante fiscal',
                     message: 'Esta venta no tiene comprobante fiscal registrado.',
@@ -383,15 +423,16 @@ export function FacturacionPage() {
                 });
                 return;
             }
-            // Abrir la factura con auto-impresión activada
-            await abrirFacturaHTML(comp.id, true);
-            notifications.show({
-                title: 'Impresión iniciada',
-                message: 'El diálogo de impresión se abrirá automáticamente',
-                color: 'blue',
-                icon: <Printer size={14} />,
-            });
+            const html = await fetchFacturaHTML(comp.id);
+            printWindow.document.open();
+            printWindow.document.write(html);
+            printWindow.document.close();
+            printWindow.onload = () => {
+                printWindow.focus();
+                printWindow.print();
+            };
         } catch (e: unknown) {
+            printWindow.close();
             notifications.show({
                 title: 'No se pudo imprimir',
                 message: e instanceof Error ? e.message : 'Error desconocido.',

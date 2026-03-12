@@ -46,6 +46,22 @@ export function getPDFUrl(comprobanteId: string): string {
 }
 
 /**
+ * Obtiene el HTML autocontenido de la factura fiscal.
+ * Usar esta función cuando se necesita abrir la ventana ANTES del fetch
+ * (evita que el popup blocker la bloquee al estar dentro de un async handler).
+ */
+export async function fetchFacturaHTML(comprobanteId: string): Promise<string> {
+    const token = tokenStore.getAccessToken();
+    const baseUrl = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
+    const url = `${baseUrl}/v1/facturacion/html/${comprobanteId}`;
+    const resp = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!resp.ok) throw new Error(`Factura HTML no disponible: ${resp.status}`);
+    return resp.text();
+}
+
+/**
  * Abre la factura HTML en una nueva pestaña del navegador.
  * El HTML es autocontenido (logo + barcode en base64) y tiene un botón "Imprimir / Guardar como PDF".
  * @param comprobanteId - ID del comprobante
@@ -94,6 +110,14 @@ export async function descargarPDF(comprobanteId: string, nombreArchivo?: string
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(objectUrl);
+}
+
+/**
+ * POST /v1/facturacion/:id/regen-pdf
+ * Regenera el PDF fiscal del comprobante en disco (solo comprobantes con CAE).
+ */
+export async function regenerarPDF(comprobanteId: string): Promise<void> {
+    await apiClient.post(`/v1/facturacion/${comprobanteId}/regen-pdf`, {});
 }
 
 /**
