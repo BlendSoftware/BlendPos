@@ -299,3 +299,5 @@ Si SendGrid no te gusta, estas también funcionan en Railway:
 3. **Postmark** (https://postmarkapp.com) - Premium, excelente deliverability
 
 Todos usan SMTP estándar, tu código funciona sin cambios.
+
+Prueba para ver si lo pusheo yo se rompe
