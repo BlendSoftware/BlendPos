@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --appendfsync always --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend # <--- Su propia carpeta
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      ENV: production
+      PORT: 8000
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      AFIP_SIDECAR_URL: ${AFIP_SIDECAR_URL}
+      ALLOWED_ORIGINS: "*"
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      WORKER_POOL_SIZE: ${WORKER_POOL_SIZE}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      afip-sidecar: { condition: service_healthy }
+
+  afip-sidecar:
+    build:
+      context: ./afip-sidecar
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      AFIP_CUIT_EMISOR: ${AFIP_CUIT_EMISOR}
+      AFIP_HOMOLOGACION: ${AFIP_HOMOLOGACION}
+      AFIP_CERT_PATH: ${AFIP_CERT_PATH}
+      AFIP_KEY_PATH: ${AFIP_KEY_PATH}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      REDIS_URL: ${REDIS_URL}
+    volumes:
+      - ./afip-sidecar/certs:/certs:ro
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+
+volumes:
+  pg_data:
+  redis_data:
+  pdf_storage:
