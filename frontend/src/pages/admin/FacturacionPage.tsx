@@ -182,7 +182,13 @@ export function FacturacionPage() {
 
     const handleReprint = async (v: IVenta) => {
         try {
-            // Crear un HTML simple para el ticket sin necesidad de comprobante
+            // Crear una ventana nueva para imprimir
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            if (!printWindow) {
+                throw new Error('El navegador bloqueó la ventana emergente. Permití las ventanas emergentes para este sitio.');
+            }
+
+            // Generar HTML del ticket
             const ticketHTML = `
 <!DOCTYPE html>
 <html>
@@ -212,18 +218,27 @@ export function FacturacionPage() {
         .total-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px; }
         .total-row.final { font-size: 16px; font-weight: bold; border-top: 2px solid #000; padding-top: 5px; margin-top: 5px; }
         .footer { text-align: center; margin-top: 20px; padding-top: 10px; border-top: 2px dashed #000; font-size: 11px; }
+        .no-print { text-align: center; margin-bottom: 20px; }
+        .btn-print { 
+            padding: 10px 20px; 
+            background: #2563eb; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 14px;
+        }
         @media print {
             body { margin: 0; padding: 0; }
             .no-print { display: none !important; }
         }
     </style>
-    <script>
-        window.addEventListener('load', function() {
-            setTimeout(function() { window.print(); }, 500);
-        });
-    </script>
 </head>
 <body>
+    <div class="no-print">
+        <button class="btn-print" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+    
     <div class="ticket">
         <div class="header">
             <h1>BLEND POS</h1>
@@ -269,19 +284,21 @@ export function FacturacionPage() {
             ${v.anulada ? '<p style="color: red; font-weight: bold; margin-top: 10px;">*** ANULADA ***</p>' : ''}
         </div>
     </div>
+    
+    <script>
+        // Auto-ejecutar impresión al cargar
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                window.print();
+            }, 500);
+        });
+    </script>
 </body>
 </html>`;
 
-            // Abrir en nueva ventana
-            const blob = new Blob([ticketHTML], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
-            const printWindow = window.open(url, '_blank');
-            
-            setTimeout(() => URL.revokeObjectURL(url), 30000);
-            
-            if (!printWindow) {
-                throw new Error('El navegador bloqueó la ventana emergente. Permití las ventanas emergentes para este sitio.');
-            }
+            // Escribir el HTML en la ventana nueva
+            printWindow.document.write(ticketHTML);
+            printWindow.document.close();
             
             notifications.show({
                 title: 'Reimpresión iniciada',
@@ -305,18 +322,29 @@ export function FacturacionPage() {
             if (!comp) {
                 notifications.show({
                     title: 'PDF no disponible',
-                    message: 'Esta venta no tiene comprobante fiscal registrado.',
+                    message: 'Esta venta no tiene comprobante fiscal registrado. El comprobante puede tardar unos segundos en generarse.',
                     color: 'orange',
                     icon: <Download size={14} />,
                 });
                 return;
             }
             await descargarPDF(comp.id, `ticket_${v.numeroTicket}.pdf`);
-        } catch (e: unknown) {
             notifications.show({
-                title: 'Error al descargar PDF',
-                message: e instanceof Error ? e.message : 'Error desconocido.',
-                color: 'red',
+                title: 'PDF descargado',
+                message: `Ticket #${v.numeroTicket}`,
+                color: 'green',
+                icon: <Download size={14} />,
+            });
+        } catch (e: unknown) {
+            const errorMsg = e instanceof Error ? e.message : 'Error desconocido.';
+            // Si es un error 404, probablemente el PDF aún no se generó
+            const isNotReady = errorMsg.includes('404') || errorMsg.includes('no disponible');
+            notifications.show({
+                title: isNotReady ? 'PDF aún no disponible' : 'Error al descargar PDF',
+                message: isNotReady 
+                    ? 'El PDF se está generando. Espera unos segundos e intenta nuevamente.' 
+                    : errorMsg,
+                color: isNotReady ? 'orange' : 'red',
                 icon: <Download size={14} />,
             });
         }
