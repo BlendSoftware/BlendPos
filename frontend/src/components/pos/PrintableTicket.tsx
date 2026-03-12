@@ -157,7 +157,7 @@ export const PrintableTicket = forwardRef<HTMLDivElement, PrintableTicketProps>(
                 {/* Footer */}
                 <div className={styles.footer}>
                     <p>¡Gracias por su compra!</p>
-                    <p className={styles.small}>www.blendpos.com</p>
+                    <p className={styles.small}>www.blendpos.tech</p>
                 </div>
             </div>
         );

@@ -10,8 +10,8 @@ RUN npm ci --ignore-scripts
 COPY . .
 
 # Vite env vars are injected at build time via ARG
-ARG VITE_API_URL=https://api.example.com
-ARG VITE_API_BASE=https://api.example.com
+ARG VITE_API_URL=https://api.blendpos.tech
+ARG VITE_API_BASE=https://api.blendpos.tech
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_API_BASE=$VITE_API_BASE
 
