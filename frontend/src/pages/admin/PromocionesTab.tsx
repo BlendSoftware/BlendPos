@@ -52,12 +52,6 @@ function toDateStr(d: Date | string | null): string {
     return d.toISOString().slice(0, 10);
 }
 
-function estadoBadge(activa: boolean) {
-    return activa
-        ? <Badge color="teal" size="sm" variant="light">Activa</Badge>
-        : <Badge color="gray" size="sm" variant="light">Inactiva</Badge>;
-}
-
 function tipoBadge(tipo: TipoPromocion) {
     return tipo === 'porcentaje'
         ? <Badge color="blue"   size="sm" variant="dot">%</Badge>
