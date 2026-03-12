@@ -84,7 +84,8 @@ export function DetalleCompraPage() {
     const iva = (compra.items ?? []).reduce((s, i) => s + Number(i.total), 0) - total;
     const totalConIva = total + iva;
     const pagado = (compra.pagos ?? []).reduce((s, p) => s + Number(p.monto), 0);
-    const saldo = totalConIva - pagado;
+    // Si el estado es "pagada" consideramos saldo = 0 independientemente de los pagos registrados
+    const saldo = compra.estado === 'pagada' ? 0 : Math.max(0, totalConIva - pagado);
 
     return (
         <Stack gap="lg" p="md">

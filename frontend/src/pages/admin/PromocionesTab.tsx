@@ -24,16 +24,32 @@ const TIPO_OPTIONS = [
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function toDateStr(d: Date | null): string {
+function toDateStr(d: Date | string | null): string {
     if (!d) return '';
-    // Mantine v8 DateInput passes a string 'YYYY-MM-DD' when the user types,
-    // or a native Date at UTC midnight when the user clicks the calendar.
-    if (typeof (d as unknown) === 'string') return (d as unknown as string).slice(0, 10);
-    // UTC midnight Date — must use UTC getters to avoid UTC-3 shifting the day back.
-    const y = (d as Date).getUTCFullYear();
-    const m = String((d as Date).getUTCMonth() + 1).padStart(2, '0');
-    const day = String((d as Date).getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+
+    if (typeof d === 'string') {
+        const raw = d.trim();
+        if (!raw) return '';
+
+        // Already ISO date (or ISO datetime)
+        if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+
+        // Common typed format in es-AR inputs: DD/MM/YYYY
+        const ddmmyyyy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (ddmmyyyy) {
+            const [, dd, mm, yyyy] = ddmmyyyy;
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        // Fallback for parseable date strings.
+        const parsed = new Date(raw);
+        if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+        return '';
+    }
+
+    if (Number.isNaN(d.getTime())) return '';
+    // toISOString avoids timezone drift when date objects are local-midnight or UTC-midnight.
+    return d.toISOString().slice(0, 10);
 }
 
 function estadoBadge(estado: string) {
@@ -68,8 +84,8 @@ interface FormValues {
     tipo:               TipoPromocion;
     valor:              number;
     cantidadRequerida:  number;
-    fechaInicio:        Date | null;
-    fechaFin:           Date | null;
+    fechaInicio:        Date | string | null;
+    fechaFin:           Date | string | null;
     activa:             boolean;
     productoIds:        string[];
 }
@@ -152,8 +168,8 @@ export function PromocionesTab() {
             valor:             p.valor,
             cantidadRequerida: p.cantidad_requerida ?? 1,
             // Slice to 'YYYY-MM-DD' so dayjs renders it as local midnight (correct day shown)
-            fechaInicio:       p.fecha_inicio.slice(0, 10) as unknown as Date,
-            fechaFin:          p.fecha_fin.slice(0, 10) as unknown as Date,
+            fechaInicio:       p.fecha_inicio.slice(0, 10),
+            fechaFin:          p.fecha_fin.slice(0, 10),
             activa:            p.activa,
             productoIds:       p.productos.map(pr => pr.id),
         });
@@ -348,7 +364,7 @@ export function PromocionesTab() {
                                 placeholder="dd/mm/aaaa"
                                 valueFormat="DD/MM/YYYY"
                                 {...form.getInputProps('fechaInicio')}
-                                onChange={(v) => form.setFieldValue('fechaInicio', v as Date | null)}
+                                onChange={(v) => form.setFieldValue('fechaInicio', v)}
                             />
                             <DateInput
                                 label="Fecha de fin"
@@ -356,7 +372,7 @@ export function PromocionesTab() {
                                 valueFormat="DD/MM/YYYY"
                                 minDate={form.values.fechaInicio ?? undefined}
                                 {...form.getInputProps('fechaFin')}
-                                onChange={(v) => form.setFieldValue('fechaFin', v as Date | null)}
+                                onChange={(v) => form.setFieldValue('fechaFin', v)}
                             />
                         </Group>
 

@@ -1,11 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
     Stack, Title, Text, Group, Button, TextInput, Modal, Table, Paper,
-    ActionIcon, Tooltip, Skeleton, Switch, Textarea,
+    ActionIcon, Tooltip, Skeleton, Textarea, Collapse, Badge,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { Plus, Edit, Trash2, Tag, Search, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Tag, Search, X, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import {
     listarCategorias, crearCategoria, actualizarCategoria, desactivarCategoria,
     type CategoriaResponse,
@@ -19,6 +19,7 @@ export function CategoriasPage() {
     const [editTarget, setEditTarget] = useState<CategoriaResponse | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<CategoriaResponse | null>(null);
     const [saving, setSaving] = useState(false);
+    const [inactivosOpen, setInactivosOpen] = useState(false);
 
     const form = useForm({
         initialValues: { nombre: '', descripcion: '' },
@@ -41,9 +42,12 @@ export function CategoriasPage() {
 
     useEffect(() => { fetchCategorias(); }, [fetchCategorias]);
 
+    const activas = categorias.filter((c) => c.activo);
+    const inactivas = categorias.filter((c) => !c.activo);
+
     const filtered = busqueda.trim()
-        ? categorias.filter((c) => c.nombre.toLowerCase().includes(busqueda.toLowerCase()))
-        : categorias;
+        ? activas.filter((c) => c.nombre.toLowerCase().includes(busqueda.toLowerCase()))
+        : activas;
 
     const openCreate = () => {
         setEditTarget(null);
@@ -80,21 +84,11 @@ export function CategoriasPage() {
         }
     });
 
-    const handleToggleActivo = async (c: CategoriaResponse) => {
-        try {
-            await actualizarCategoria(c.id, { activo: !c.activo });
-            notifications.show({ title: c.activo ? 'Categoría desactivada' : 'Categoría activada', message: c.nombre, color: c.activo ? 'gray' : 'teal' });
-            await fetchCategorias();
-        } catch (err) {
-            notifications.show({ title: 'Error', message: err instanceof Error ? err.message : 'Error', color: 'red' });
-        }
-    };
-
     const handleDelete = async () => {
         if (!deleteConfirm) return;
         try {
             await desactivarCategoria(deleteConfirm.id);
-            notifications.show({ title: 'Categoría eliminada', message: deleteConfirm.nombre, color: 'gray' });
+            notifications.show({ title: 'Categoría desactivada', message: deleteConfirm.nombre, color: 'gray' });
             setDeleteConfirm(null);
             await fetchCategorias();
         } catch (err) {
@@ -102,14 +96,24 @@ export function CategoriasPage() {
         }
     };
 
-    const activos = categorias.filter((c) => c.activo).length;
+    const handleReactivar = async (c: CategoriaResponse) => {
+        try {
+            await actualizarCategoria(c.id, { activo: true });
+            notifications.show({ title: 'Categoría reactivada', message: c.nombre, color: 'teal' });
+            await fetchCategorias();
+        } catch (err) {
+            notifications.show({ title: 'Error', message: err instanceof Error ? err.message : 'Error', color: 'red' });
+        }
+    };
+
+    const activos = activas.length;
 
     return (
         <Stack gap="xl">
             <Group justify="space-between">
                 <div>
                     <Title order={2} fw={800}>Categorías</Title>
-                    <Text c="dimmed" size="sm">{activos} activas · {categorias.length} total</Text>
+                    <Text c="dimmed" size="sm">{activos} activas · {inactivas.length} inactivas</Text>
                 </div>
                 <Button leftSection={<Plus size={16} />} onClick={openCreate}>Nueva categoría</Button>
             </Group>
@@ -129,7 +133,6 @@ export function CategoriasPage() {
                         <Table.Tr>
                             <Table.Th>Nombre</Table.Th>
                             <Table.Th>Descripción</Table.Th>
-                            <Table.Th>Estado</Table.Th>
                             <Table.Th>Acciones</Table.Th>
                         </Table.Tr>
                     </Table.Thead>
@@ -137,21 +140,21 @@ export function CategoriasPage() {
                         {loading ? (
                             Array.from({ length: 5 }).map((_, i) => (
                                 <Table.Tr key={i}>
-                                    {Array.from({ length: 4 }).map((__, j) => (
+                                    {Array.from({ length: 3 }).map((__, j) => (
                                         <Table.Td key={j}><Skeleton height={20} radius="sm" /></Table.Td>
                                     ))}
                                 </Table.Tr>
                             ))
                         ) : filtered.length === 0 ? (
                             <Table.Tr>
-                                <Table.Td colSpan={4}>
+                                <Table.Td colSpan={3}>
                                     <Text ta="center" c="dimmed" py="xl" size="sm">
                                         {busqueda ? 'Sin resultados' : 'No hay categorías. Creá la primera.'}
                                     </Text>
                                 </Table.Td>
                             </Table.Tr>
                         ) : filtered.map((cat) => (
-                            <Table.Tr key={cat.id} style={{ opacity: cat.activo ? 1 : 0.5 }}>
+                            <Table.Tr key={cat.id}>
                                 <Table.Td>
                                     <Group gap="xs">
                                         <Tag size={14} color="var(--mantine-color-blue-5)" />
@@ -160,15 +163,6 @@ export function CategoriasPage() {
                                 </Table.Td>
                                 <Table.Td>
                                     <Text size="xs" c="dimmed">{cat.descripcion || '—'}</Text>
-                                </Table.Td>
-                                <Table.Td>
-                                    <Tooltip label={cat.activo ? 'Desactivar' : 'Activar'} withArrow>
-                                        <Switch
-                                            size="sm"
-                                            checked={cat.activo}
-                                            onChange={() => handleToggleActivo(cat)}
-                                        />
-                                    </Tooltip>
                                 </Table.Td>
                                 <Table.Td>
                                     <Group gap={4}>
@@ -189,6 +183,58 @@ export function CategoriasPage() {
                     </Table.Tbody>
                 </Table>
             </Paper>
+
+            {/* ── Sección Inactivos ────────────────────────────────────────── */}
+            {inactivas.length > 0 && (
+                <Stack gap="xs">
+                    <Group
+                        gap="sm"
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => setInactivosOpen((v) => !v)}
+                    >
+                        <ActionIcon variant="subtle" color="gray" size="sm">
+                            {inactivosOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </ActionIcon>
+                        <Text size="sm" fw={600} c="dimmed">Inactivos</Text>
+                        <Badge size="sm" color="gray" variant="light">{inactivas.length}</Badge>
+                    </Group>
+                    <Collapse in={inactivosOpen}>
+                        <Paper radius="md" withBorder style={{ overflow: 'hidden', opacity: 0.85 }}>
+                            <Table verticalSpacing="sm">
+                                <Table.Thead>
+                                    <Table.Tr>
+                                        <Table.Th>Nombre</Table.Th>
+                                        <Table.Th>Descripción</Table.Th>
+                                        <Table.Th>Acciones</Table.Th>
+                                    </Table.Tr>
+                                </Table.Thead>
+                                <Table.Tbody>
+                                    {inactivas.map((cat) => (
+                                        <Table.Tr key={cat.id}>
+                                            <Table.Td>
+                                                <Group gap="xs">
+                                                    <Tag size={14} color="var(--mantine-color-gray-5)" />
+                                                    <Text size="sm" c="dimmed">{cat.nombre}</Text>
+                                                </Group>
+                                            </Table.Td>
+                                            <Table.Td>
+                                                <Text size="xs" c="dimmed">{cat.descripcion || '—'}</Text>
+                                            </Table.Td>
+                                            <Table.Td>
+                                                <Tooltip label="Reactivar" withArrow>
+                                                    <ActionIcon variant="subtle" color="teal" onClick={() => handleReactivar(cat)}>
+                                                        <RotateCcw size={15} />
+                                                    </ActionIcon>
+                                                </Tooltip>
+                                            </Table.Td>
+                                        </Table.Tr>
+                                    ))}
+                                </Table.Tbody>
+                            </Table>
+                        </Paper>
+                    </Collapse>
+                </Stack>
+            )}
 
             {/* ── Modal Create/Edit ────────────────────────────────────────── */}
             <Modal
@@ -223,18 +269,19 @@ export function CategoriasPage() {
             <Modal
                 opened={!!deleteConfirm}
                 onClose={() => setDeleteConfirm(null)}
-                title={<Text fw={700} c="red">Eliminar categoría</Text>}
+                title={<Text fw={700} c="red">Desactivar categoría</Text>}
                 size="sm"
                 centered
             >
                 <Stack gap="md">
                     <Text size="sm">
-                        ¿Eliminar la categoría <strong>{deleteConfirm?.nombre}</strong>?
-                        Los productos asociados conservarán el nombre de categoría actual.
+                        ¿Desactivar la categoría <strong>{deleteConfirm?.nombre}</strong>?
+                        Quedará en la sección <em>Inactivos</em> y podrás reactivarla cuando quieras.
+                        Los productos asociados no se verán afectados.
                     </Text>
                     <Group justify="flex-end">
                         <Button variant="subtle" autoFocus onClick={() => setDeleteConfirm(null)}>Cancelar</Button>
-                        <Button color="red" onClick={handleDelete}>Eliminar</Button>
+                        <Button color="red" onClick={handleDelete}>Desactivar</Button>
                     </Group>
                 </Stack>
             </Modal>

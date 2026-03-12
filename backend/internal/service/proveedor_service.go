@@ -500,15 +500,18 @@ func (s *proveedorService) upsertProductoDesdeCSV(
 	if row.Categoria != "" {
 		cat, findErr := s.categoriaRepo.ObtenerPorNombre(ctx, row.Categoria)
 		if findErr != nil {
-			// Categoría no existe — crear una nueva
-			nuevaCat := &model.Categoria{
-				Nombre: row.Categoria,
-				Activo: true,
+			// Categoría no existe — NO crear automáticamente, usar "Sin Categoría" como fallback
+			fallback, fallbackErr := s.categoriaRepo.ObtenerPorNombre(ctx, "Sin Categoría")
+			if fallbackErr != nil {
+				// Si "Sin Categoría" tampoco existe, crearla una única vez
+				nuevaCat := &model.Categoria{Nombre: "Sin Categoría", Activo: true}
+				if err := s.categoriaRepo.Crear(ctx, nuevaCat); err != nil {
+					return false, fmt.Errorf("error al crear categoría por defecto: %w", err)
+				}
+				categoriaID = nuevaCat.ID
+			} else {
+				categoriaID = fallback.ID
 			}
-			if err := s.categoriaRepo.Crear(ctx, nuevaCat); err != nil {
-				return false, fmt.Errorf("error al crear categoría: %w", err)
-			}
-			categoriaID = nuevaCat.ID
 		} else {
 			categoriaID = cat.ID
 		}

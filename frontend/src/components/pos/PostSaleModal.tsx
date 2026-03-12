@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Modal, Stack, Text, Group, Button, Divider, Badge, ThemeIcon, Box, Alert, Loader, TextInput,
 } from '@mantine/core';
@@ -32,7 +32,6 @@ export function PostSaleModal() {
     const [openingFactura, setOpeningFactura] = useState(false);
     const [emailCliente, setEmailCliente] = useState('');
     const [sendingEmail, setSendingEmail] = useState(false);
-    const ticketRef = useRef<HTMLDivElement>(null);
 
     const isFiscal = record && ['factura_a', 'factura_b', 'factura_c'].includes(record.tipoComprobante);
 
@@ -118,193 +117,181 @@ export function PostSaleModal() {
     });
 
     const handlePrint = () => {
-        console.log('[PostSaleModal] Iniciando impresión...', {
-            numeroTicket: record.numeroTicket,
-        });
-        
-        setPrinting(true);
-        
-        try {
-            // Obtener el contenido HTML del ticket
-            const ticketElement = ticketRef.current;
-            if (!ticketElement) {
-                throw new Error('No se pudo obtener el contenido del ticket');
-            }
-
-            // Crear una ventana nueva para imprimir
-            const printWindow = window.open('', '_blank', 'width=800,height=600');
-            if (!printWindow) {
-                throw new Error('No se pudo abrir la ventana de impresión. Verifica que los popups no estén bloqueados.');
-            }
-
-            // Escribir el HTML con estilos incluidos
-            printWindow.document.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <title>Ticket #${record.numeroTicket}</title>
-                    <style>
-                        * { 
-                            margin: 0; 
-                            padding: 0; 
-                            box-sizing: border-box; 
-                        }
-                        body { 
-                            font-family: 'Courier New', monospace;
-                            padding: 10mm;
-                            background: white;
-                            font-size: 12px;
-                            color: #000;
-                        }
-                        .ticket {
-                            max-width: 80mm;
-                            margin: 0 auto;
-                            padding: 20px;
-                            font-family: 'Courier New', monospace;
-                            font-size: 12px;
-                            color: #000;
-                            background: white;
-                        }
-                        .header {
-                            text-align: center;
-                            margin-bottom: 15px;
-                        }
-                        .storeName {
-                            font-size: 20px;
-                            font-weight: bold;
-                            margin: 0 0 5px 0;
-                        }
-                        .storeSubtitle {
-                            font-size: 11px;
-                            margin: 0;
-                            color: #666;
-                        }
-                        .section {
-                            margin: 10px 0;
-                        }
-                        .row {
-                            display: flex;
-                            justify-content: space-between;
-                            margin: 4px 0;
-                            font-size: 11px;
-                        }
-                        .label {
-                            font-weight: normal;
-                            color: #333;
-                        }
-                        .value {
-                            font-weight: bold;
-                            text-align: right;
-                        }
-                        .totalRow {
-                            font-size: 14px;
-                            font-weight: bold;
-                            margin-top: 8px;
-                            padding-top: 8px;
-                            border-top: 1px solid #000;
-                        }
-                        .totalRow .label,
-                        .totalRow .value {
-                            font-weight: bold;
-                        }
-                        .divider {
-                            border-top: 1px dashed #666;
-                            margin: 10px 0;
-                        }
-                        .itemsTable {
-                            width: 100%;
-                            border-collapse: collapse;
-                            font-size: 10px;
-                            margin: 5px 0;
-                        }
-                        .itemsTable thead th {
-                            border-bottom: 1px solid #000;
-                            padding: 4px 2px;
-                            font-weight: bold;
-                            text-align: left;
-                            font-size: 10px;
-                        }
-                        .itemsTable tbody td {
-                            padding: 3px 2px;
-                            font-size: 10px;
-                        }
-                        .pagosMixtos {
-                            margin-left: 10px;
-                            font-size: 10px;
-                        }
-                        .footer {
-                            text-align: center;
-                            margin-top: 20px;
-                            padding-top: 10px;
-                            border-top: 1px dashed #666;
-                        }
-                        .footer p {
-                            margin: 5px 0;
-                            font-size: 11px;
-                        }
-                        .small {
-                            font-size: 9px !important;
-                            color: #666;
-                        }
-                        @media print {
-                            @page { 
-                                size: 80mm auto;
-                                margin: 5mm;
-                            }
-                            body { 
-                                padding: 0; 
-                                margin: 0;
-                            }
-                            .ticket {
-                                padding: 5mm;
-                            }
-                        }
-                    </style>
-                </head>
-                <body>
-                    ${ticketElement.innerHTML}
-                </body>
-                </html>
-            `);
-            printWindow.document.close();
-
-            // Esperar a que se cargue y abrir diálogo de impresión
-            printWindow.onload = () => {
-                printWindow.focus();
-                printWindow.print();
-                // Cerrar la ventana después de imprimir (el usuario puede cancelar)
-                setTimeout(() => {
-                    printWindow.close();
-                }, 100);
-            };
-
-            console.log('[PostSaleModal] Ventana de impresión abierta');
-            
-            notifications.show({
-                title: 'Impresión iniciada',
-                message: `Ticket #${record.numeroTicket}`,
-                color: 'blue',
-                icon: <Printer size={14} />,
-                autoClose: 3000,
-            });
-        } catch (err) {
-            console.error('[PostSaleModal] Error de impresión:', err);
-            
-            const errorMessage = err instanceof Error ? err.message : 'No se pudo iniciar la impresión.';
-            const isPopupBlocked = errorMessage.includes('popup') || errorMessage.includes('ventana');
-            
+        const printWindow = window.open('', '_blank', 'width=800,height=700');
+        if (!printWindow) {
             notifications.show({
                 title: 'Error de impresión',
-                message: isPopupBlocked 
-                    ? 'Los popups están bloqueados. Por favor, permite ventanas emergentes para este sitio y vuelve a intentar.'
-                    : errorMessage,
+                message: 'Los popups están bloqueados. Permití las ventanas emergentes para este sitio e intentá de nuevo.',
                 color: 'red',
-                autoClose: isPopupBlocked ? 8000 : 5000,
+                autoClose: 8000,
             });
-        } finally {
-            setPrinting(false);
+            return;
         }
+
+        setPrinting(true);
+
+        const totalFinal = record.totalConDescuento || record.total;
+        const tieneDescuento = record.totalConDescuento > 0 && record.total !== record.totalConDescuento;
+        const vuelto = record.vuelto ?? 0;
+
+        const METODO_PRINT: Record<string, string> = {
+            efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito',
+            qr: 'QR', transferencia: 'Transferencia', mixto: 'Mixto',
+        };
+
+        const ticketHTML = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Ticket #${record.numeroTicket}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: white;
+            display: flex;
+            justify-content: center;
+            padding: 10mm;
+        }
+        .ticket {
+            width: 76mm;
+            max-width: 76mm;
+            background: white;
+            padding: 5mm;
+        }
+        .header { text-align: center; margin-bottom: 12px; }
+        .store-name { font-size: 20px; font-weight: bold; margin-bottom: 3px; }
+        .store-sub { font-size: 10px; color: #555; margin-bottom: 2px; }
+        .divider { border-top: 1px dashed #555; margin: 8px 0; }
+        .divider-solid { border-top: 2px solid #000; margin: 8px 0; }
+        .section { margin: 6px 0; }
+        .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 11px; }
+        .label { color: #444; }
+        .value { font-weight: bold; text-align: right; }
+        .items-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+        .items-table thead th {
+            font-size: 10px; font-weight: bold;
+            border-bottom: 1px solid #000;
+            padding: 3px 2px; text-align: left;
+        }
+        .items-table thead th:not(:first-child) { text-align: right; }
+        .items-table tbody td { font-size: 10px; padding: 3px 2px; }
+        .items-table tbody td:not(:first-child) { text-align: right; }
+        .items-table .name-col { max-width: 36mm; word-break: break-word; }
+        .total-row { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; }
+        .pagos-mixtos { margin-left: 8px; }
+        .footer { text-align: center; margin-top: 14px; padding-top: 10px; border-top: 1px dashed #555; }
+        .footer p { font-size: 11px; margin: 3px 0; }
+        .footer .small { font-size: 9px; color: #666; }
+        .anulada-banner { text-align: center; font-size: 13px; font-weight: bold; color: red; margin: 8px 0; border: 2px solid red; padding: 4px; }
+        .no-print { text-align: center; margin-bottom: 14px; }
+        .btn-print { padding: 9px 22px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-family: sans-serif; }
+        @media print {
+            body { padding: 0; }
+            .no-print { display: none !important; }
+            @page { size: 80mm auto; margin: 5mm; }
+        }
+    </style>
+</head>
+<body>
+<div class="ticket">
+    <div class="no-print">
+        <button class="btn-print" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+
+    <div class="header">
+        <div class="store-name">BLEND POS</div>
+        <div class="store-sub">Sistema de Punto de Venta</div>
+    </div>
+
+    <div class="divider-solid"></div>
+
+    <div class="section">
+        <div class="row"><span class="label">Ticket N°</span><span class="value">#${record.numeroTicket}</span></div>
+        <div class="row"><span class="label">Fecha</span><span class="value">${new Date(record.fecha).toLocaleDateString('es-AR')} ${new Date(record.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span></div>
+        <div class="row"><span class="label">Cajero</span><span class="value">${record.cajero}</span></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section">
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th class="name-col">Producto</th>
+                    <th>Cant</th>
+                    <th>P.Unit</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${record.items.map(item => `
+                <tr>
+                    <td class="name-col">${item.nombre}</td>
+                    <td>${item.cantidad}</td>
+                    <td>${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(item.precio)}</td>
+                    <td>${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(item.cantidad * item.precio)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section">
+        ${tieneDescuento ? `
+        <div class="row"><span class="label">Subtotal</span><span class="value">${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(record.total)}</span></div>
+        <div class="row"><span class="label">Descuento</span><span class="value">-${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(record.total - record.totalConDescuento)}</span></div>
+        ` : ''}
+        <div class="row total-row"><span class="label">TOTAL</span><span class="value">${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(totalFinal)}</span></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section">
+        <div class="row"><span class="label">Método de pago</span><span class="value">${METODO_PRINT[record.metodoPago] ?? record.metodoPago}</span></div>
+        ${record.metodoPago === 'mixto' && record.pagos ? `
+        <div class="pagos-mixtos">
+            ${record.pagos.map(p => `<div class="row"><span class="label">• ${METODO_PRINT[p.metodo] ?? p.metodo}</span><span class="value">${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(p.monto)}</span></div>`).join('')}
+        </div>` : ''}
+        ${record.efectivoRecibido && record.efectivoRecibido > 0 ? `
+        <div class="row"><span class="label">Efectivo recibido</span><span class="value">${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(record.efectivoRecibido)}</span></div>
+        ${vuelto > 0 ? `<div class="row"><span class="label">Vuelto</span><span class="value">${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(vuelto)}</span></div>` : ''}
+        ` : ''}
+    </div>
+
+    ${record.clienteEmail ? `
+    <div class="divider"></div>
+    <div class="section">
+        <div class="row"><span class="label">Email</span><span class="value">${record.clienteEmail}</span></div>
+    </div>` : ''}
+
+    <div class="footer">
+        <p>¡Gracias por su compra!</p>
+        <p class="small">www.blendpos.tech</p>
+    </div>
+</div>
+</body>
+</html>`;
+
+        printWindow.document.open();
+        printWindow.document.write(ticketHTML);
+        printWindow.document.close();
+        printWindow.onload = () => {
+            printWindow.focus();
+            printWindow.print();
+            setTimeout(() => printWindow.close(), 100);
+        };
+
+        notifications.show({
+            title: 'Impresión iniciada',
+            message: `Ticket #${record.numeroTicket}`,
+            color: 'blue',
+            icon: <Printer size={14} />,
+            autoClose: 3000,
+        });
+
+        setPrinting(false);
     };
 
     const handleDownloadFactura = async () => {
@@ -721,15 +708,9 @@ export function PostSaleModal() {
 
             {/* Ticket para impresión - renderizado pero oculto visualmente */}
             <div 
-                style={{ 
-                    position: 'fixed',
-                    left: '-9999px',
-                    width: '80mm',
-                    background: 'white'
-                }} 
-                className="printable-content"
+                style={{ display: 'none' }}
             >
-                <PrintableTicket ref={ticketRef} record={record} />
+                <PrintableTicket record={record} />
             </div>
         </Modal>
     );
