@@ -252,6 +252,39 @@ export function FacturacionPage() {
         }
     };
 
+    const handleImprimirFactura = async (v: IVenta) => {
+        try {
+            const comp = await getComprobante(v.id).catch(() => null);
+            if (!comp) {
+                notifications.show({
+                    title: 'Sin comprobante fiscal',
+                    message: 'Esta venta no tiene comprobante fiscal registrado.',
+                    color: 'orange',
+                });
+                return;
+            }
+            // Abrir la factura y luego activar el diálogo de impresión
+            await abrirFacturaHTML(comp.id);
+            // Dar tiempo para que se abra la ventana/pestaña
+            setTimeout(() => {
+                // La nueva ventana ejecutará window.print() automáticamente
+                notifications.show({
+                    title: 'Factura abierta',
+                    message: 'Use Ctrl+P o el diálogo de impresión para imprimir',
+                    color: 'blue',
+                    icon: <Printer size={14} />,
+                });
+            }, 500);
+        } catch (e: unknown) {
+            notifications.show({
+                title: 'No se pudo imprimir',
+                message: e instanceof Error ? e.message : 'Error desconocido.',
+                color: 'red',
+                icon: <Printer size={14} />,
+            });
+        }
+    };
+
     const handleAnular = async () => {
         if (!anularTarget) return;
         try {
@@ -452,7 +485,7 @@ export function FacturacionPage() {
                                     </Table.Td>
                                     <Table.Td>
                                         <Group gap={4} onClick={(e) => e.stopPropagation()}>
-                                            <Tooltip label="Reimprimir" withArrow>
+                                            <Tooltip label="Reimprimir ticket" withArrow>
                                                 <ActionIcon variant="subtle" color="blue" onClick={() => handleReprint(v)} disabled={v.anulada}>
                                                     <Printer size={15} />
                                                 </ActionIcon>
@@ -460,6 +493,11 @@ export function FacturacionPage() {
                                             <Tooltip label="Ver factura" withArrow>
                                                 <ActionIcon variant="subtle" color="teal" onClick={() => handleVerFactura(v)}>
                                                     <FileText size={15} />
+                                                </ActionIcon>
+                                            </Tooltip>
+                                            <Tooltip label="Imprimir factura" withArrow>
+                                                <ActionIcon variant="subtle" color="violet" onClick={() => handleImprimirFactura(v)} disabled={v.anulada}>
+                                                    <Printer size={15} />
                                                 </ActionIcon>
                                             </Tooltip>
                                             <Tooltip label="Descargar PDF" withArrow>

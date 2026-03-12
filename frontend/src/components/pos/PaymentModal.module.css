@@ -28,7 +28,7 @@
 
 /* Light mode */
 :global([data-mantine-color-scheme='light']) .comprobanteBox {
-    background: var(--mantine-color-gray-0);
+    background: #ffffff;
     border: 1px solid var(--mantine-color-gray-3);
 }
 

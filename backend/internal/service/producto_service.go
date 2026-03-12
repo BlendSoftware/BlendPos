@@ -37,17 +37,32 @@ func NewProductoService(repo repository.ProductoRepository, movRepo repository.M
 }
 
 // lookupCategoriaID busca la categoría por nombre y devuelve su ID.
+// Si la categoría no existe, la crea automáticamente.
 // Si catRepo es nil (en tests) devuelve uuid.Nil sin error para mantener
 // compatibilidad con los stubs de test que no usan DB real.
 func (s *productoService) lookupCategoriaID(ctx context.Context, nombre string) (uuid.UUID, error) {
 	if s.catRepo == nil {
 		return uuid.Nil, nil
 	}
+	
+	// Intentar obtener la categoría existente
 	cat, err := s.catRepo.ObtenerPorNombre(ctx, nombre)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("categoría '%s' no encontrada", nombre)
+	if err == nil {
+		// Categoría encontrada, devolver su ID
+		return cat.ID, nil
 	}
-	return cat.ID, nil
+	
+	// Si la categoría no existe, crearla automáticamente
+	nuevaCat := &model.Categoria{
+		Nombre: nombre,
+		Activo: true,
+	}
+	
+	if err := s.catRepo.Crear(ctx, nuevaCat); err != nil {
+		return uuid.Nil, fmt.Errorf("no se pudo crear la categoría '%s': %w", nombre, err)
+	}
+	
+	return nuevaCat.ID, nil
 }
 
 // precioCacheKey returns the Redis key for a product's price cache entry.

@@ -56,10 +56,10 @@ export function CierreCajaPage() {
     }, [activeTab]);
 
     const statsDia = {
-        totalEfectivoEsperado: reporte?.monto_esperado?.efectivo ?? 0,
-        totalTarjeta: (reporte?.monto_esperado?.debito ?? 0) + (reporte?.monto_esperado?.credito ?? 0),
-        totalQR: reporte?.monto_esperado?.qr ?? 0,
-        totalTransferencia: reporte?.monto_esperado?.transferencia ?? 0,
+        totalEfectivoEsperado: Number(reporte?.monto_esperado?.efectivo ?? 0),
+        totalTarjeta: Number(reporte?.monto_esperado?.debito ?? 0) + Number(reporte?.monto_esperado?.credito ?? 0),
+        totalQR: Number(reporte?.monto_esperado?.qr ?? 0),
+        totalTransferencia: Number(reporte?.monto_esperado?.transferencia ?? 0),
         cantidadVentas: reporte?.ventas_del_dia ?? 0,
     };
 
