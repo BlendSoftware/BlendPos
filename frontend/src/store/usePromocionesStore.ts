@@ -105,15 +105,28 @@ export const usePromocionesStore = create<PromocionesState>()((set, get) => ({
                 );
                 if (!allPresent) continue;
 
-                for (const p of promo.productos) {
-                    if (promo.tipo === 'porcentaje') {
-                        discountMap[p.id] = Math.min(100, Math.max(0, promo.valor));
-                    } else {
+                const totalQty = promo.productos.reduce((sum, p) => sum + (quantityMap[p.id] ?? 0), 0);
+                const completeSets = Math.floor(totalQty / n);
+                if (completeSets === 0) continue;
+
+                const discountedUnits = completeSets * n;
+                let effectivePct: number;
+
+                if (promo.tipo === 'porcentaje') {
+                    // Weighted: only complete-set units get discount, leftovers pay full price.
+                    effectivePct = promo.valor * (discountedUnits / totalQty);
+                } else {
+                    const totalValue = promo.productos.reduce((sum, p) => {
                         const price = priceMap[p.id] ?? p.precio_venta;
-                        if (price > 0) {
-                            discountMap[p.id] = Math.min(100, Math.max(0, (promo.valor / price) * 100));
-                        }
-                    }
+                        const qty = quantityMap[p.id] ?? 0;
+                        return sum + (price * qty);
+                    }, 0);
+                    const totalDiscount = completeSets * promo.valor;
+                    effectivePct = totalValue > 0 ? (totalDiscount / totalValue) * 100 : 0;
+                }
+
+                for (const p of promo.productos) {
+                    discountMap[p.id] = Math.min(100, Math.max(0, effectivePct));
                 }
             }
         }

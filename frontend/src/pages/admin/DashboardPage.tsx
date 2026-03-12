@@ -133,8 +133,8 @@ export function DashboardPage() {
 
     const totalHoy     = ventasHoy.reduce((s, v) => s + v.total, 0);
     const ticketProm   = ventasHoy.length ? totalHoy / ventasHoy.length : 0;
-    const stockCritico = alertas;
     const sinStock     = alertas.filter((a) => a.stock_actual === 0);
+    const stockCritico = alertas.filter((a) => a.stock_actual > 0 && a.stock_actual <= a.stock_minimo);
 
     const metodoPagoTotals = ventasHoy.reduce<Record<string, { count: number; total: number }>>((acc, v) => {
         if (!acc[v.metodoPago]) acc[v.metodoPago] = { count: 0, total: 0 };
@@ -348,8 +348,8 @@ export function DashboardPage() {
             <SimpleGrid cols={{ base: 1, md: 2 }}>
                 <Paper p="lg" radius="md" withBorder className={styles.card}>
                     <Group justify="space-between" mb="lg">
-                        <Title order={5} c={stockCritico.length > 0 ? 'red.4' : 'teal.4'}>Alertas de stock</Title>
-                        {stockCritico.length > 0 && <Badge color="red" size="sm" variant="filled" radius="sm">{stockCritico.length} urgentes</Badge>}
+                        <Title order={5} c={stockCritico.length > 0 ? 'red.4' : 'teal.4'}>Alertas de stock crítico</Title>
+                        {stockCritico.length > 0 && <Badge color="yellow" size="sm" variant="filled" radius="sm">{stockCritico.length} bajo mínimo</Badge>}
                     </Group>
                     {loading ? (
                         <Stack gap="xs">{[1, 2, 3].map((i) => <Skeleton key={i} h={36} radius="sm" />)}</Stack>
@@ -365,13 +365,11 @@ export function DashboardPage() {
                         <Stack gap="xs">
                             {stockCritico.slice(0, 7).map((a) => (
                                 <Paper key={a.producto_id} p="xs" radius="sm" className={styles.alertRow}
-                                    style={{ borderLeft: `2px solid var(--mantine-color-${a.stock_actual === 0 ? 'red' : 'yellow'}-6)` }}>
+                                    style={{ borderLeft: '2px solid var(--mantine-color-yellow-6)' }}>
                                     <Group justify="space-between" wrap="nowrap">
                                         <Text size="sm" fw={500} lineClamp={1} style={{ flex: 1 }}>{a.nombre}</Text>
                                         <Group gap="xs" wrap="nowrap">
-                                            <Badge color={a.stock_actual === 0 ? 'red' : 'yellow'} size="sm" variant={a.stock_actual === 0 ? 'filled' : 'light'}>
-                                                {a.stock_actual === 0 ? 'SIN STOCK' : `${a.stock_actual} ud`}
-                                            </Badge>
+                                            <Badge color="yellow" size="sm" variant="light">{a.stock_actual} ud</Badge>
                                             <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>mín: {a.stock_minimo}</Text>
                                         </Group>
                                     </Group>

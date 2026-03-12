@@ -183,7 +183,7 @@ export function PromocionesTab() {
                 descripcion:       values.descripcion.trim() || undefined,
                 tipo:              values.tipo,
                 valor:             values.valor,
-                cantidad_requerida: values.productoIds.length === 1 ? Math.max(1, values.cantidadRequerida) : 1,
+                cantidad_requerida: Math.max(1, values.cantidadRequerida),
                 fecha_inicio:      toDateStr(values.fechaInicio),
                 fecha_fin:         toDateStr(values.fechaFin),
                 activa:            values.activa,
@@ -263,7 +263,6 @@ export function PromocionesTab() {
                                 <Table.Th>Descuento</Table.Th>
                                 <Table.Th>Vigencia</Table.Th>
                                 <Table.Th>Productos</Table.Th>
-                                <Table.Th>Estado</Table.Th>
                                 <Table.Th style={{ width: 80 }}></Table.Th>
                             </Table.Tr>
                         </Table.Thead>
@@ -287,7 +286,6 @@ export function PromocionesTab() {
                                             {p.productos.length} producto{p.productos.length !== 1 ? 's' : ''}
                                         </Badge>
                                     </Table.Td>
-                                    <Table.Td>{estadoBadge(p.activa)}</Table.Td>
                                     <Table.Td>
                                         <Group gap={4} justify="flex-end">
                                             <Tooltip label="Editar">
@@ -386,18 +384,15 @@ export function PromocionesTab() {
                             {...form.getInputProps('productoIds')}
                         />
 
-                        {/* Only relevant when a single product is selected — enables quantity promos (e.g. 2x1) */}
-                        {form.values.productoIds.length === 1 && (
-                            <NumberInput
-                                label="Unidades mínimas para activar"
-                                description="Cantidad de unidades del producto requeridas para que se aplique el descuento. Usá 2 para un 2×1, 3 para un 3×1, etc."
-                                min={1}
-                                max={99}
-                                allowDecimal={false}
-                                {...form.getInputProps('cantidadRequerida')}
-                                onChange={(v) => form.setFieldValue('cantidadRequerida', typeof v === 'number' ? v : 1)}
-                            />
-                        )}
+                        <NumberInput
+                            label="Unidades mínimas para activar"
+                            description="Usá 2 para una promo 2x1, 3 para 3x1, etc."
+                            min={1}
+                            max={99}
+                            allowDecimal={false}
+                            {...form.getInputProps('cantidadRequerida')}
+                            onChange={(v) => form.setFieldValue('cantidadRequerida', typeof v === 'number' ? v : 1)}
+                        />
 
                         {editTarget && (
                             <Select
