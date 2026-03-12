@@ -182,17 +182,107 @@ export function FacturacionPage() {
 
     const handleReprint = async (v: IVenta) => {
         try {
-            const comp = await getComprobante(v.id).catch(() => null);
-            if (!comp) {
-                notifications.show({
-                    title: 'Sin comprobante',
-                    message: 'No se encontró el comprobante para esta venta.',
-                    color: 'orange',
-                });
-                return;
+            // Crear un HTML simple para el ticket sin necesidad de comprobante
+            const ticketHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Ticket #${v.numeroTicket}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Courier New', monospace; 
+            padding: 20px; 
+            max-width: 300px; 
+            margin: 0 auto; 
+        }
+        .ticket { background: white; padding: 10px; }
+        .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
+        .header h1 { font-size: 18px; margin-bottom: 5px; }
+        .header p { font-size: 12px; }
+        .info { margin-bottom: 10px; font-size: 12px; }
+        .info div { margin-bottom: 3px; }
+        .items { border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 10px 0; margin: 10px 0; }
+        .item { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
+        .item-desc { flex: 1; }
+        .item-qty { width: 40px; text-align: center; }
+        .item-price { width: 80px; text-align: right; }
+        .totals { margin-top: 10px; }
+        .total-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px; }
+        .total-row.final { font-size: 16px; font-weight: bold; border-top: 2px solid #000; padding-top: 5px; margin-top: 5px; }
+        .footer { text-align: center; margin-top: 20px; padding-top: 10px; border-top: 2px dashed #000; font-size: 11px; }
+        @media print {
+            body { margin: 0; padding: 0; }
+            .no-print { display: none !important; }
+        }
+    </style>
+    <script>
+        window.addEventListener('load', function() {
+            setTimeout(function() { window.print(); }, 500);
+        });
+    </script>
+</head>
+<body>
+    <div class="ticket">
+        <div class="header">
+            <h1>BLEND POS</h1>
+            <p>Ticket de Venta</p>
+        </div>
+        
+        <div class="info">
+            <div><strong>Ticket:</strong> #${v.numeroTicket}</div>
+            <div><strong>Fecha:</strong> ${new Date(v.fecha).toLocaleString('es-AR')}</div>
+            <div><strong>Cajero:</strong> ${v.cajeroNombre}</div>
+            <div><strong>Método:</strong> ${METODO_LABEL[v.metodoPago] || v.metodoPago}</div>
+        </div>
+        
+        <div class="items">
+            ${v.items.map(item => `
+                <div class="item">
+                    <div class="item-desc">${item.productoNombre}</div>
+                    <div class="item-qty">x${item.cantidad}</div>
+                    <div class="item-price">${formatARS(item.subtotal)}</div>
+                </div>
+            `).join('')}
+        </div>
+        
+        <div class="totals">
+            ${v.descuentoGlobal > 0 ? `
+                <div class="total-row">
+                    <span>Subtotal:</span>
+                    <span>${formatARS(v.subtotal)}</span>
+                </div>
+                <div class="total-row">
+                    <span>Descuento:</span>
+                    <span>-${formatARS(v.descuentoGlobal)}</span>
+                </div>
+            ` : ''}
+            <div class="total-row final">
+                <span>TOTAL:</span>
+                <span>${formatARS(v.total)}</span>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>¡Gracias por su compra!</p>
+            ${v.anulada ? '<p style="color: red; font-weight: bold; margin-top: 10px;">*** ANULADA ***</p>' : ''}
+        </div>
+    </div>
+</body>
+</html>`;
+
+            // Abrir en nueva ventana
+            const blob = new Blob([ticketHTML], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const printWindow = window.open(url, '_blank');
+            
+            setTimeout(() => URL.revokeObjectURL(url), 30000);
+            
+            if (!printWindow) {
+                throw new Error('El navegador bloqueó la ventana emergente. Permití las ventanas emergentes para este sitio.');
             }
-            // Abrir el HTML con auto-impresión activada
-            await abrirFacturaHTML(comp.id, true);
+            
             notifications.show({
                 title: 'Reimpresión iniciada',
                 message: `Ticket #${v.numeroTicket}`,
@@ -212,13 +302,21 @@ export function FacturacionPage() {
     const handleDownloadPDF = async (v: IVenta) => {
         try {
             const comp = await getComprobante(v.id).catch(() => null);
-            const pdfId = comp?.id ?? v.id;
-            await descargarPDF(pdfId, `ticket_${v.numeroTicket}.pdf`);
-        } catch {
+            if (!comp) {
+                notifications.show({
+                    title: 'PDF no disponible',
+                    message: 'Esta venta no tiene comprobante fiscal registrado.',
+                    color: 'orange',
+                    icon: <Download size={14} />,
+                });
+                return;
+            }
+            await descargarPDF(comp.id, `ticket_${v.numeroTicket}.pdf`);
+        } catch (e: unknown) {
             notifications.show({
-                title: 'PDF no disponible',
-                message: 'El comprobante aún no fue generado o el backend no está conectado.',
-                color: 'orange',
+                title: 'Error al descargar PDF',
+                message: e instanceof Error ? e.message : 'Error desconocido.',
+                color: 'red',
                 icon: <Download size={14} />,
             });
         }
