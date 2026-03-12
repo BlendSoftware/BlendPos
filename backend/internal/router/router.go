@@ -94,6 +94,7 @@ func New(d Deps) *gin.Engine {
 	auditH := handler.NewAuditHandler(d.AuditRepo)
 	configFiscalH := handler.NewConfiguracionFiscalHandler(d.ConfigFiscalSvc)
 	comprasH := handler.NewCompraHandler(d.CompraSvc)
+	promocionesH := handler.NewPromocionHandler(d.PromocionSvc)
 
 	// ── Routes ───────────────────────────────────────────────────────────────
 
@@ -227,6 +228,17 @@ func New(d Deps) *gin.Engine {
 		{
 			compras.POST("", comprasH.Crear)
 			compras.PATCH(":id/estado", comprasH.ActualizarEstado)
+		}
+
+		// Promociones - lectura para todos los roles autenticados del POS;
+		// escritura solo para administrador.
+		v1.GET("/promociones", middleware.RequireRole("cajero", "supervisor", "administrador"), promocionesH.Listar)
+		v1.GET("/promociones/:id", middleware.RequireRole("cajero", "supervisor", "administrador"), promocionesH.ObtenerPorID)
+		promos := v1.Group("/promociones", middleware.RequireRole("administrador"))
+		{
+			promos.POST("", promocionesH.Crear)
+			promos.PUT(":id", promocionesH.Actualizar)
+			promos.DELETE(":id", promocionesH.Eliminar)
 		}
 	}
 
