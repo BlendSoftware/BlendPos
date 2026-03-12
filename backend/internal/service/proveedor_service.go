@@ -29,12 +29,13 @@ type ProveedorService interface {
 }
 
 type proveedorService struct {
-	repo         repository.ProveedorRepository
-	productoRepo repository.ProductoRepository
+	repo          repository.ProveedorRepository
+	productoRepo  repository.ProductoRepository
+	categoriaRepo repository.CategoriaRepository
 }
 
-func NewProveedorService(repo repository.ProveedorRepository, productoRepo repository.ProductoRepository) ProveedorService {
-	return &proveedorService{repo: repo, productoRepo: productoRepo}
+func NewProveedorService(repo repository.ProveedorRepository, productoRepo repository.ProductoRepository, categoriaRepo repository.CategoriaRepository) ProveedorService {
+	return &proveedorService{repo: repo, productoRepo: productoRepo, categoriaRepo: categoriaRepo}
 }
 
 //  CRUD
@@ -494,13 +495,48 @@ func (s *proveedorService) upsertProductoDesdeCSV(
 ) (created bool, err error) {
 	margen := calcularMargen(row.PrecioCosto, row.PrecioVenta)
 
+	// Buscar o crear la categoría basada en el nombre del CSV
+	var categoriaID uuid.UUID
+	if row.Categoria != "" {
+		cat, findErr := s.categoriaRepo.ObtenerPorNombre(ctx, row.Categoria)
+		if findErr != nil {
+			// Categoría no existe — crear una nueva
+			nuevaCat := &model.Categoria{
+				Nombre: row.Categoria,
+				Activo: true,
+			}
+			if err := s.categoriaRepo.Crear(ctx, nuevaCat); err != nil {
+				return false, fmt.Errorf("error al crear categoría: %w", err)
+			}
+			categoriaID = nuevaCat.ID
+		} else {
+			categoriaID = cat.ID
+		}
+	} else {
+		// Si no se especifica categoría, buscar o crear "Sin Categoría"
+		cat, findErr := s.categoriaRepo.ObtenerPorNombre(ctx, "Sin Categoría")
+		if findErr != nil {
+			nuevaCat := &model.Categoria{
+				Nombre: "Sin Categoría",
+				Activo: true,
+			}
+			if err := s.categoriaRepo.Crear(ctx, nuevaCat); err != nil {
+				return false, fmt.Errorf("error al crear categoría por defecto: %w", err)
+			}
+			categoriaID = nuevaCat.ID
+		} else {
+			categoriaID = cat.ID
+		}
+	}
+
 	existing, findErr := s.productoRepo.FindByBarcode(ctx, row.CodigoBarras)
 	if findErr != nil {
-		// Producto no existe  crear
+		// Producto no existe — crear
 		nuevo := &model.Producto{
 			CodigoBarras: row.CodigoBarras,
 			Nombre:       row.Nombre,
 			Categoria:    row.Categoria,
+			CategoriaID:  categoriaID,
 			PrecioCosto:  row.PrecioCosto,
 			PrecioVenta:  row.PrecioVenta,
 			MargenPct:    margen,
@@ -529,6 +565,7 @@ func (s *proveedorService) upsertProductoDesdeCSV(
 	ventaAntes := existing.PrecioVenta
 	existing.Nombre = row.Nombre
 	existing.Categoria = row.Categoria
+	existing.CategoriaID = categoriaID
 	existing.PrecioCosto = row.PrecioCosto
 	existing.PrecioVenta = row.PrecioVenta
 	existing.MargenPct = margen

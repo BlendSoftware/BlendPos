@@ -390,7 +390,10 @@ func (h *FacturacionHandler) ObtenerHTML(c *gin.Context) {
 		return
 	}
 
-	htmlContent, err := infra.GenerateFacturaHTML(venta, comp, fiscalCfg)
+	// Leer parámetro query ?autoprint=true para activar impresión automática
+	autoPrint := c.Query("autoprint") == "true"
+
+	htmlContent, err := infra.GenerateFacturaHTML(venta, comp, fiscalCfg, autoPrint)
 	if err != nil {
 		log.Error().Err(err).Str("comprobante_id", id.String()).Msg("ObtenerHTML: generation failed")
 		c.JSON(http.StatusInternalServerError, apierror.New("Error al generar HTML de la factura"))

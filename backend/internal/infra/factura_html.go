@@ -81,6 +81,9 @@ type facturaHTMLData struct {
 	CAEVencimiento string
 	BarcodeDataURL template.URL // "data:image/png;base64,..." or ""
 	BarcodeText    string
+
+	// AutoPrint: si es true, incluye un script para abrir el diálogo de impresión automáticamente
+	AutoPrint      bool
 }
 
 // ─── Template (raw string) ────────────────────────────────────────────────────
@@ -193,6 +196,15 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     /* === LEGAL === */
     .legal { padding: 4px 10px; border-top: 1px solid #000; font-size: 7px; font-style: italic; color: #444; line-height: 1.5; }
   </style>
+  {{if .AutoPrint}}
+  <script>
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        window.print();
+      }, 500);
+    });
+  </script>
+  {{end}}
 </head>
 <body>
   <div class="no-print">
@@ -335,7 +347,8 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
 // GenerateFacturaHTML renders a complete self-contained HTML invoice page.
 // The returned string can be served with Content-Type: text/html; charset=utf-8.
 // All assets (logo, barcode) are embedded as base64 data URLs.
-func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *model.ConfiguracionFiscal) (string, error) {
+// If autoPrint is true, the HTML will automatically trigger the print dialog on load.
+func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *model.ConfiguracionFiscal, autoPrint bool) (string, error) {
 	tmpl, err := template.New("factura").Parse(facturaHTMLTmpl)
 	if err != nil {
 		return "", fmt.Errorf("factura_html: parse template: %w", err)
@@ -535,6 +548,7 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 		CAEVencimiento:    caeVencimiento,
 		BarcodeDataURL:    barcodeDataURL,
 		BarcodeText:       barcodeText,
+		AutoPrint:         autoPrint,
 	}
 
 	var buf bytes.Buffer

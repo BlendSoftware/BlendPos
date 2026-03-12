@@ -48,11 +48,14 @@ export function getPDFUrl(comprobanteId: string): string {
 /**
  * Abre la factura HTML en una nueva pestaña del navegador.
  * El HTML es autocontenido (logo + barcode en base64) y tiene un botón "Imprimir / Guardar como PDF".
+ * @param comprobanteId - ID del comprobante
+ * @param autoPrint - Si es true, el HTML abrirá automáticamente el diálogo de impresión
  */
-export async function abrirFacturaHTML(comprobanteId: string): Promise<void> {
+export async function abrirFacturaHTML(comprobanteId: string, autoPrint = false): Promise<void> {
     const token = tokenStore.getAccessToken();
     const baseUrl = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
-    const url = `${baseUrl}/v1/facturacion/html/${comprobanteId}`;
+    const queryParam = autoPrint ? '?autoprint=true' : '';
+    const url = `${baseUrl}/v1/facturacion/html/${comprobanteId}${queryParam}`;
 
     const resp = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},

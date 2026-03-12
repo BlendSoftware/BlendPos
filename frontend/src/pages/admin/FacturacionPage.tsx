@@ -263,18 +263,14 @@ export function FacturacionPage() {
                 });
                 return;
             }
-            // Abrir la factura y luego activar el diálogo de impresión
-            await abrirFacturaHTML(comp.id);
-            // Dar tiempo para que se abra la ventana/pestaña
-            setTimeout(() => {
-                // La nueva ventana ejecutará window.print() automáticamente
-                notifications.show({
-                    title: 'Factura abierta',
-                    message: 'Use Ctrl+P o el diálogo de impresión para imprimir',
-                    color: 'blue',
-                    icon: <Printer size={14} />,
-                });
-            }, 500);
+            // Abrir la factura con auto-impresión activada
+            await abrirFacturaHTML(comp.id, true);
+            notifications.show({
+                title: 'Impresión iniciada',
+                message: 'El diálogo de impresión se abrirá automáticamente',
+                color: 'blue',
+                icon: <Printer size={14} />,
+            });
         } catch (e: unknown) {
             notifications.show({
                 title: 'No se pudo imprimir',
