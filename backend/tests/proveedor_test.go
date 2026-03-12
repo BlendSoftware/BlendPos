@@ -109,6 +109,67 @@ func (r *stubProveedorRepo) DB() *gorm.DB { return r.db }
 
 var _ repository.ProveedorRepository = (*stubProveedorRepo)(nil)
 
+// ── In-memory CategoriaRepository stub ───────────────────────────────────────
+
+type stubCategoriaRepo struct {
+	categorias map[uuid.UUID]*model.Categoria
+}
+
+func newStubCategoriaRepo() *stubCategoriaRepo {
+	return &stubCategoriaRepo{
+		categorias: make(map[uuid.UUID]*model.Categoria),
+	}
+}
+
+func (r *stubCategoriaRepo) Crear(_ context.Context, c *model.Categoria) error {
+	if c.ID == uuid.Nil {
+		c.ID = uuid.New()
+	}
+	r.categorias[c.ID] = c
+	return nil
+}
+
+func (r *stubCategoriaRepo) Listar(_ context.Context) ([]model.Categoria, error) {
+	result := make([]model.Categoria, 0, len(r.categorias))
+	for _, c := range r.categorias {
+		result = append(result, *c)
+	}
+	return result, nil
+}
+
+func (r *stubCategoriaRepo) ObtenerPorID(_ context.Context, id uuid.UUID) (*model.Categoria, error) {
+	c, ok := r.categorias[id]
+	if !ok {
+		return nil, errors.New("record not found")
+	}
+	return c, nil
+}
+
+func (r *stubCategoriaRepo) ObtenerPorNombre(_ context.Context, nombre string) (*model.Categoria, error) {
+	for _, c := range r.categorias {
+		if strings.EqualFold(c.Nombre, nombre) {
+			return c, nil
+		}
+	}
+	return nil, errors.New("record not found")
+}
+
+func (r *stubCategoriaRepo) Actualizar(_ context.Context, c *model.Categoria) error {
+	r.categorias[c.ID] = c
+	return nil
+}
+
+func (r *stubCategoriaRepo) Desactivar(_ context.Context, id uuid.UUID) error {
+	c, ok := r.categorias[id]
+	if !ok {
+		return errors.New("record not found")
+	}
+	c.Activo = false
+	return nil
+}
+
+var _ repository.CategoriaRepository = (*stubCategoriaRepo)(nil)
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func seedProveedor(repo *stubProveedorRepo, razonSocial, cuit string) *model.Proveedor {
@@ -122,17 +183,18 @@ func seedProveedor(repo *stubProveedorRepo, razonSocial, cuit string) *model.Pro
 	return p
 }
 
-func buildProveedorSvc() (service.ProveedorService, *stubProveedorRepo, *stubProductoRepo) {
+func buildProveedorSvc() (service.ProveedorService, *stubProveedorRepo, *stubProductoRepo, *stubCategoriaRepo) {
 	provRepo := newStubProveedorRepo()
 	prodRepo := newStubProductoRepo()
-	svc := service.NewProveedorService(provRepo, prodRepo)
-	return svc, provRepo, prodRepo
+	catRepo := newStubCategoriaRepo()
+	svc := service.NewProveedorService(provRepo, prodRepo, catRepo)
+	return svc, provRepo, prodRepo, catRepo
 }
 
 // ── CRUD Tests ────────────────────────────────────────────────────────────────
 
 func TestCrearProveedor(t *testing.T) {
-	svc, _, _ := buildProveedorSvc()
+	svc, _, _, _ := buildProveedorSvc()
 
 	resp, err := svc.Crear(context.Background(), dto.CrearProveedorRequest{
 		RazonSocial: "Distribuidora El Sol S.A.",
@@ -146,7 +208,7 @@ func TestCrearProveedor(t *testing.T) {
 }
 
 func TestCrearProveedor_CUITDuplicado(t *testing.T) {
-	svc, provRepo, _ := buildProveedorSvc()
+	svc, provRepo, _, _ := buildProveedorSvc()
 	seedProveedor(provRepo, "Proveedor Existente", "30-99999999-9")
 
 	_, err := svc.Crear(context.Background(), dto.CrearProveedorRequest{
@@ -159,7 +221,7 @@ func TestCrearProveedor_CUITDuplicado(t *testing.T) {
 }
 
 func TestObtenerProveedorPorID(t *testing.T) {
-	svc, provRepo, _ := buildProveedorSvc()
+	svc, provRepo, _, _ := buildProveedorSvc()
 	p := seedProveedor(provRepo, "Lácteos Norte", "20-12345678-3")
 
 	resp, err := svc.ObtenerPorID(context.Background(), p.ID)
@@ -169,7 +231,7 @@ func TestObtenerProveedorPorID(t *testing.T) {
 }
 
 func TestObtenerProveedor_NoExiste(t *testing.T) {
-	svc, _, _ := buildProveedorSvc()
+	svc, _, _, _ := buildProveedorSvc()
 
 	_, err := svc.ObtenerPorID(context.Background(), uuid.New())
 	assert.Error(t, err)
@@ -177,7 +239,7 @@ func TestObtenerProveedor_NoExiste(t *testing.T) {
 }
 
 func TestListarProveedores(t *testing.T) {
-	svc, provRepo, _ := buildProveedorSvc()
+	svc, provRepo, _, _ := buildProveedorSvc()
 	seedProveedor(provRepo, "Proveedor A", "20-11111111-1")
 	seedProveedor(provRepo, "Proveedor B", "20-22222222-2")
 
@@ -188,7 +250,7 @@ func TestListarProveedores(t *testing.T) {
 }
 
 func TestActualizarProveedor(t *testing.T) {
-	svc, provRepo, _ := buildProveedorSvc()
+	svc, provRepo, _, _ := buildProveedorSvc()
 	p := seedProveedor(provRepo, "Proveedor Original", "20-33333333-3")
 	tel := "2615551234"
 
@@ -204,7 +266,7 @@ func TestActualizarProveedor(t *testing.T) {
 }
 
 func TestEliminarProveedor(t *testing.T) {
-	svc, provRepo, _ := buildProveedorSvc()
+	svc, provRepo, _, _ := buildProveedorSvc()
 	p := seedProveedor(provRepo, "Para Borrar", "20-44444444-4")
 
 	err := svc.Eliminar(context.Background(), p.ID)
@@ -216,7 +278,7 @@ func TestEliminarProveedor(t *testing.T) {
 }
 
 func TestEliminarProveedor_NoExiste(t *testing.T) {
-	svc, _, _ := buildProveedorSvc()
+	svc, _, _, _ := buildProveedorSvc()
 
 	err := svc.Eliminar(context.Background(), uuid.New())
 	assert.Error(t, err)
@@ -225,7 +287,7 @@ func TestEliminarProveedor_NoExiste(t *testing.T) {
 // ── ActualizarPreciosMasivo Tests ─────────────────────────────────────────────
 
 func TestActualizarPreciosMasivo_Preview(t *testing.T) {
-	svc, provRepo, prodRepo := buildProveedorSvc()
+	svc, provRepo, prodRepo, _ := buildProveedorSvc()
 
 	prov := seedProveedor(provRepo, "Frutos del Mar S.A.", "30-55555555-5")
 
@@ -258,7 +320,7 @@ func TestActualizarPreciosMasivo_Preview(t *testing.T) {
 }
 
 func TestActualizarPreciosMasivo_PreviewCalculos(t *testing.T) {
-	svc, provRepo, prodRepo := buildProveedorSvc()
+	svc, provRepo, prodRepo, _ := buildProveedorSvc()
 	prov := seedProveedor(provRepo, "Distribuidora Test", "30-66666666-6")
 
 	prod := seedProducto(prodRepo, "Producto Test", "7790020000001", 5, 1)
@@ -286,7 +348,7 @@ func TestActualizarPreciosMasivo_PreviewCalculos(t *testing.T) {
 }
 
 func TestActualizarPreciosMasivo_ConRecalculoVenta(t *testing.T) {
-	svc, provRepo, prodRepo := buildProveedorSvc()
+	svc, provRepo, prodRepo, _ := buildProveedorSvc()
 	prov := seedProveedor(provRepo, "Distribuidora Test 2", "30-77777777-7")
 
 	prod := seedProducto(prodRepo, "Prod ReCalculate", "7790030000001", 5, 1)
@@ -311,7 +373,7 @@ func TestActualizarPreciosMasivo_ConRecalculoVenta(t *testing.T) {
 }
 
 func TestActualizarPreciosMasivo_Aplicar(t *testing.T) {
-	svc, provRepo, prodRepo := buildProveedorSvc()
+	svc, provRepo, prodRepo, _ := buildProveedorSvc()
 	prov := seedProveedor(provRepo, "Distribuidora Aplicar", "30-88888888-8")
 
 	prod := seedProducto(prodRepo, "Prod Aplicar", "7790040000001", 5, 1)
@@ -335,7 +397,7 @@ func TestActualizarPreciosMasivo_Aplicar(t *testing.T) {
 }
 
 func TestActualizarPreciosMasivo_ProveedorNoExiste(t *testing.T) {
-	svc, _, _ := buildProveedorSvc()
+	svc, _, _, _ := buildProveedorSvc()
 
 	_, err := svc.ActualizarPreciosMasivo(context.Background(), uuid.New(),
 		dto.ActualizarPreciosMasivoRequest{
@@ -349,7 +411,7 @@ func TestActualizarPreciosMasivo_ProveedorNoExiste(t *testing.T) {
 }
 
 func TestActualizarPreciosMasivo_SinProductos(t *testing.T) {
-	svc, provRepo, _ := buildProveedorSvc()
+	svc, provRepo, _, _ := buildProveedorSvc()
 	prov := seedProveedor(provRepo, "Proveedor Sin Productos", "30-99990000-0")
 
 	resp, err := svc.ActualizarPreciosMasivo(context.Background(), prov.ID,
@@ -367,7 +429,7 @@ func TestActualizarPreciosMasivo_SinProductos(t *testing.T) {
 // ── ImportarCSV Tests ─────────────────────────────────────────────────────────
 
 func TestImportarCSV_Exitoso(t *testing.T) {
-	svc, provRepo, _ := buildProveedorSvc()
+	svc, provRepo, _, _ := buildProveedorSvc()
 	prov := seedProveedor(provRepo, "Proveedor CSV", "20-55551234-0")
 
 	csvContent := "codigo_barras,nombre,precio_costo,precio_venta,unidades_por_bulto,categoria\n" +
@@ -385,7 +447,7 @@ func TestImportarCSV_Exitoso(t *testing.T) {
 }
 
 func TestImportarCSV_Upsert(t *testing.T) {
-	svc, provRepo, prodRepo := buildProveedorSvc()
+	svc, provRepo, prodRepo, _ := buildProveedorSvc()
 	prov := seedProveedor(provRepo, "Proveedor Upsert", "20-66661234-0")
 
 	// Pre-existente
@@ -412,7 +474,7 @@ func TestImportarCSV_Upsert(t *testing.T) {
 }
 
 func TestImportarCSV_FilaConError(t *testing.T) {
-	svc, provRepo, _ := buildProveedorSvc()
+	svc, provRepo, _, _ := buildProveedorSvc()
 	prov := seedProveedor(provRepo, "Proveedor Errores", "20-77771234-0")
 
 	csvContent := "codigo_barras,nombre,precio_costo,precio_venta\n" +
@@ -431,7 +493,7 @@ func TestImportarCSV_FilaConError(t *testing.T) {
 }
 
 func TestImportarCSV_ArchivoBinarioRechazado(t *testing.T) {
-	svc, provRepo, _ := buildProveedorSvc()
+	svc, provRepo, _, _ := buildProveedorSvc()
 	prov := seedProveedor(provRepo, "Proveedor Binario", "20-88881234-0")
 
 	// Firma ZIP (XLSX)
@@ -444,7 +506,7 @@ func TestImportarCSV_ArchivoBinarioRechazado(t *testing.T) {
 }
 
 func TestImportarCSV_EncabezadoIncorrecto(t *testing.T) {
-	svc, provRepo, _ := buildProveedorSvc()
+	svc, provRepo, _, _ := buildProveedorSvc()
 	prov := seedProveedor(provRepo, "Proveedor Encabezado", "20-99991234-0")
 
 	csvContent := "columna1,columna2,columna3\n1,2,3\n"
@@ -456,7 +518,7 @@ func TestImportarCSV_EncabezadoIncorrecto(t *testing.T) {
 }
 
 func TestImportarCSV_ProveedorNoExiste(t *testing.T) {
-	svc, _, _ := buildProveedorSvc()
+	svc, _, _, _ := buildProveedorSvc()
 
 	csvContent := "codigo_barras,nombre,precio_costo,precio_venta\n7790000000001,Prod,50,75\n"
 
@@ -467,7 +529,7 @@ func TestImportarCSV_ProveedorNoExiste(t *testing.T) {
 }
 
 func TestImportarCSV_ArchivoVacio(t *testing.T) {
-	svc, provRepo, _ := buildProveedorSvc()
+	svc, provRepo, _, _ := buildProveedorSvc()
 	prov := seedProveedor(provRepo, "Proveedor Vacío", "20-11110000-0")
 
 	_, err := svc.ImportarCSV(context.Background(), prov.ID, []byte{})
