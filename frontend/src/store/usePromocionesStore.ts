@@ -67,14 +67,10 @@ export const usePromocionesStore = create<PromocionesState>()((set, get) => ({
 
     computePromoDescuentos: (cartProductIds, priceMap, quantityMap) => {
         const { promociones } = get();
-        const now = new Date();
         const discountMap: Record<string, number> = {};
 
         for (const promo of promociones) {
-            if (!promo.activa || promo.estado !== 'activa') continue;
-            const desde = new Date(promo.fecha_inicio);
-            const hasta = new Date(promo.fecha_fin);
-            if (now < desde || now > hasta) continue;
+            if (!promo.activa) continue;
 
             const n = Math.max(1, promo.cantidad_requerida ?? 1);
             const isSingleProduct = promo.productos.length === 1;

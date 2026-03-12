@@ -52,12 +52,10 @@ function toDateStr(d: Date | string | null): string {
     return d.toISOString().slice(0, 10);
 }
 
-function estadoBadge(estado: string) {
-    switch (estado) {
-        case 'activa':    return <Badge color="teal"   size="sm" variant="light">Activa</Badge>;
-        case 'pendiente': return <Badge color="yellow" size="sm" variant="light">Pendiente</Badge>;
-        default:          return <Badge color="gray"   size="sm" variant="light">Vencida</Badge>;
-    }
+function estadoBadge(activa: boolean) {
+    return activa
+        ? <Badge color="teal" size="sm" variant="light">Activa</Badge>
+        : <Badge color="gray" size="sm" variant="light">Inactiva</Badge>;
 }
 
 function tipoBadge(tipo: TipoPromocion) {
@@ -232,7 +230,7 @@ export function PromocionesTab() {
             <Group justify="space-between">
                 <div>
                     <Text fw={700} size="lg">Promociones</Text>
-                    <Text size="sm" c="dimmed">{promociones.filter(p => p.estado === 'activa').length} activas de {promociones.length} total</Text>
+                    <Text size="sm" c="dimmed">{promociones.filter(p => p.activa).length} activas de {promociones.length} total</Text>
                 </div>
                 <Button leftSection={<Plus size={15} />} onClick={openCreate}>
                     Nueva promoción
@@ -289,7 +287,7 @@ export function PromocionesTab() {
                                             {p.productos.length} producto{p.productos.length !== 1 ? 's' : ''}
                                         </Badge>
                                     </Table.Td>
-                                    <Table.Td>{estadoBadge(p.estado)}</Table.Td>
+                                    <Table.Td>{estadoBadge(p.activa)}</Table.Td>
                                     <Table.Td>
                                         <Group gap={4} justify="flex-end">
                                             <Tooltip label="Editar">
