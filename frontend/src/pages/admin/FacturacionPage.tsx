@@ -10,7 +10,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { usePrinterStore } from '../../store/usePrinterStore';
 import { type MetodoPago } from '../../store/useSaleStore';
 import { anularVenta, listarVentas, type VentaListItem } from '../../services/api/ventas';
-import { getComprobante, fetchFacturaHTML } from '../../services/api/facturacion';
+import { getComprobante, abrirFacturaHTML, descargarPDF } from '../../services/api/facturacion';
 import { formatARS } from '../../utils/format';
 import type { IVenta } from '../../types';
 
@@ -302,32 +302,15 @@ export function FacturacionPage() {
     };
 
     const handleDownloadPDF = async (v: IVenta) => {
-        // Abre la factura HTML en una ventana nueva y lanza el diálogo de impresión,
-        // desde donde el usuario puede guardar como PDF con el mismo formato visual.
-        const win = window.open('', '_blank', 'width=900,height=700');
-        if (!win) {
-            notifications.show({
-                title: 'Popups bloqueados',
-                message: 'Permite las ventanas emergentes en este sitio e intenta de nuevo.',
-                color: 'red',
-                icon: <Download size={14} />,
-            });
-            return;
-        }
         try {
             const comp = await getComprobante(v.id).catch(() => null);
-            const html = comp ? await fetchFacturaHTML(comp.id) : buildTicketHTML(v);
-            win.document.open();
-            win.document.write(html);
-            win.document.close();
-            win.onload = () => {
-                win.focus();
-                win.print();
-            };
+            if (!comp) {
+                throw new Error('Comprobante no disponible para esta venta.');
+            }
+            await descargarPDF(comp.id, `comprobante_${v.numeroTicket}.pdf`);
         } catch (e: unknown) {
-            win.close();
             notifications.show({
-                title: 'No se pudo abrir la factura',
+                title: 'No se pudo descargar el PDF',
                 message: e instanceof Error ? e.message : 'Error desconocido.',
                 color: 'red',
                 icon: <Download size={14} />,
@@ -336,32 +319,19 @@ export function FacturacionPage() {
     };
 
     const handleVerFactura = async (v: IVenta) => {
-        // Abrir ventana ANTES del await — evita que el popup blocker la bloquee
-        const win = window.open('', '_blank', 'width=900,height=700');
-        if (!win) {
-            notifications.show({
-                title: 'Popups bloqueados',
-                message: 'Permite las ventanas emergentes en este sitio e intenta de nuevo.',
-                color: 'red',
-                icon: <FileText size={14} />,
-            });
-            return;
-        }
         try {
             const comp = await getComprobante(v.id).catch(() => null);
             if (!comp) {
                 // Sin comprobante fiscal → mostrar ticket HTML
+                const win = window.open('', '_blank', 'width=900,height=700');
+                if (!win) throw new Error('El navegador bloqueó la ventana emergente. Permití las ventanas emergentes para este sitio.');
                 win.document.open();
                 win.document.write(buildTicketHTML(v));
                 win.document.close();
                 return;
             }
-            const html = await fetchFacturaHTML(comp.id);
-            win.document.open();
-            win.document.write(html);
-            win.document.close();
+            await abrirFacturaHTML(comp.id, false, false);
         } catch (e: unknown) {
-            win.close();
             notifications.show({
                 title: 'No se pudo abrir la factura',
                 message: e instanceof Error ? e.message : 'Error desconocido.',
@@ -372,29 +342,23 @@ export function FacturacionPage() {
     };
 
     const handleImprimirFactura = async (v: IVenta) => {
-        // Abrir ventana ANTES del await — evita que el popup blocker la bloquee
-        const printWindow = window.open('', '_blank', 'width=900,height=700');
-        if (!printWindow) {
-            notifications.show({
-                title: 'Popups bloqueados',
-                message: 'Permite las ventanas emergentes en este sitio e intenta de nuevo.',
-                color: 'red',
-                icon: <Printer size={14} />,
-            });
-            return;
-        }
         try {
             const comp = await getComprobante(v.id).catch(() => null);
-            const html = comp ? await fetchFacturaHTML(comp.id) : buildTicketHTML(v);
-            printWindow.document.open();
-            printWindow.document.write(html);
-            printWindow.document.close();
-            printWindow.onload = () => {
-                printWindow.focus();
-                printWindow.print();
-            };
+            if (!comp) {
+                const printWindow = window.open('', '_blank', 'width=900,height=700');
+                if (!printWindow) throw new Error('El navegador bloqueó la ventana emergente. Permití las ventanas emergentes para este sitio.');
+                const html = buildTicketHTML(v);
+                printWindow.document.open();
+                printWindow.document.write(html);
+                printWindow.document.close();
+                printWindow.onload = () => {
+                    printWindow.focus();
+                    printWindow.print();
+                };
+                return;
+            }
+            await abrirFacturaHTML(comp.id, true, false);
         } catch (e: unknown) {
-            printWindow.close();
             notifications.show({
                 title: 'No se pudo imprimir',
                 message: e instanceof Error ? e.message : 'Error desconocido.',

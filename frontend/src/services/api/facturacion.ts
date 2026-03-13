@@ -77,19 +77,46 @@ export async function abrirFacturaHTML(comprobanteId: string, autoPrint = false,
     const queryParam = params.toString() ? `?${params.toString()}` : '';
     const url = `${baseUrl}/v1/facturacion/html/${comprobanteId}${queryParam}`;
 
-    const resp = await fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-
-    if (!resp.ok) throw new Error(`Factura HTML no disponible: ${resp.status}`);
-
-    const html = await resp.text();
-    const blob = new Blob([html], { type: 'text/html' });
-    const objectUrl = URL.createObjectURL(blob);
-    const win = window.open(objectUrl, '_blank');
-    // Revoke después de que la ventana cargue; 30s es suficiente.
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+    // Open first to avoid popup blockers triggered by async fetch.
+    const win = window.open('', '_blank', 'width=1000,height=820');
     if (!win) throw new Error('El navegador bloqueó la ventana emergente. Permití las ventanas emergentes para este sitio.');
+
+    win.document.open();
+    win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Cargando factura...</title></head><body style="font-family:Arial,Helvetica,sans-serif;padding:16px;">Cargando factura...</body></html>');
+    win.document.close();
+
+    try {
+        const resp = await fetch(url, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+        if (!resp.ok) throw new Error(`Factura HTML no disponible: ${resp.status}`);
+
+        const html = await resp.text();
+        win.document.open();
+        win.document.write(html);
+        win.document.close();
+
+        win.onload = () => {
+            const btn = win.document.querySelector('.btn-print') as HTMLButtonElement | null;
+            if (btn) {
+                btn.onclick = (event) => {
+                    event.preventDefault();
+                    win.focus();
+                    win.print();
+                };
+            }
+            if (autoPrint) {
+                setTimeout(() => {
+                    win.focus();
+                    win.print();
+                }, 250);
+            }
+        };
+    } catch (err) {
+        win.close();
+        throw err;
+    }
 }
 
 /**

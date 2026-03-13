@@ -356,7 +356,7 @@ func (w *FacturacionWorker) generatePDF(ctx context.Context, venta *model.Venta,
 	var pdfErr error
 
 	if isFiscal {
-		// Generate HTML invoice file (same format as print view)
+		// Generate fiscal A4 PDF for electronic invoices.
 		if w.configFiscalSvc == nil {
 			pdfPath, pdfErr = infra.GenerateTicketPDF(venta, w.pdfStoragePath)
 		} else {
@@ -365,7 +365,7 @@ func (w *FacturacionWorker) generatePDF(ctx context.Context, venta *model.Venta,
 				log.Warn().Err(err).Str("venta_id", ventaID).Msg("facturacion_worker: could not load fiscal config for invoice, falling back to ticket")
 				pdfPath, pdfErr = infra.GenerateTicketPDF(venta, w.pdfStoragePath)
 			} else {
-				pdfPath, pdfErr = infra.GenerateFacturaHTMLFile(
+				pdfPath, pdfErr = infra.GenerateFacturaFiscalPDF(
 					venta,
 					comp,
 					config,
