@@ -7,14 +7,17 @@ package infra
 // browser can open it in a new tab and print/save as PDF without any extra
 // dependencies.
 //
-// Template layout follows the AFIP Factura C standard:
+// Template layout follows the AFIP/ARCA Factura A/B/C standard:
 //   - 3-column header  (emisor | letra gigante | datos comprobante)
-//   - Receptor data
+//   - Receptor data (nombre, domicilio, doc, condición IVA)
 //   - CONDICIÓN Y FORMA DE PAGO row
-//   - Items table  (dark header, striped body)
+//   - Items table with bonificaciones column
+//   - Descuentos globales row (if applicable)
 //   - Son pesos · Importe total
 //   - Comprobante autorizado · CAE · barcode
 //   - Legal footer
+//
+// Supports ORIGINAL and DUPLICADO copies via esCopia parameter.
 
 import (
 	"bytes"
@@ -37,14 +40,15 @@ type facturaHTMLItem struct {
 	Cantidad       int
 	Nombre         string
 	PrecioUnitario string
+	Descuento      string // "" if none
 	PrecioTotal    string
 }
 
 type facturaHTMLData struct {
 	// Left header
-	LogoDataURL    template.URL // "data:image/...;base64,..." or ""
-	RazonSocial    string
-	Domicilio      string
+	LogoDataURL     template.URL // "data:image/...;base64,..." or ""
+	RazonSocial     string
+	Domicilio       string
 	CondicionFiscal string
 
 	// Center header
@@ -53,6 +57,7 @@ type facturaHTMLData struct {
 	TipoCodigo string // e.g. "11"
 
 	// Right header
+	CopiaLabel       string // "ORIGINAL" or "DUPLICADO"
 	NumeroFormateado string // "0001-00000016"
 	FechaStr         string // "9/3/2026"
 	CUIT             string
@@ -60,16 +65,22 @@ type facturaHTMLData struct {
 	FechaInicioActiv string
 
 	// Receptor
-	ReceptorNombre    string
-	ReceptorDomicilio string
-	ReceptorDocLabel  string // "CUIT" | "DNI" | "DOCUMENTO"
-	ReceptorDocNumero string
+	ReceptorNombre       string
+	ReceptorDomicilio    string
+	ReceptorDocLabel     string // "CUIT" | "DNI" | "DOCUMENTO"
+	ReceptorDocNumero    string
+	ReceptorCondicionIVA string // "CONSUMIDOR FINAL", "RESPONSABLE INSCRIPTO", etc.
 
 	// Condición de pago
 	CondicionPago string
 
 	// Items
 	Items []facturaHTMLItem
+
+	// Descuentos globales
+	TieneDescuento     bool
+	SubtotalFormateado string
+	DescuentoTotal     string
 
 	// Totals
 	TotalEnLetras   string
@@ -82,7 +93,7 @@ type facturaHTMLData struct {
 	BarcodeText    string
 
 	// AutoPrint: si es true, incluye un script para abrir el diálogo de impresión automáticamente
-	AutoPrint      bool
+	AutoPrint bool
 }
 
 // ─── Template (raw string) ────────────────────────────────────────────────────
@@ -96,7 +107,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; background: #ddd; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; background: #e0e4ea; }
     @page { size: A4 portrait; margin: 8mm; }
     @media print {
       body { background: #fff; }
@@ -104,114 +115,127 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       .invoice-wrap { box-shadow: none !important; margin: 0 !important; padding: 0 !important; }
       .invoice { min-height: 281mm; }
     }
-    /* Print bar */
+    /* ── Print bar ── */
     .no-print {
-      background: #1a3558; padding: 10px; text-align: center;
+      background: #1e3a5f; padding: 10px 20px; display: flex; gap: 10px; justify-content: center; align-items: center;
     }
     .btn-print {
-      padding: 7px 22px; background: #2563eb; color: #fff; border: none;
-      border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold;
+      padding: 7px 24px; background: #2563eb; color: #fff; border: none;
+      border-radius: 5px; cursor: pointer; font-size: 13px; font-weight: 600; letter-spacing: 0.2px;
     }
-    /* Invoice wrapper */
-    .invoice-wrap { max-width: 794px; margin: 14px auto; background: #fff; box-shadow: 0 2px 14px rgba(0,0,0,.25); padding: 0; }
-    .invoice { border: 1px solid #000; display: flex; flex-direction: column; min-height: 281mm; }
+    .btn-print:hover { background: #1d4ed8; }
+    /* ── Invoice wrapper ── */
+    .invoice-wrap { max-width: 794px; margin: 16px auto; background: #fff; box-shadow: 0 3px 18px rgba(0,0,0,.16); }
+    .invoice { border: 1px solid #888; display: flex; flex-direction: column; min-height: 281mm; }
 
-    /* === HEADER === */
-    .header { display: grid; grid-template-columns: 42% 16% 42%; border-bottom: 1px solid #000; min-height: 85px; }
-    .hdr-left  { padding: 8px 10px; border-right: 1px solid #000; }
-    .hdr-left-logo { max-height: 48px; max-width: 110px; object-fit: contain; display: block; margin-bottom: 5px; }
-    .hdr-left-name { font-size: 14px; font-weight: bold; line-height: 1.2; }
-    .hdr-left-addr { font-size: 8px; line-height: 1.5; margin-top: 2px; color: #222; }
-    .hdr-left-cond { font-size: 8.5px; font-weight: bold; margin-top: 5px; }
+    /* ── HEADER ── */
+    .header { display: grid; grid-template-columns: 42% 16% 42%; border-bottom: 1px solid #bbb; min-height: 92px; }
+    .hdr-left  { padding: 10px 12px; border-right: 1px solid #bbb; }
+    .hdr-left-logo { max-height: 52px; max-width: 120px; object-fit: contain; display: block; margin-bottom: 6px; }
+    .hdr-left-name { font-size: 13px; font-weight: 700; line-height: 1.3; color: #111; }
+    .hdr-left-addr { font-size: 8.5px; line-height: 1.6; margin-top: 3px; color: #555; }
+    .hdr-left-cond { font-size: 8.5px; font-weight: 700; margin-top: 5px; color: #222; }
     .hdr-center {
-      border-right: 1px solid #000; display: flex; flex-direction: column;
+      border-right: 1px solid #bbb; display: flex; flex-direction: column;
       align-items: center; justify-content: center; padding: 6px; text-align: center;
     }
-    .hdr-center-label { font-size: 8px; letter-spacing: 0.5px; }
-    .hdr-center-letra { font-size: 60px; font-weight: bold; line-height: 1; }
-    .hdr-center-cod   { font-size: 8px; margin-top: 2px; }
-    .hdr-right { padding: 8px 10px; }
-    .hdr-r-row1 { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1px; }
-    .hdr-r-tipo { font-size: 10px; }
-    .hdr-r-num  { font-size: 12px; font-weight: bold; }
-    .hdr-r-row2 { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-    .hdr-r-orig { font-size: 10px; font-weight: bold; }
-    .hdr-r-data { font-size: 8.5px; }
+    .hdr-center-label { font-size: 7.5px; letter-spacing: 0.5px; text-transform: uppercase; color: #666; }
+    .hdr-center-letra { font-size: 64px; font-weight: 900; line-height: 1; color: #111; }
+    .hdr-center-cod   { font-size: 7.5px; margin-top: 2px; color: #666; }
+    .hdr-right { padding: 10px 12px; }
+    .hdr-r-row1 { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
+    .hdr-r-tipo { font-size: 10px; color: #555; }
+    .hdr-r-num  { font-size: 12px; font-weight: 700; color: #111; }
+    .hdr-r-row2 { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+    .hdr-r-fecha { font-size: 9px; color: #444; }
+    .hdr-r-copia { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; color: #222; }
     .dtbl { width: 100%; border-collapse: collapse; }
-    .dtbl td { padding: 1px 0; vertical-align: top; }
-    .dtbl .lbl { white-space: nowrap; padding-right: 4px; min-width: 82px; }
+    .dtbl td { padding: 1.5px 0; vertical-align: top; font-size: 8.5px; }
+    .dtbl .lbl { white-space: nowrap; padding-right: 6px; min-width: 90px; color: #666; }
 
-    /* === RECEPTOR === */
-    .receptor { border-bottom: 1px solid #000; }
-    .rec-row { display: grid; grid-template-columns: 50% 50%; border-bottom: 1px solid #000; }
+    /* ── RECEPTOR ── */
+    .receptor { border-bottom: 1px solid #bbb; }
+    .rec-row { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #e0e0e0; }
     .rec-row:last-child { border-bottom: none; }
-    .rec-cell { padding: 3px 8px; display: flex; align-items: baseline; gap: 6px; }
-    .rec-cell:first-child { border-right: 1px solid #000; }
-    .rec-lbl { font-weight: bold; font-size: 8.5px; white-space: nowrap; min-width: 65px; }
-    .rec-val  { font-size: 9.5px; }
+    .rec-cell { padding: 4px 10px; display: flex; align-items: baseline; gap: 6px; }
+    .rec-cell:first-child { border-right: 1px solid #e0e0e0; }
+    .rec-lbl { font-weight: 700; font-size: 7.5px; white-space: nowrap; min-width: 72px; text-transform: uppercase; color: #666; }
+    .rec-val  { font-size: 9.5px; color: #111; }
 
-    /* === CONDICIÓN === */
+    /* ── CONDICIÓN DE PAGO ── */
     .condicion-row {
-      padding: 3px 8px; display: flex; align-items: center; gap: 8px;
-      border-bottom: 1px solid #000;
+      padding: 4px 10px; display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid #bbb; background: #fafafa;
     }
-    .condicion-lbl { font-weight: bold; font-size: 8.5px; white-space: nowrap; }
-    .condicion-val { font-size: 8.5px; }
+    .condicion-lbl { font-weight: 700; font-size: 7.5px; white-space: nowrap; text-transform: uppercase; color: #666; }
+    .condicion-val { font-size: 9px; color: #111; }
 
-    /* === ITEMS TABLE === */
+    /* ── ITEMS TABLE ── */
     .items-section { flex: 1; display: flex; flex-direction: column; }
     .items-tbl { width: 100%; border-collapse: collapse; }
-    .items-tbl thead tr { background: #3d3d3d; color: #fff; }
-    .items-tbl th { padding: 4px 8px; font-size: 8.5px; font-weight: bold; border: 1px solid #000; }
-    .items-tbl td { padding: 3px 8px; font-size: 9px; border-left: 1px solid #000; border-right: 1px solid #000; height: 18px; }
+    .items-tbl thead tr { background: #f2f4f7; }
+    .items-tbl th {
+      padding: 5px 8px; font-size: 7.5px; font-weight: 700; text-transform: uppercase;
+      border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; letter-spacing: 0.3px; color: #444;
+    }
+    .items-tbl th + th { border-left: 1px solid #ddd; }
+    .items-tbl td { padding: 4px 8px; font-size: 9px; height: 20px; border-bottom: 1px solid #eee; color: #111; }
+    .items-tbl td + td { border-left: 1px solid #eee; }
     .items-tbl tbody tr:last-child td { border-bottom: none; }
-    .items-filler { flex: 1; border-left: 1px solid #000; border-right: 1px solid #000; border-bottom: 1px solid #000; min-height: 4px; }
+    .items-filler { flex: 1; min-height: 8px; }
     .tr { text-align: right; }
     .tc { text-align: center; }
 
-    /* === TOTALS === */
-    .totals-row { display: flex; border-top: 1px solid #000; border-bottom: 1px solid #000; }
+    /* ── DESCUENTOS GLOBALES ── */
+    .descuento-row {
+      display: flex; border-top: 1px solid #e0e0e0; border-bottom: 1px solid #bbb;
+      padding: 4px 10px; gap: 24px; align-items: center; background: #fffbf0;
+    }
+    .desc-cell { display: flex; align-items: baseline; gap: 6px; font-size: 9px; }
+    .desc-lbl { font-weight: 700; color: #666; font-size: 7.5px; text-transform: uppercase; }
+    .desc-val-red { color: #b00000; font-weight: 600; }
+
+    /* ── TOTALS ── */
+    .totals-row { display: flex; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
     .son-pesos {
       flex: 1; display: flex; align-items: center; gap: 6px;
-      padding: 4px 8px; border-right: 1px solid #000; font-size: 8.5px;
+      padding: 5px 10px; border-right: 1px solid #bbb; font-size: 8.5px;
     }
-    .son-pesos-lbl { white-space: nowrap; }
-    .son-pesos-val { font-style: italic; }
+    .son-pesos-lbl { white-space: nowrap; font-weight: 700; color: #666; font-size: 7.5px; text-transform: uppercase; }
+    .son-pesos-val { font-style: italic; color: #333; }
     .importe-total {
-      min-width: 200px; display: flex; align-items: center; justify-content: space-between;
-      padding: 4px 10px; background: #e5e5e5; gap: 10px;
+      min-width: 210px; display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 14px; background: #f0f3f8; gap: 12px;
     }
-    .imp-lbl { font-weight: bold; font-size: 9.5px; white-space: nowrap; }
-    .imp-val { font-weight: bold; font-size: 13px; }
+    .imp-lbl { font-weight: 700; font-size: 8.5px; white-space: nowrap; text-transform: uppercase; color: #444; }
+    .imp-val { font-weight: 900; font-size: 15px; color: #111; }
 
-    /* === CAE FOOTER === */
-    .cae-footer { display: grid; grid-template-columns: 50% 50%; border-top: 1px solid #000; min-height: 52px; }
-    .cae-left { padding: 6px 10px; border-right: 1px solid #000; }
-    .cae-title { font-weight: bold; font-size: 9.5px; margin-bottom: 3px; }
-    .cae-data  { font-size: 8.5px; margin-bottom: 2px; }
-		.cae-right {
-			padding: 6px 10px; display: flex; flex-direction: column;
-			align-items: center; justify-content: center; gap: 3px;
-		}
+    /* ── CAE FOOTER ── */
+    .cae-footer { display: grid; grid-template-columns: 50% 50%; border-top: 1px solid #bbb; min-height: 58px; }
+    .cae-left { padding: 8px 12px; border-right: 1px solid #bbb; }
+    .cae-title { font-weight: 700; font-size: 9.5px; margin-bottom: 4px; color: #222; }
+    .cae-data  { font-size: 8.5px; margin-bottom: 2px; color: #333; }
+    .cae-right {
+      padding: 8px 12px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 4px;
+    }
     .barcode-img { max-height: 48px; max-width: 100%; }
-		.barcode-text { font-size: 8px; letter-spacing: 0.8px; line-height: 1; text-align: center; }
+    .barcode-text { font-size: 8px; letter-spacing: 0.8px; line-height: 1; text-align: center; color: #444; font-family: 'Courier New', monospace; }
 
-    /* === LEGAL === */
-    .legal { padding: 4px 10px; border-top: 1px solid #000; font-size: 7px; font-style: italic; color: #444; line-height: 1.5; }
+    /* ── LEGAL ── */
+    .legal { padding: 5px 12px; border-top: 1px solid #ddd; font-size: 7px; font-style: italic; color: #777; line-height: 1.7; }
   </style>
   {{if .AutoPrint}}
   <script>
     window.addEventListener('load', function() {
-      setTimeout(function() {
-        window.print();
-      }, 500);
+      setTimeout(function() { window.print(); }, 500);
     });
   </script>
   {{end}}
 </head>
 <body>
   <div class="no-print">
-    <button class="btn-print" onclick="window.print()">Imprimir / Guardar como PDF</button>
+    <button class="btn-print" onclick="window.print()">&#128438; Imprimir / Guardar como PDF</button>
   </div>
 
   <div class="invoice-wrap">
@@ -235,17 +259,17 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       <div class="hdr-right">
         <div class="hdr-r-row1">
           <span class="hdr-r-tipo">{{.TipoNombre}}</span>
-          <span class="hdr-r-num">N&#176; {{.NumeroFormateado}}</span>
+          <span class="hdr-r-num">N&#186; {{.NumeroFormateado}}</span>
         </div>
         <div class="hdr-r-row2">
-          <span>Fecha &nbsp;<strong>{{.FechaStr}}</strong></span>
-          <span class="hdr-r-orig">ORIGINAL</span>
+          <span class="hdr-r-fecha">Fecha &nbsp;<strong>{{.FechaStr}}</strong></span>
+          <span class="hdr-r-copia">{{.CopiaLabel}}</span>
         </div>
         <div class="hdr-r-data">
           <table class="dtbl">
             <tr><td class="lbl">CUIT:</td><td>{{.CUIT}}</td></tr>
-            {{if .IIBB}}<tr><td class="lbl">ING. BRUTOS:</td><td>{{.IIBB}}</td></tr>{{end}}
-            {{if .FechaInicioActiv}}<tr><td class="lbl">INICIO ACT.:</td><td>{{.FechaInicioActiv}}</td></tr>{{end}}
+            {{if .IIBB}}<tr><td class="lbl">Ing. Brutos:</td><td>{{.IIBB}}</td></tr>{{end}}
+            {{if .FechaInicioActiv}}<tr><td class="lbl">Inicio de act.:</td><td>{{.FechaInicioActiv}}</td></tr>{{end}}
           </table>
         </div>
       </div>
@@ -255,7 +279,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     <div class="receptor">
       <div class="rec-row">
         <div class="rec-cell">
-          <span class="rec-lbl">NOMBRE:</span>
+          <span class="rec-lbl">Nombre:</span>
           <span class="rec-val">{{.ReceptorNombre}}</span>
         </div>
         <div class="rec-cell">
@@ -267,16 +291,19 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       </div>
       <div class="rec-row">
         <div class="rec-cell">
-          <span class="rec-lbl">DOMICILIO:</span>
-          <span class="rec-val">{{.ReceptorDomicilio}}</span>
+          <span class="rec-lbl">Domicilio:</span>
+          <span class="rec-val">{{if .ReceptorDomicilio}}{{.ReceptorDomicilio}}{{else}}-{{end}}</span>
         </div>
-        <div class="rec-cell"></div>
+        <div class="rec-cell">
+          <span class="rec-lbl">Cond. IVA:</span>
+          <span class="rec-val">{{.ReceptorCondicionIVA}}</span>
+        </div>
       </div>
     </div>
 
     <!-- CONDICIÓN Y FORMA DE PAGO -->
     <div class="condicion-row">
-      <span class="condicion-lbl">CONDICI&#211;N Y FORMA DE PAGO:</span>
+      <span class="condicion-lbl">Condici&#243;n y forma de pago:</span>
       <span class="condicion-val">{{.CondicionPago}}</span>
     </div>
 
@@ -285,10 +312,11 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       <table class="items-tbl">
         <thead>
           <tr>
-            <th class="tc" style="width:56px;">Cantidad</th>
-            <th style="text-align:left;">Detalle</th>
-            <th class="tr" style="width:118px;">Precio Unitario</th>
-            <th class="tr" style="width:118px;">Precio total</th>
+            <th class="tc" style="width:52px;">Cantidad</th>
+            <th style="text-align:left;">Producto / Detalle</th>
+            <th class="tr" style="width:100px;">Precio Unit.</th>
+            <th class="tr" style="width:80px;">Bonif.</th>
+            <th class="tr" style="width:108px;">Importe</th>
           </tr>
         </thead>
         <tbody>
@@ -297,6 +325,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
             <td class="tc">{{.Cantidad}}</td>
             <td>{{.Nombre}}</td>
             <td class="tr">{{.PrecioUnitario}}</td>
+            <td class="tr" style="color:{{if .Descuento}}#a00{{else}}#bbb{{end}}">{{if .Descuento}}{{.Descuento}}{{else}}-{{end}}</td>
             <td class="tr">{{.PrecioTotal}}</td>
           </tr>
           {{end}}
@@ -304,6 +333,20 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       </table>
       <div class="items-filler"></div>
     </div>
+
+    <!-- DESCUENTOS GLOBALES (si aplica) -->
+    {{if .TieneDescuento}}
+    <div class="descuento-row">
+      <div class="desc-cell">
+        <span class="desc-lbl">Subtotal:</span>
+        <span>{{.SubtotalFormateado}}</span>
+      </div>
+      <div class="desc-cell">
+        <span class="desc-lbl">Bonif. / Descuento:</span>
+        <span class="desc-val-red">&#8722; {{.DescuentoTotal}}</span>
+      </div>
+    </div>
+    {{end}}
 
     <!-- SON PESOS + IMPORTE TOTAL -->
     <div class="totals-row">
@@ -313,7 +356,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       </div>
       <div class="importe-total">
         <span class="imp-lbl">Importe total</span>
-        <span class="imp-val">{{.TotalFormateado}}</span>
+        <span class="imp-val">$ {{.TotalFormateado}}</span>
       </div>
     </div>
 
@@ -322,22 +365,22 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       <div class="cae-left">
         <div class="cae-title">Comprobante autorizado</div>
         {{if .CAE}}
-        <div class="cae-data">CAE N&#176;: &nbsp;<strong>{{.CAE}}</strong></div>
-        {{if .CAEVencimiento}}<div class="cae-data">Vencimiento: &nbsp;<strong>{{.CAEVencimiento}}</strong></div>{{end}}
+        <div class="cae-data">CAE N&#186;: &nbsp;<strong>{{.CAE}}</strong></div>
+        {{if .CAEVencimiento}}<div class="cae-data">Fecha de vencimiento del CAE: &nbsp;<strong>{{.CAEVencimiento}}</strong></div>{{end}}
         {{else}}
-        <div class="cae-data" style="color:#c00;">Pendiente de autorizaci&#243;n AFIP</div>
+        <div class="cae-data" style="color:#c00;">Pendiente de autorizaci&#243;n ARCA / AFIP</div>
         {{end}}
       </div>
       <div class="cae-right">
         {{if .BarcodeDataURL}}<img class="barcode-img" src="{{.BarcodeDataURL}}" alt="C&#243;digo de barras CAE">{{end}}
-				{{if .BarcodeText}}<div class="barcode-text">{{.BarcodeText}}</div>{{end}}
+        {{if .BarcodeText}}<div class="barcode-text">{{.BarcodeText}}</div>{{end}}
       </div>
     </div>
 
     <!-- PIE LEGAL -->
     <div class="legal">
       Esta Administraci&#243;n Federal no se responsabiliza por los datos ingresados en el detalle de la operaci&#243;n.<br>
-      Comprobante autorizado seg&#250;n Resoluci&#243;n General AFIP. &nbsp; Para verificar: www.afip.gob.ar/genericos/consultaCAE
+      Comprobante autorizado seg&#250;n Resoluci&#243;n General ARCA (ex AFIP). &nbsp; Verificaci&#243;n: www.afip.gob.ar/genericos/consultaCAE
     </div>
 
    </div><!-- /invoice -->
@@ -345,13 +388,40 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
 </body>
 </html>`
 
+// ─── Helper: condición IVA del receptor ──────────────────────────────────────
+
+func condicionIVALabel(codigo *int) string {
+	if codigo == nil {
+		return "Consumidor Final"
+	}
+	switch *codigo {
+	case 1:
+		return "Responsable Inscripto"
+	case 2:
+		return "Responsable No Inscripto"
+	case 3:
+		return "No Responsable"
+	case 4:
+		return "Exento"
+	case 5:
+		return "Consumidor Final"
+	case 6:
+		return "Monotributista"
+	case 7:
+		return "No Alcanzado"
+	default:
+		return "Consumidor Final"
+	}
+}
+
 // ─── Generator function ───────────────────────────────────────────────────────
 
 // GenerateFacturaHTML renders a complete self-contained HTML invoice page.
 // The returned string can be served with Content-Type: text/html; charset=utf-8.
 // All assets (logo, barcode) are embedded as base64 data URLs.
 // If autoPrint is true, the HTML will automatically trigger the print dialog on load.
-func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *model.ConfiguracionFiscal, autoPrint bool) (string, error) {
+// If esCopia is true, the header label shows "DUPLICADO" instead of "ORIGINAL".
+func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *model.ConfiguracionFiscal, autoPrint bool, esCopia bool) (string, error) {
 	tmpl, err := template.New("factura").Parse(facturaHTMLTmpl)
 	if err != nil {
 		return "", fmt.Errorf("factura_html: parse template: %w", err)
@@ -377,6 +447,12 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 	pvDisplay := comp.PuntoDeVenta
 	if pvDisplay == 0 {
 		pvDisplay = config.PuntoDeVenta
+	}
+
+	// ── Copia label ───────────────────────────────────────────────────────
+	copiaLabel := "ORIGINAL"
+	if esCopia {
+		copiaLabel = "DUPLICADO"
 	}
 
 	// ── Domicilio del emisor ──────────────────────────────────────────────
@@ -406,7 +482,6 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 	domicilio := strings.Join(domParts, " · ")
 
 	// ── Logo inline base64 ────────────────────────────────────────────────
-	// Usar logo_path de la config, o caer al logo por defecto en /app/static/logo.png
 	logoDataURL := template.URL("")
 	logoFile := "/app/static/logo.png"
 	if config.LogoPath != nil && *config.LogoPath != "" {
@@ -423,7 +498,6 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 		encoded := base64.StdEncoding.EncodeToString(imgBytes)
 		logoDataURL = template.URL("data:" + mime + ";base64," + encoded)
 	}
-
 
 	// ── IIBB & fecha inicio ───────────────────────────────────────────────
 	iibb := ""
@@ -456,6 +530,7 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 		}
 		receptorDocNumero = *comp.ReceptorCUIT
 	}
+	receptorCondicionIVA := condicionIVALabel(comp.ReceptorCondicionIVA)
 
 	// ── Condición de pago ─────────────────────────────────────────────────
 	condPago := "Contado"
@@ -483,13 +558,27 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 		if item.Producto != nil {
 			nombre = item.Producto.Nombre
 		}
+		descuentoStr := ""
+		if !item.DescuentoItem.IsZero() {
+			descuentoStr = formatMoneyAFIP(item.DescuentoItem)
+		}
 		htmlItems = append(htmlItems, facturaHTMLItem{
 			Cantidad:       item.Cantidad,
 			Nombre:         nombre,
 			PrecioUnitario: formatMoneyAFIP(item.PrecioUnitario),
+			Descuento:      descuentoStr,
 			PrecioTotal:    formatMoneyAFIP(item.Subtotal),
 		})
 	}
+
+	// ── Descuentos globales ───────────────────────────────────────────────
+	tieneDescuento := !venta.DescuentoTotal.IsZero()
+	subtotalStr := formatMoneyAFIP(venta.Subtotal)
+	descuentoGlobalStr := ""
+	if tieneDescuento {
+		descuentoGlobalStr = formatMoneyAFIP(venta.DescuentoTotal)
+	}
+
 	// ── CAE ───────────────────────────────────────────────────────────────
 	cae := ""
 	if comp.CAE != nil {
@@ -521,31 +610,36 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 	}
 
 	data := facturaHTMLData{
-		LogoDataURL:      logoDataURL,
-		RazonSocial:      config.RazonSocial,
-		Domicilio:        domicilio,
-		CondicionFiscal:  config.CondicionFiscal,
-		TipoLetra:        tipoLetra,
-		TipoNombre:       tipoNombre,
-		TipoCodigo:       fmt.Sprintf("%02d", tipoCodigo),
-		NumeroFormateado: fmt.Sprintf("%04d-%08d", pvDisplay, numero),
-		FechaStr:         venta.CreatedAt.Format("2/1/2006"),
-		CUIT:             config.CUITEmsior,
-		IIBB:             iibb,
-		FechaInicioActiv: fechaInicioActiv,
-		ReceptorNombre:    receptorNombre,
-		ReceptorDomicilio: receptorDomicilio,
-		ReceptorDocLabel:  receptorDocLabel,
-		ReceptorDocNumero: receptorDocNumero,
-		CondicionPago:     condPago,
-		Items:             htmlItems,
-		TotalEnLetras:     amountToWords(venta.Total) + " con 00/100",
-		TotalFormateado:   formatMoneyAFIP(venta.Total),
-		CAE:               cae,
-		CAEVencimiento:    caeVencimiento,
-		BarcodeDataURL:    barcodeDataURL,
-		BarcodeText:       barcodeText,
-		AutoPrint:         autoPrint,
+		LogoDataURL:          logoDataURL,
+		RazonSocial:          config.RazonSocial,
+		Domicilio:            domicilio,
+		CondicionFiscal:      config.CondicionFiscal,
+		TipoLetra:            tipoLetra,
+		TipoNombre:           tipoNombre,
+		TipoCodigo:           fmt.Sprintf("%02d", tipoCodigo),
+		CopiaLabel:           copiaLabel,
+		NumeroFormateado:     fmt.Sprintf("%04d-%08d", pvDisplay, numero),
+		FechaStr:             venta.CreatedAt.Format("2/1/2006"),
+		CUIT:                 config.CUITEmsior,
+		IIBB:                 iibb,
+		FechaInicioActiv:     fechaInicioActiv,
+		ReceptorNombre:       receptorNombre,
+		ReceptorDomicilio:    receptorDomicilio,
+		ReceptorDocLabel:     receptorDocLabel,
+		ReceptorDocNumero:    receptorDocNumero,
+		ReceptorCondicionIVA: receptorCondicionIVA,
+		CondicionPago:        condPago,
+		Items:                htmlItems,
+		TieneDescuento:       tieneDescuento,
+		SubtotalFormateado:   subtotalStr,
+		DescuentoTotal:       descuentoGlobalStr,
+		TotalEnLetras:        amountToWords(venta.Total) + " con 00/100",
+		TotalFormateado:      formatMoneyAFIP(venta.Total),
+		CAE:                  cae,
+		CAEVencimiento:       caeVencimiento,
+		BarcodeDataURL:       barcodeDataURL,
+		BarcodeText:          barcodeText,
+		AutoPrint:            autoPrint,
 	}
 
 	var buf bytes.Buffer

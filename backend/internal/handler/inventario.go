@@ -390,10 +390,13 @@ func (h *FacturacionHandler) ObtenerHTML(c *gin.Context) {
 		return
 	}
 
-	// Leer parámetro query ?autoprint=true para activar impresión automática
+	// Leer parámetros query
+	// ?autoprint=true  → activa el diálogo de impresión automáticamente al cargar
+	// ?copia=true      → muestra el label "DUPLICADO" en lugar de "ORIGINAL"
 	autoPrint := c.Query("autoprint") == "true"
+	esCopia := c.Query("copia") == "true"
 
-	htmlContent, err := infra.GenerateFacturaHTML(venta, comp, fiscalCfg, autoPrint)
+	htmlContent, err := infra.GenerateFacturaHTML(venta, comp, fiscalCfg, autoPrint, esCopia)
 	if err != nil {
 		log.Error().Err(err).Str("comprobante_id", id.String()).Msg("ObtenerHTML: generation failed")
 		c.JSON(http.StatusInternalServerError, apierror.New("Error al generar HTML de la factura"))

@@ -7,6 +7,7 @@ import { DateInput } from '@mantine/dates';
 import { Printer, Download, FileText, ChevronDown, ChevronUp, Search, Ban, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
+import { usePrinterStore } from '../../store/usePrinterStore';
 import { type MetodoPago } from '../../store/useSaleStore';
 import { anularVenta, listarVentas, type VentaListItem } from '../../services/api/ventas';
 import { getComprobante, descargarPDF, fetchFacturaHTML, regenerarPDF } from '../../services/api/facturacion';
@@ -40,6 +41,7 @@ function matchesPeriodo(fecha: string, periodo: Periodo): boolean {
 
 export function FacturacionPage() {
     const { hasRole } = useAuthStore();
+    const { config: printerConfig } = usePrinterStore();
     const [apiVentas, setApiVentas] = useState<VentaListItem[]>([]);
     const [loadingVentas, setLoadingVentas] = useState(false);
     const [desde, setDesde] = useState<Date | null>(null);
@@ -180,124 +182,109 @@ export function FacturacionPage() {
         return result;
     }, [ventas, anuladas, busqueda, periodo, filtroMetodo, filtroEstado, desde, hasta, sortBy, sortDir]);
 
-    const handleReprint = async (v: IVenta) => {
-        try {
-            // Crear una ventana nueva para imprimir
-            const printWindow = window.open('', '_blank', 'width=800,height=600');
-            if (!printWindow) {
-                throw new Error('El navegador bloqueó la ventana emergente. Permití las ventanas emergentes para este sitio.');
-            }
-
-            // Generar HTML del ticket
-            const ticketHTML = `
-<!DOCTYPE html>
+    const buildTicketHTML = (v: IVenta): string => {
+        const storeName = printerConfig.storeName || 'BLEND POS';
+        const storeSub  = printerConfig.storeSubtitle || '';
+        const storeAddr = printerConfig.storeAddress || '';
+        const storePhone = printerConfig.storePhone || '';
+        const storeFooter = printerConfig.storeFooter || '¡Gracias por su compra!';
+        return `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Ticket #${v.numeroTicket}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: 'Courier New', monospace; 
-            padding: 20px; 
-            max-width: 300px; 
-            margin: 0 auto; 
-        }
-        .ticket { background: white; padding: 10px; }
-        .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
-        .header h1 { font-size: 18px; margin-bottom: 5px; }
-        .header p { font-size: 12px; }
-        .info { margin-bottom: 10px; font-size: 12px; }
-        .info div { margin-bottom: 3px; }
-        .items { border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 10px 0; margin: 10px 0; }
-        .item { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
-        .item-desc { flex: 1; }
-        .item-qty { width: 40px; text-align: center; }
-        .item-price { width: 80px; text-align: right; }
-        .totals { margin-top: 10px; }
-        .total-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px; }
-        .total-row.final { font-size: 16px; font-weight: bold; border-top: 2px solid #000; padding-top: 5px; margin-top: 5px; }
-        .footer { text-align: center; margin-top: 20px; padding-top: 10px; border-top: 2px dashed #000; font-size: 11px; }
-        .no-print { text-align: center; margin-bottom: 20px; }
-        .btn-print { 
-            padding: 10px 20px; 
-            background: #2563eb; 
-            color: white; 
-            border: none; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            font-size: 14px;
-        }
-        @media print {
-            body { margin: 0; padding: 0; }
-            .no-print { display: none !important; }
-        }
+        body { font-family: 'Courier New', monospace; background: white; display: flex; justify-content: center; padding: 10mm; }
+        .ticket { width: 76mm; max-width: 76mm; background: white; padding: 5mm; }
+        .header { text-align: center; margin-bottom: 12px; }
+        .store-name { font-size: 20px; font-weight: bold; margin-bottom: 3px; }
+        .store-sub { font-size: 10px; color: #555; margin-bottom: 2px; }
+        .store-addr { font-size: 9px; color: #555; margin-bottom: 1px; }
+        .divider { border-top: 1px dashed #555; margin: 8px 0; }
+        .divider-solid { border-top: 2px solid #000; margin: 8px 0; }
+        .section { margin: 6px 0; }
+        .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 11px; }
+        .label { color: #444; }
+        .value { font-weight: bold; text-align: right; }
+        .items-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+        .items-table thead th { font-size: 10px; font-weight: bold; border-bottom: 1px solid #000; padding: 3px 2px; text-align: left; }
+        .items-table thead th:not(:first-child) { text-align: right; }
+        .items-table tbody td { font-size: 10px; padding: 3px 2px; }
+        .items-table tbody td:not(:first-child) { text-align: right; }
+        .items-table .name-col { max-width: 36mm; word-break: break-word; }
+        .total-row { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; }
+        .footer { text-align: center; margin-top: 14px; padding-top: 10px; border-top: 1px dashed #555; }
+        .footer p { font-size: 11px; margin: 3px 0; }
+        .no-print { text-align: center; margin-bottom: 14px; }
+        .btn-print { padding: 9px 22px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-family: sans-serif; }
+        @media print { body { padding: 0; } .no-print { display: none !important; } @page { size: 80mm auto; margin: 5mm; } }
     </style>
 </head>
 <body>
-    <div class="no-print">
-        <button class="btn-print" onclick="window.print()">🖨️ Imprimir</button>
+<div class="ticket">
+    <div class="no-print"><button class="btn-print" onclick="window.print()">Imprimir</button></div>
+    <div class="header">
+        <div class="store-name">${storeName}</div>
+        ${storeSub ? `<div class="store-sub">${storeSub}</div>` : ''}
+        ${storeAddr ? `<div class="store-addr">${storeAddr}</div>` : ''}
+        ${storePhone ? `<div class="store-addr">${storePhone}</div>` : ''}
     </div>
-    
-    <div class="ticket">
-        <div class="header">
-            <h1>BLEND POS</h1>
-            <p>Ticket de Venta</p>
-        </div>
-        
-        <div class="info">
-            <div><strong>Ticket:</strong> #${v.numeroTicket}</div>
-            <div><strong>Fecha:</strong> ${new Date(v.fecha).toLocaleString('es-AR')}</div>
-            <div><strong>Cajero:</strong> ${v.cajeroNombre}</div>
-            <div><strong>Método:</strong> ${METODO_LABEL[v.metodoPago] || v.metodoPago}</div>
-        </div>
-        
-        <div class="items">
-            ${v.items.map(item => `
-                <div class="item">
-                    <div class="item-desc">${item.productoNombre}</div>
-                    <div class="item-qty">x${item.cantidad}</div>
-                    <div class="item-price">${formatARS(item.subtotal)}</div>
-                </div>
-            `).join('')}
-        </div>
-        
-        <div class="totals">
-            ${v.descuentoGlobal > 0 ? `
-                <div class="total-row">
-                    <span>Subtotal:</span>
-                    <span>${formatARS(v.subtotal)}</span>
-                </div>
-                <div class="total-row">
-                    <span>Descuento:</span>
-                    <span>-${formatARS(v.descuentoGlobal)}</span>
-                </div>
-            ` : ''}
-            <div class="total-row final">
-                <span>TOTAL:</span>
-                <span>${formatARS(v.total)}</span>
-            </div>
-        </div>
-        
-        <div class="footer">
-            <p>¡Gracias por su compra!</p>
-            ${v.anulada ? '<p style="color: red; font-weight: bold; margin-top: 10px;">*** ANULADA ***</p>' : ''}
-        </div>
+    <div class="divider-solid"></div>
+    <div class="section">
+        <div class="row"><span class="label">Ticket N°</span><span class="value">#${v.numeroTicket}</span></div>
+        <div class="row"><span class="label">Fecha</span><span class="value">${new Date(v.fecha).toLocaleDateString('es-AR')} ${new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span></div>
+        <div class="row"><span class="label">Cajero</span><span class="value">${v.cajeroNombre}</span></div>
     </div>
+    <div class="divider"></div>
+    <div class="section">
+        <table class="items-table">
+            <thead><tr><th class="name-col">Producto</th><th>Cant</th><th>P.Unit</th><th>Total</th></tr></thead>
+            <tbody>${v.items.map(item => `
+                <tr>
+                    <td class="name-col">${item.productoNombre}</td>
+                    <td>${item.cantidad}</td>
+                    <td>${formatARS(item.precioUnitario)}</td>
+                    <td>${formatARS(item.subtotal)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>
+    <div class="divider"></div>
+    <div class="section">
+        ${v.descuentoGlobal > 0 ? `
+        <div class="row"><span class="label">Subtotal</span><span class="value">${formatARS(v.subtotal)}</span></div>
+        <div class="row"><span class="label">Descuento</span><span class="value">-${formatARS(v.descuentoGlobal)}</span></div>
+        ` : ''}
+        <div class="row total-row"><span class="label">TOTAL</span><span class="value">${formatARS(v.total)}</span></div>
+    </div>
+    <div class="divider"></div>
+    <div class="section">
+        <div class="row"><span class="label">Método de pago</span><span class="value">${METODO_LABEL[v.metodoPago] ?? v.metodoPago}</span></div>
+    </div>
+    ${v.anulada ? `<div class="divider"></div><div class="section" style="text-align:center;color:red;font-weight:bold;">*** ANULADA ***</div>` : ''}
+    <div class="footer">
+        <p>${storeFooter}</p>
+    </div>
+</div>
 </body>
 </html>`;
+    };
 
-            // Escribir el HTML en la ventana nueva
-            printWindow.document.write(ticketHTML);
+    const handleReprint = async (v: IVenta) => {
+        try {
+            const printWindow = window.open('', '_blank', 'width=800,height=700');
+            if (!printWindow) {
+                throw new Error('El navegador bloqueó la ventana emergente. Permití las ventanas emergentes para este sitio.');
+            }
+            printWindow.document.open();
+            printWindow.document.write(buildTicketHTML(v));
             printWindow.document.close();
-
-            // Disparar impresión desde la ventana padre (más confiable que window.print() en los scripts embebidos)
             printWindow.onload = () => {
                 printWindow.focus();
                 printWindow.print();
                 setTimeout(() => printWindow.close(), 100);
             };
-            
             notifications.show({
                 title: 'Reimpresión iniciada',
                 message: `Ticket #${v.numeroTicket}`,
@@ -377,12 +364,10 @@ export function FacturacionPage() {
         try {
             const comp = await getComprobante(v.id).catch(() => null);
             if (!comp) {
-                win.close();
-                notifications.show({
-                    title: 'Sin comprobante fiscal',
-                    message: 'Esta venta no tiene comprobante fiscal registrado.',
-                    color: 'orange',
-                });
+                // Sin comprobante fiscal → mostrar ticket HTML
+                win.document.open();
+                win.document.write(buildTicketHTML(v));
+                win.document.close();
                 return;
             }
             const html = await fetchFacturaHTML(comp.id);
@@ -414,16 +399,7 @@ export function FacturacionPage() {
         }
         try {
             const comp = await getComprobante(v.id).catch(() => null);
-            if (!comp) {
-                printWindow.close();
-                notifications.show({
-                    title: 'Sin comprobante fiscal',
-                    message: 'Esta venta no tiene comprobante fiscal registrado.',
-                    color: 'orange',
-                });
-                return;
-            }
-            const html = await fetchFacturaHTML(comp.id);
+            const html = comp ? await fetchFacturaHTML(comp.id) : buildTicketHTML(v);
             printWindow.document.open();
             printWindow.document.write(html);
             printWindow.document.close();

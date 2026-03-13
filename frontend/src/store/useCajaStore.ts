@@ -185,8 +185,13 @@ export const useCajaStore = create<CajaState>()(
                                 });
                                 return;
                             }
+                            // La sesión existe en el backend pero no está abierta (fue cerrada).
+                            // Caer al getCajaActiva para buscar una nueva sesión activa.
                         } catch {
-                            // La sesión guardada ya no existe en el backend; continuar con getCajaActiva
+                            // Error de red o backend no disponible: conservar estado local.
+                            // No limpiar el sesionId guardado — el modal no debe aparecer
+                            // solo porque el backend es lento o hay un error transitorio.
+                            return;
                         }
                     }
 
@@ -202,7 +207,9 @@ export const useCajaStore = create<CajaState>()(
                             error: null,
                         });
                     } else {
-                        // El backend confirma que no hay sesión activa; limpiar localStorage obsoleto
+                        // El backend confirma que no hay sesión activa; limpiar localStorage obsoleto.
+                        // Solo llegamos aquí si: (a) no había sesionId guardado, o (b) la sesión
+                        // guardada fue explícitamente cerrada y no hay otra sesión activa.
                         set({
                             sesionId: null,
                             puntoDeVenta: null,

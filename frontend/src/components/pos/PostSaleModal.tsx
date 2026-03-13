@@ -3,11 +3,12 @@ import {
     Modal, Stack, Text, Group, Button, Divider, Badge, ThemeIcon, Box, Alert, Loader, TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { CheckCircle, Printer, X, Mail, Receipt, AlertCircle, Info, FileText, Download } from 'lucide-react';
+import { CheckCircle, Printer, X, Mail, Receipt, AlertCircle, Info, FileText } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
+import { usePrinterStore } from '../../store/usePrinterStore';
 import { formatARS } from '../../utils/format';
 import { PrintableTicket } from './PrintableTicket';
-import { getComprobante, descargarPDF, abrirFacturaHTML, enviarEmailComprobante, type FacturacionResponse } from '../../services/api/facturacion';
+import { getComprobante, abrirFacturaHTML, enviarEmailComprobante, type FacturacionResponse } from '../../services/api/facturacion';
 
 const METODO_LABEL: Record<string, string> = {
     efectivo: '💵 Efectivo',
@@ -24,12 +25,13 @@ export function PostSaleModal() {
     const isOpen = usePOSUIStore((s) => s.isPostSaleModalOpen);
     const record = usePOSUIStore((s) => s.lastSaleRecord);
     const close = usePOSUIStore((s) => s.closePostSaleModal);
+    const { config: printerConfig } = usePrinterStore();
     const [printing, setPrinting] = useState(false);
     const [smtpConfigured, setSMTPConfigured] = useState<boolean | null>(null);
     const [comprobante, setComprobante] = useState<FacturacionResponse | null>(null);
     const [loadingComprobante, setLoadingComprobante] = useState(false);
-    const [downloadingPDF, setDownloadingPDF] = useState(false);
     const [openingFactura, setOpeningFactura] = useState(false);
+    const [openingDuplicado, setOpeningDuplicado] = useState(false);
     const [emailCliente, setEmailCliente] = useState('');
     const [sendingEmail, setSendingEmail] = useState(false);
 
@@ -139,6 +141,13 @@ export function PostSaleModal() {
             qr: 'QR', transferencia: 'Transferencia', mixto: 'Mixto',
         };
 
+        const storeName = printerConfig.storeName || 'BLEND POS';
+        const storeSub  = printerConfig.storeSubtitle || '';
+        const storeAddr = printerConfig.storeAddress || '';
+        const storePhone = printerConfig.storePhone || '';
+        const storeFooter = printerConfig.storeFooter || '¡Gracias por su compra!';
+        const ars = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(n);
+
         const ticketHTML = `<!DOCTYPE html>
 <html>
 <head>
@@ -146,22 +155,12 @@ export function PostSaleModal() {
     <title>Ticket #${record.numeroTicket}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Courier New', monospace;
-            background: white;
-            display: flex;
-            justify-content: center;
-            padding: 10mm;
-        }
-        .ticket {
-            width: 76mm;
-            max-width: 76mm;
-            background: white;
-            padding: 5mm;
-        }
+        body { font-family: 'Courier New', monospace; background: white; display: flex; justify-content: center; padding: 10mm; }
+        .ticket { width: 76mm; max-width: 76mm; background: white; padding: 5mm; }
         .header { text-align: center; margin-bottom: 12px; }
         .store-name { font-size: 20px; font-weight: bold; margin-bottom: 3px; }
         .store-sub { font-size: 10px; color: #555; margin-bottom: 2px; }
+        .store-addr { font-size: 9px; color: #555; margin-bottom: 1px; }
         .divider { border-top: 1px dashed #555; margin: 8px 0; }
         .divider-solid { border-top: 2px solid #000; margin: 8px 0; }
         .section { margin: 6px 0; }
@@ -169,11 +168,7 @@ export function PostSaleModal() {
         .label { color: #444; }
         .value { font-weight: bold; text-align: right; }
         .items-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
-        .items-table thead th {
-            font-size: 10px; font-weight: bold;
-            border-bottom: 1px solid #000;
-            padding: 3px 2px; text-align: left;
-        }
+        .items-table thead th { font-size: 10px; font-weight: bold; border-bottom: 1px solid #000; padding: 3px 2px; text-align: left; }
         .items-table thead th:not(:first-child) { text-align: right; }
         .items-table tbody td { font-size: 10px; padding: 3px 2px; }
         .items-table tbody td:not(:first-child) { text-align: right; }
@@ -182,93 +177,59 @@ export function PostSaleModal() {
         .pagos-mixtos { margin-left: 8px; }
         .footer { text-align: center; margin-top: 14px; padding-top: 10px; border-top: 1px dashed #555; }
         .footer p { font-size: 11px; margin: 3px 0; }
-        .footer .small { font-size: 9px; color: #666; }
-        .anulada-banner { text-align: center; font-size: 13px; font-weight: bold; color: red; margin: 8px 0; border: 2px solid red; padding: 4px; }
         .no-print { text-align: center; margin-bottom: 14px; }
         .btn-print { padding: 9px 22px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-family: sans-serif; }
-        @media print {
-            body { padding: 0; }
-            .no-print { display: none !important; }
-            @page { size: 80mm auto; margin: 5mm; }
-        }
+        @media print { body { padding: 0; } .no-print { display: none !important; } @page { size: 80mm auto; margin: 5mm; } }
     </style>
 </head>
 <body>
 <div class="ticket">
-    <div class="no-print">
-        <button class="btn-print" onclick="window.print()">🖨️ Imprimir</button>
-    </div>
-
+    <div class="no-print"><button class="btn-print" onclick="window.print()">Imprimir</button></div>
     <div class="header">
-        <div class="store-name">BLEND POS</div>
-        <div class="store-sub">Sistema de Punto de Venta</div>
+        <div class="store-name">${storeName}</div>
+        ${storeSub ? `<div class="store-sub">${storeSub}</div>` : ''}
+        ${storeAddr ? `<div class="store-addr">${storeAddr}</div>` : ''}
+        ${storePhone ? `<div class="store-addr">${storePhone}</div>` : ''}
     </div>
-
     <div class="divider-solid"></div>
-
     <div class="section">
         <div class="row"><span class="label">Ticket N°</span><span class="value">#${record.numeroTicket}</span></div>
         <div class="row"><span class="label">Fecha</span><span class="value">${new Date(record.fecha).toLocaleDateString('es-AR')} ${new Date(record.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span></div>
         <div class="row"><span class="label">Cajero</span><span class="value">${record.cajero}</span></div>
     </div>
-
     <div class="divider"></div>
-
     <div class="section">
         <table class="items-table">
-            <thead>
-                <tr>
-                    <th class="name-col">Producto</th>
-                    <th>Cant</th>
-                    <th>P.Unit</th>
-                    <th>Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${record.items.map(item => `
+            <thead><tr><th class="name-col">Producto</th><th>Cant</th><th>P.Unit</th><th>Total</th></tr></thead>
+            <tbody>${record.items.map(item => `
                 <tr>
                     <td class="name-col">${item.nombre}</td>
                     <td>${item.cantidad}</td>
-                    <td>${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(item.precio)}</td>
-                    <td>${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(item.cantidad * item.precio)}</td>
+                    <td>${ars(item.precio)}</td>
+                    <td>${ars(item.cantidad * item.precio)}</td>
                 </tr>`).join('')}
             </tbody>
         </table>
     </div>
-
     <div class="divider"></div>
-
     <div class="section">
         ${tieneDescuento ? `
-        <div class="row"><span class="label">Subtotal</span><span class="value">${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(record.total)}</span></div>
-        <div class="row"><span class="label">Descuento</span><span class="value">-${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(record.total - record.totalConDescuento)}</span></div>
+        <div class="row"><span class="label">Subtotal</span><span class="value">${ars(record.total)}</span></div>
+        <div class="row"><span class="label">Descuento</span><span class="value">-${ars(record.total - record.totalConDescuento)}</span></div>
         ` : ''}
-        <div class="row total-row"><span class="label">TOTAL</span><span class="value">${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(totalFinal)}</span></div>
+        <div class="row total-row"><span class="label">TOTAL</span><span class="value">${ars(totalFinal)}</span></div>
     </div>
-
     <div class="divider"></div>
-
     <div class="section">
         <div class="row"><span class="label">Método de pago</span><span class="value">${METODO_PRINT[record.metodoPago] ?? record.metodoPago}</span></div>
-        ${record.metodoPago === 'mixto' && record.pagos ? `
-        <div class="pagos-mixtos">
-            ${record.pagos.map(p => `<div class="row"><span class="label">• ${METODO_PRINT[p.metodo] ?? p.metodo}</span><span class="value">${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(p.monto)}</span></div>`).join('')}
-        </div>` : ''}
+        ${record.metodoPago === 'mixto' && record.pagos ? `<div class="pagos-mixtos">${record.pagos.map(p => `<div class="row"><span class="label">• ${METODO_PRINT[p.metodo] ?? p.metodo}</span><span class="value">${ars(p.monto)}</span></div>`).join('')}</div>` : ''}
         ${record.efectivoRecibido && record.efectivoRecibido > 0 ? `
-        <div class="row"><span class="label">Efectivo recibido</span><span class="value">${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(record.efectivoRecibido)}</span></div>
-        ${vuelto > 0 ? `<div class="row"><span class="label">Vuelto</span><span class="value">${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(vuelto)}</span></div>` : ''}
-        ` : ''}
+        <div class="row"><span class="label">Efectivo recibido</span><span class="value">${ars(record.efectivoRecibido)}</span></div>
+        ${vuelto > 0 ? `<div class="row"><span class="label">Vuelto</span><span class="value">${ars(vuelto)}</span></div>` : ''}` : ''}
     </div>
-
-    ${record.clienteEmail ? `
-    <div class="divider"></div>
-    <div class="section">
-        <div class="row"><span class="label">Email</span><span class="value">${record.clienteEmail}</span></div>
-    </div>` : ''}
-
+    ${record.clienteEmail ? `<div class="divider"></div><div class="section"><div class="row"><span class="label">Email</span><span class="value">${record.clienteEmail}</span></div></div>` : ''}
     <div class="footer">
-        <p>¡Gracias por su compra!</p>
-        <p class="small">www.blendpos.tech</p>
+        <p>${storeFooter}</p>
     </div>
 </div>
 </body>
@@ -294,51 +255,14 @@ export function PostSaleModal() {
         setPrinting(false);
     };
 
-    const handleDownloadFactura = async () => {
-        if (!comprobante) return;
-        
-        setDownloadingPDF(true);
-        try {
-            const tipoLetra = record.tipoComprobante === 'factura_a' ? 'A' 
-                : record.tipoComprobante === 'factura_b' ? 'B' 
-                : 'C';
-            const fileName = `factura_${tipoLetra}_${comprobante.punto_de_venta.toString().padStart(4, '0')}_${comprobante.numero?.toString().padStart(8, '0') || '00000000'}.pdf`;
-            
-            await descargarPDF(comprobante.id, fileName);
-            
-            notifications.show({
-                title: 'Factura descargada',
-                message: `${fileName}`,
-                color: 'green',
-                icon: <Download size={14} />,
-                autoClose: 3000,
-            });
-        } catch (err) {
-            console.error('[PostSaleModal] Error descargando factura:', err);
-            notifications.show({
-                title: 'Error al descargar',
-                message: 'La factura aún no está disponible. Intenta nuevamente en unos segundos.',
-                color: 'orange',
-                autoClose: 5000,
-            });
-        } finally {
-            setDownloadingPDF(false);
-        }
-    };
-
-    const handleOpenFactura = async () => {
+    // Abre el HTML de la factura (ORIGINAL o DUPLICADO)
+    const handleOpenFactura = async (esCopia: boolean) => {
         if (!comprobante) return;
 
-        setOpeningFactura(true);
+        if (esCopia) setOpeningDuplicado(true);
+        else setOpeningFactura(true);
         try {
-            await abrirFacturaHTML(comprobante.id);
-            notifications.show({
-                title: 'Factura abierta',
-                message: 'Se abrio la factura en una nueva ventana para imprimir o guardar como PDF.',
-                color: 'green',
-                icon: <FileText size={14} />,
-                autoClose: 3000,
-            });
+            await abrirFacturaHTML(comprobante.id, false, esCopia);
         } catch (err) {
             notifications.show({
                 title: 'No se pudo abrir la factura',
@@ -347,7 +271,8 @@ export function PostSaleModal() {
                 autoClose: 5000,
             });
         } finally {
-            setOpeningFactura(false);
+            if (esCopia) setOpeningDuplicado(false);
+            else setOpeningFactura(false);
         }
     };
 
@@ -623,31 +548,31 @@ export function PostSaleModal() {
 
                 {/* Actions */}
                 <Stack gap="sm">
-                    {/* Descargar Factura Fiscal (si es factura A/B/C) */}
+                    {/* Factura fiscal emitida: botones Original y Duplicado */}
                     {isFiscal && comprobante && comprobante.estado === 'emitido' && (
                         <>
                             <Button
                                 size="lg"
                                 leftSection={<Printer size={18} />}
-                                onClick={handleOpenFactura}
+                                onClick={() => handleOpenFactura(false)}
                                 loading={openingFactura}
                                 variant="gradient"
                                 gradient={{ from: 'teal', to: 'lime', deg: 90 }}
                                 fullWidth
                             >
-                                Abrir Factura para Imprimir
+                                Imprimir ORIGINAL
                             </Button>
 
                             <Button
                                 size="lg"
                                 leftSection={<FileText size={18} />}
-                                onClick={handleDownloadFactura}
-                                loading={downloadingPDF}
-                                variant="gradient"
-                                gradient={{ from: 'blue', to: 'cyan', deg: 90 }}
+                                onClick={() => handleOpenFactura(true)}
+                                loading={openingDuplicado}
+                                variant="outline"
+                                color="teal"
                                 fullWidth
                             >
-                                Descargar Factura Fiscal PDF
+                                Imprimir DUPLICADO
                             </Button>
                         </>
                     )}
@@ -666,7 +591,8 @@ export function PostSaleModal() {
                         </Button>
                     )}
 
-                    {/* Imprimir ticket térmico */}
+                    {/* Imprimir ticket (solo para ticket_interno) */}
+                    {!isFiscal && (
                     <Button
                         size="lg"
                         leftSection={<Printer size={18} />}
@@ -678,6 +604,7 @@ export function PostSaleModal() {
                     >
                         Imprimir Ticket
                     </Button>
+                    )}
 
                     <Button
                         size="lg"
