@@ -108,12 +108,13 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; background: #e0e4ea; }
-    @page { size: A4 portrait; margin: 8mm; }
+    @page { size: A4 portrait; margin: 6mm; }
     @media print {
       body { background: #fff; }
       .no-print { display: none !important; }
-      .invoice-wrap { box-shadow: none !important; margin: 0 !important; padding: 0 !important; }
-      .invoice { min-height: 281mm; }
+      .invoice-wrap { box-shadow: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; width: 100% !important; }
+      .invoice { min-height: 0 !important; }
+      .items-filler { display: none !important; }
     }
     /* ── Print bar ── */
     .no-print {
