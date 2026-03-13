@@ -115,7 +115,10 @@ export function SalesTable() {
                                         </Text>
                                         {Math.max(item.descuento, item.promoDescuento ?? 0) > 0 && (
                                             <Badge size="xs" color="orange" variant="light" mt={2}>
-                                                -{Math.max(item.descuento, item.promoDescuento ?? 0)}% dto.
+                                                {item.promoNombre
+                                                    ? `🏷 ${item.promoNombre}`
+                                                    : `−${Math.round(Math.max(item.descuento, item.promoDescuento ?? 0) * 10) / 10}% dto.`
+                                                }
                                             </Badge>
                                         )}
                                     </Box>
