@@ -161,7 +161,8 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 		pdfPath := w.generatePDF(ctx, venta, comp, payload.VentaID)
 		// Send email even if PDF generation failed (user still wants the receipt)
 		if payload.ClienteEmail != nil && *payload.ClienteEmail != "" {
-			w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath)
+			htmlBody := w.generateHTMLBody(ctx, venta, comp)
+			w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath, htmlBody)
 		}
 		return
 	}
@@ -178,7 +179,8 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 	// 6. Async email if customer email was provided (AC-06.5)
 	// Send email even if PDF generation failed (user still wants the receipt)
 	if payload.ClienteEmail != nil && *payload.ClienteEmail != "" {
-		w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath)
+		htmlBody := w.generateHTMLBody(ctx, venta, comp)
+		w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath, htmlBody)
 	}
 }
 
@@ -390,8 +392,27 @@ func (w *FacturacionWorker) generatePDF(ctx context.Context, venta *model.Venta,
 	return pdfPath
 }
 
-func (w *FacturacionWorker) enqueueEmail(ctx context.Context, venta *model.Venta, email, pdfPath string) {
-	// Build email body with appropriate message
+// generateHTMLBody renders the invoice HTML using GenerateFacturaHTML.
+// Returns an empty string if generation fails (email will fall back to plain text).
+func (w *FacturacionWorker) generateHTMLBody(ctx context.Context, venta *model.Venta, comp *model.Comprobante) string {
+	if w.configFiscalSvc == nil {
+		return ""
+	}
+	config, err := w.configFiscalSvc.ObtenerConfiguracionCompleta(ctx)
+	if err != nil || config == nil {
+		log.Warn().Err(err).Msg("facturacion_worker: could not load fiscal config for HTML email body")
+		return ""
+	}
+	html, err := infra.GenerateFacturaHTML(venta, comp, config, false, false)
+	if err != nil {
+		log.Warn().Err(err).Str("venta_id", venta.ID.String()).Msg("facturacion_worker: HTML body generation failed")
+		return ""
+	}
+	return html
+}
+
+func (w *FacturacionWorker) enqueueEmail(ctx context.Context, venta *model.Venta, email, pdfPath, htmlBody string) {
+	// Plain-text fallback body
 	var body string
 	if pdfPath != "" {
 		body = fmt.Sprintf("Adjunto encontrarás tu comprobante de compra.\nTotal: $%.2f\n\nGracias por tu compra.", venta.Total.InexactFloat64())
@@ -401,15 +422,16 @@ func (w *FacturacionWorker) enqueueEmail(ctx context.Context, venta *model.Venta
 	}
 
 	emailJob := EmailJobPayload{
-		ToEmail: email,
-		Subject: fmt.Sprintf("Comprobante BlendPOS — Ticket #%d", venta.NumeroTicket),
-		Body:    body,
-		PDFPath: pdfPath,
+		ToEmail:  email,
+		Subject:  fmt.Sprintf("Comprobante BlendPOS — Ticket #%d", venta.NumeroTicket),
+		Body:     body,
+		HTMLBody: htmlBody,
+		PDFPath:  pdfPath,
 	}
 	if err := w.dispatcher.EnqueueEmail(ctx, emailJob); err != nil {
 		log.Warn().Err(err).Str("email", email).Msg("facturacion_worker: failed to enqueue email")
 	} else {
-		log.Info().Str("email", email).Bool("with_pdf", pdfPath != "").Msg("facturacion_worker: email job enqueued")
+		log.Info().Str("email", email).Bool("with_pdf", pdfPath != "").Bool("with_html", htmlBody != "").Msg("facturacion_worker: email job enqueued")
 	}
 }
 

@@ -29,6 +29,8 @@ export interface LocalSale {
     receptorNombre?: string;
     /** Domicilio del comprador para comprobantes fiscales. */
     receptorDomicilio?: string;
+    /** Descuento global aplicado al carrito (porcentaje 0-100). */
+    descuentoGlobal?: number;
     synced: 0 | 1;
 }
 

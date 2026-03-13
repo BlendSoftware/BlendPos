@@ -37,14 +37,15 @@ func (m *Mailer) IsConfigured() bool {
 }
 
 // SendComprobante sends a receipt email, optionally attaching a PDF.
+// If htmlBody is non-empty it is used as the email body (text/html); body is the plain-text fallback.
 // Port 465 → implicit TLS (recommended on Railway).
 // Port 587 → STARTTLS.
-func (m *Mailer) SendComprobante(to, subject, body, pdfPath string) error {
+func (m *Mailer) SendComprobante(to, subject, body, htmlBody, pdfPath string) error {
 	if !m.IsConfigured() {
 		return fmt.Errorf("mailer: SMTP no configurado")
 	}
 
-	msg, err := buildMessage(m.user, to, subject, body, pdfPath)
+	msg, err := buildMessage(m.user, to, subject, body, htmlBody, pdfPath)
 	if err != nil {
 		return err
 	}
@@ -108,12 +109,26 @@ func sendViaClient(client *smtp.Client, from, to string, msg []byte) error {
 	return w.Close()
 }
 
-// buildMessage constructs a MIME email. If pdfPath is set, attaches it.
-func buildMessage(from, to, subject, body, pdfPath string) ([]byte, error) {
+// buildMessage constructs a MIME email.
+// If htmlBody is set it is used as the body (text/html); otherwise body (text/plain) is used.
+// If pdfPath is set, the PDF is attached via multipart/mixed.
+func buildMessage(from, to, subject, body, htmlBody, pdfPath string) ([]byte, error) {
 	var buf bytes.Buffer
 
+	bodyContentType := "text/plain; charset=UTF-8"
+	bodyContent := body
+	if htmlBody != "" {
+		bodyContentType = "text/html; charset=UTF-8"
+		bodyContent = htmlBody
+	}
+
 	if pdfPath == "" {
-		fmt.Fprintf(&buf, "From: BlendPOS <%s>\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s", from, to, subject, body)
+		fmt.Fprintf(&buf, "From: BlendPOS <%s>\r\n", from)
+		fmt.Fprintf(&buf, "To: %s\r\n", to)
+		fmt.Fprintf(&buf, "Subject: %s\r\n", subject)
+		fmt.Fprintf(&buf, "MIME-Version: 1.0\r\n")
+		fmt.Fprintf(&buf, "Content-Type: %s\r\n\r\n", bodyContentType)
+		fmt.Fprintf(&buf, "%s", bodyContent)
 		return buf.Bytes(), nil
 	}
 
@@ -129,10 +144,10 @@ func buildMessage(from, to, subject, body, pdfPath string) ([]byte, error) {
 	fmt.Fprintf(&buf, "MIME-Version: 1.0\r\n")
 	fmt.Fprintf(&buf, "Content-Type: multipart/mixed; boundary=%q\r\n\r\n", boundary)
 
-	// Texto
+	// Cuerpo (HTML o texto plano)
 	fmt.Fprintf(&buf, "--%s\r\n", boundary)
-	fmt.Fprintf(&buf, "Content-Type: text/plain; charset=UTF-8\r\n\r\n")
-	fmt.Fprintf(&buf, "%s\r\n\r\n", body)
+	fmt.Fprintf(&buf, "Content-Type: %s\r\n\r\n", bodyContentType)
+	fmt.Fprintf(&buf, "%s\r\n\r\n", bodyContent)
 
 	// PDF adjunto
 	fmt.Fprintf(&buf, "--%s\r\n", boundary)

@@ -10,7 +10,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { usePrinterStore } from '../../store/usePrinterStore';
 import { type MetodoPago } from '../../store/useSaleStore';
 import { anularVenta, listarVentas, type VentaListItem } from '../../services/api/ventas';
-import { getComprobante, descargarPDF, fetchFacturaHTML, regenerarPDF } from '../../services/api/facturacion';
+import { getComprobante, fetchFacturaHTML } from '../../services/api/facturacion';
 import { formatARS } from '../../utils/format';
 import type { IVenta } from '../../types';
 
@@ -302,47 +302,33 @@ export function FacturacionPage() {
     };
 
     const handleDownloadPDF = async (v: IVenta) => {
-        try {
-            const comp = await getComprobante(v.id).catch(() => null);
-            if (!comp) {
-                notifications.show({
-                    title: 'PDF no disponible',
-                    message: 'Esta venta no tiene comprobante fiscal registrado. El comprobante puede tardar unos segundos en generarse.',
-                    color: 'orange',
-                    icon: <Download size={14} />,
-                });
-                return;
-            }
-            const fileName = `ticket_${v.numeroTicket}.pdf`;
-            try {
-                await descargarPDF(comp.id, fileName);
-            } catch (firstErr) {
-                // Si el archivo no está en disco (404), intentar regenerarlo y reintentar
-                const is404 = firstErr instanceof Error && firstErr.message.includes('404');
-                if (!is404) throw firstErr;
-
-                notifications.show({
-                    title: 'Regenerando PDF…',
-                    message: 'El archivo no se encontró en disco. Regenerando…',
-                    color: 'blue',
-                    icon: <RefreshCw size={14} />,
-                });
-                await regenerarPDF(comp.id);
-                await descargarPDF(comp.id, fileName);
-            }
+        // Abre la factura HTML en una ventana nueva y lanza el diálogo de impresión,
+        // desde donde el usuario puede guardar como PDF con el mismo formato visual.
+        const win = window.open('', '_blank', 'width=900,height=700');
+        if (!win) {
             notifications.show({
-                title: 'PDF descargado',
-                message: `Ticket #${v.numeroTicket}`,
-                color: 'green',
+                title: 'Popups bloqueados',
+                message: 'Permite las ventanas emergentes en este sitio e intenta de nuevo.',
+                color: 'red',
                 icon: <Download size={14} />,
             });
+            return;
+        }
+        try {
+            const comp = await getComprobante(v.id).catch(() => null);
+            const html = comp ? await fetchFacturaHTML(comp.id) : buildTicketHTML(v);
+            win.document.open();
+            win.document.write(html);
+            win.document.close();
+            win.onload = () => {
+                win.focus();
+                win.print();
+            };
         } catch (e: unknown) {
-            const errorMsg = e instanceof Error ? e.message : 'Error desconocido.';
+            win.close();
             notifications.show({
-                title: 'Error al descargar PDF',
-                message: errorMsg.includes('CAE')
-                    ? 'Este ticket no tiene factura electrónica (sin CAE). Usá "Reimprimir" para obtener el comprobante.'
-                    : errorMsg,
+                title: 'No se pudo abrir la factura',
+                message: e instanceof Error ? e.message : 'Error desconocido.',
                 color: 'red',
                 icon: <Download size={14} />,
             });

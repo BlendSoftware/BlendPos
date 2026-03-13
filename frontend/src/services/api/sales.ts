@@ -20,12 +20,19 @@ export interface SyncSaleResult {
  */
 function toRegistrarVentaRequest(sale: LocalSale): Record<string, unknown> {
     // Transformar CartItem[] → ItemVentaRequest[]
+    // El descuento de cada ítem combina: descuento manual/promo (por ítem) + descuento global del carrito.
+    // Se aplican en cascada: subtotal = lineTotal * (1 - perItemPct) * (1 - globalPct)
+    // El monto de descuento total = lineTotal - subtotal
+    const globalPct = (sale.descuentoGlobal ?? 0) / 100;
     const items = sale.items.map((item) => ({
         producto_id: item.id,
         cantidad: item.cantidad,
         descuento: (() => {
-            const pct = Math.max(item.descuento, (item as unknown as { promoDescuento?: number }).promoDescuento ?? 0);
-            return pct > 0 ? +(item.cantidad * item.precio * pct / 100).toFixed(2) : 0;
+            const lineTotal = item.precio * item.cantidad;
+            const perItemPct = Math.max(item.descuento, (item as unknown as { promoDescuento?: number }).promoDescuento ?? 0) / 100;
+            const effectiveSubtotal = lineTotal * (1 - perItemPct) * (1 - globalPct);
+            const discountAmount = lineTotal - effectiveSubtotal;
+            return discountAmount > 0 ? +discountAmount.toFixed(2) : 0;
         })(),
     }));
 

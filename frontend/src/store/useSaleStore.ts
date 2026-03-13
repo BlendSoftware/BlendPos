@@ -54,6 +54,8 @@ export interface SaleRecord {
     receptorNombre?: string;
     /** Domicilio fiscal/comercial del comprador. */
     receptorDomicilio?: string;
+    /** Descuento global aplicado al carrito (porcentaje 0-100). */
+    descuentoGlobal?: number;
 }
 
 // ── Lean state — only what belongs here ──────────────────────────────────────
@@ -99,7 +101,7 @@ export const useSaleStore = create<SaleState>()(
 
             confirmSale: (pago) => {
                 // Pull cart from the cart sub-store — single source of truth.
-                const { cart, total, totalConDescuento, clearCart } = useCartStore.getState();
+                const { cart, total, totalConDescuento, descuentoGlobal, clearCart } = useCartStore.getState();
                 const { historial, cajero, ticketCounter } = get();
 
                 const nextCounter = ticketCounter + 1;
@@ -136,6 +138,7 @@ export const useSaleStore = create<SaleState>()(
                     nroDocReceptor: pago.nroDocReceptor,
                     receptorNombre: pago.receptorNombre,
                     receptorDomicilio: pago.receptorDomicilio,
+                    descuentoGlobal: descuentoGlobal > 0 ? descuentoGlobal : undefined,
                 };
 
                 // 🖨️ Printing is now handled by PostSaleModal (user-initiated).

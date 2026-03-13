@@ -15,10 +15,11 @@ import (
 
 // EmailJobPayload is the job envelope sent to QueueEmail.
 type EmailJobPayload struct {
-	ToEmail string `json:"to_email"`
-	Subject string `json:"subject"`
-	Body    string `json:"body"`
-	PDFPath string `json:"pdf_path"`
+	ToEmail  string `json:"to_email"`
+	Subject  string `json:"subject"`
+	Body     string `json:"body"`
+	HTMLBody string `json:"html_body,omitempty"`
+	PDFPath  string `json:"pdf_path"`
 }
 
 // EmailWorker processes email jobs from QueueEmail.
@@ -44,7 +45,7 @@ func (w *EmailWorker) Process(_ context.Context, raw json.RawMessage) {
 		return
 	}
 
-	if err := w.mailer.SendComprobante(payload.ToEmail, payload.Subject, payload.Body, payload.PDFPath); err != nil {
+	if err := w.mailer.SendComprobante(payload.ToEmail, payload.Subject, payload.Body, payload.HTMLBody, payload.PDFPath); err != nil {
 		log.Error().Err(err).Str("to", payload.ToEmail).Msg("email_worker: failed to send email")
 		return
 	}
