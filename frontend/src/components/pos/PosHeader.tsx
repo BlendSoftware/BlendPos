@@ -48,7 +48,7 @@ const ROL_COLOR: Record<string, string> = {
 };
 
 export function PosHeader() {
-    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [isOnline, setIsOnline] = useState(false);
     const [printerConnected, setPrinterConnected] = useState(thermalPrinter.isConnected);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
@@ -68,11 +68,36 @@ export function PosHeader() {
     }, [printerConfig.baudRate]);
 
     useEffect(() => {
-        const handleOnline = () => setIsOnline(true);
-        const handleOffline = () => setIsOnline(false);
+        let mounted = true;
+        const BASE_URL = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
+
+        const checkConnectivity = async () => {
+            try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 5000);
+                const res = await fetch(`${BASE_URL}/health`, {
+                    method: 'GET',
+                    signal: controller.signal,
+                    cache: 'no-store',
+                });
+                clearTimeout(timeout);
+                if (mounted) setIsOnline(res.ok);
+            } catch {
+                if (mounted) setIsOnline(false);
+            }
+        };
+
+        checkConnectivity();
+        const interval = setInterval(checkConnectivity, 10_000);
+
+        const handleOnline = () => checkConnectivity();
+        const handleOffline = () => { if (mounted) setIsOnline(false); };
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
+
         return () => {
+            mounted = false;
+            clearInterval(interval);
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
