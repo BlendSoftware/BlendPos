@@ -9,6 +9,7 @@ import (
 	"net/smtp"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"blendpos/internal/config"
 )
@@ -111,8 +112,8 @@ func sendViaClient(client *smtp.Client, from, to string, msg []byte) error {
 
 // buildMessage constructs a MIME email.
 // If htmlBody is set it is used as the body (text/html); otherwise body (text/plain) is used.
-// If pdfPath is set, the PDF is attached via multipart/mixed.
-func buildMessage(from, to, subject, body, htmlBody, pdfPath string) ([]byte, error) {
+// If attachPath is set, the file is attached via multipart/mixed (supports .pdf and .html).
+func buildMessage(from, to, subject, body, htmlBody, attachPath string) ([]byte, error) {
 	var buf bytes.Buffer
 
 	bodyContentType := "text/plain; charset=UTF-8"
@@ -122,7 +123,7 @@ func buildMessage(from, to, subject, body, htmlBody, pdfPath string) ([]byte, er
 		bodyContent = htmlBody
 	}
 
-	if pdfPath == "" {
+	if attachPath == "" {
 		fmt.Fprintf(&buf, "From: BlendPOS <%s>\r\n", from)
 		fmt.Fprintf(&buf, "To: %s\r\n", to)
 		fmt.Fprintf(&buf, "Subject: %s\r\n", subject)
@@ -132,9 +133,19 @@ func buildMessage(from, to, subject, body, htmlBody, pdfPath string) ([]byte, er
 		return buf.Bytes(), nil
 	}
 
-	pdfData, err := os.ReadFile(pdfPath)
+	attachData, err := os.ReadFile(attachPath)
 	if err != nil {
-		return nil, fmt.Errorf("mailer: leer PDF: %w", err)
+		return nil, fmt.Errorf("mailer: leer adjunto: %w", err)
+	}
+
+	// Determine content type from file extension
+	ext := strings.ToLower(filepath.Ext(attachPath))
+	attachContentType := "application/pdf"
+	attachFilename := filepath.Base(attachPath)
+	if ext == ".html" || ext == ".htm" {
+		attachContentType = "text/html; charset=UTF-8"
+		// Rename to .html for clarity in email clients
+		attachFilename = strings.TrimSuffix(attachFilename, ext) + ".html"
 	}
 
 	boundary := "==BlendPOS_Boundary=="
@@ -149,12 +160,12 @@ func buildMessage(from, to, subject, body, htmlBody, pdfPath string) ([]byte, er
 	fmt.Fprintf(&buf, "Content-Type: %s\r\n\r\n", bodyContentType)
 	fmt.Fprintf(&buf, "%s\r\n\r\n", bodyContent)
 
-	// PDF adjunto
+	// Adjunto
 	fmt.Fprintf(&buf, "--%s\r\n", boundary)
-	fmt.Fprintf(&buf, "Content-Type: application/pdf\r\n")
-	fmt.Fprintf(&buf, "Content-Disposition: attachment; filename=%q\r\n", filepath.Base(pdfPath))
+	fmt.Fprintf(&buf, "Content-Type: %s\r\n", attachContentType)
+	fmt.Fprintf(&buf, "Content-Disposition: attachment; filename=%q\r\n", attachFilename)
 	fmt.Fprintf(&buf, "Content-Transfer-Encoding: base64\r\n\r\n")
-	encoded := base64.StdEncoding.EncodeToString(pdfData)
+	encoded := base64.StdEncoding.EncodeToString(attachData)
 	for i := 0; i < len(encoded); i += 76 {
 		end := i + 76
 		if end > len(encoded) {

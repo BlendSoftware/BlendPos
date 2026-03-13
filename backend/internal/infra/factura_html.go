@@ -26,6 +26,7 @@ import (
 	"html/template"
 	"image/png"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"blendpos/internal/model"
@@ -592,6 +593,31 @@ func GenerateFacturaEmailHTML(venta *model.Venta, comp *model.Comprobante, confi
 		return "", fmt.Errorf("factura_email: execute template: %w", err)
 	}
 	return buf.String(), nil
+}
+
+// GenerateFacturaHTMLFile generates the browser-ready HTML invoice and saves it
+// as an .html file in storageDir. Returns the file path.
+func GenerateFacturaHTMLFile(venta *model.Venta, comp *model.Comprobante, config *model.ConfiguracionFiscal, storageDir string) (string, error) {
+	html, err := GenerateFacturaHTML(venta, comp, config, false, false)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(storageDir, 0755); err != nil {
+		return "", fmt.Errorf("factura_html_file: mkdir: %w", err)
+	}
+	filename := fmt.Sprintf("factura_%s_%04d-%08d.html", comp.Tipo, comp.PuntoDeVenta, safeNumero(comp.Numero))
+	path := filepath.Join(storageDir, filename)
+	if err := os.WriteFile(path, []byte(html), 0644); err != nil {
+		return "", fmt.Errorf("factura_html_file: write: %w", err)
+	}
+	return path, nil
+}
+
+func safeNumero(n *int64) int64 {
+	if n == nil {
+		return 0
+	}
+	return *n
 }
 
 // ─── Helper: condición IVA del receptor ──────────────────────────────────────
