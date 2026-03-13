@@ -20,8 +20,9 @@ export interface CartItem {
     codigoBarras: string;
     cantidad: number;
     subtotal: number;
-    descuento: number;       // porcentaje 0-100 — descuento MANUAL via DiscountModal
-    promoDescuento?: number;  // porcentaje 0-100 — descuento aplicado por promoción automática (opcional para compatibilidad con historial antiguo)
+    descuento: number;        // porcentaje 0-100 — descuento MANUAL via DiscountModal
+    promoDescuento?: number;  // porcentaje 0-100 — descuento aplicado por promoción automática
+    promoNombre?: string;     // nombre de la promoción que aplica el descuento automático
 }
 
 // ── State interface ───────────────────────────────────────────────────────────
@@ -41,10 +42,10 @@ interface CartState {
     setItemDiscount: (id: string, descuento: number) => void;
     /**
      * Batch-updates promotion discounts for all cart items.
-     * Receives a map of { productId → discountPct } — items not present in the
-     * map are reset to 0. Only triggers a re-render if something actually changed.
+     * Receives a map of { productId → discountPct } and optionally { productId → promoNombre }.
+     * Items not present in the map are reset to 0. Only re-renders if something changed.
      */
-    setPromoDiscounts: (map: Record<string, number>) => void;
+    setPromoDiscounts: (map: Record<string, number>, nombres?: Record<string, string>) => void;
     setGlobalDiscount: (descuento: number) => void;
     clearCart: () => void;
 
@@ -224,17 +225,19 @@ export const useCartStore = create<CartState>()((set, get) => ({
         });
     },
 
-    setPromoDiscounts: (map) => {
+    setPromoDiscounts: (map, nombres = {}) => {
         const { cart, descuentoGlobal } = get();
         let changed = false;
         const updatedCart = cart.map((c) => {
             const newPromo = map[c.id] ?? 0;
-            if (c.promoDescuento === newPromo) return c; // nothing changed for this item
+            const newNombre = nombres[c.id] ?? undefined;
+            if (c.promoDescuento === newPromo && c.promoNombre === newNombre) return c;
             changed = true;
             const effectivo = Math.max(c.descuento, newPromo);
             return {
                 ...c,
                 promoDescuento: newPromo,
+                promoNombre: newNombre,
                 // NOTE: descuento (manual) is intentionally NOT touched here
                 subtotal: c.cantidad * c.precio * (1 - effectivo / 100),
             };

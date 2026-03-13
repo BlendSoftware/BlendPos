@@ -125,8 +125,8 @@ export function PosTerminal() {
         const priceMap: Record<string, number> = {};
         const quantityMap: Record<string, number> = {};
         cart.forEach((c) => { priceMap[c.id] = c.precio; quantityMap[c.id] = c.cantidad; });
-        const discountMap = computePromoDescuentos(cartProductIds, priceMap, quantityMap);
-        setPromoDiscounts(discountMap);
+        const { descuentos, promoNombres } = computePromoDescuentos(cartProductIds, priceMap, quantityMap);
+        setPromoDiscounts(descuentos, promoNombres);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cartKey, promociones]);
 

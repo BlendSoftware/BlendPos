@@ -1,6 +1,7 @@
 import type { SaleRecord } from '../store/useSaleStore';
 import { db, type LocalSale, type SyncQueueItem } from './db';
 import { syncSalesBatch, type SyncSaleResult } from '../services/api/sales';
+import { OfflineError } from '../api/client';
 
 const SYNC_BATCH_SIZE = 25;
 const MAX_TRIES_BEFORE_ERROR = 3;
@@ -166,11 +167,29 @@ export async function trySyncQueue(): Promise<void> {
             console.warn(`[sync] ${failedEntries.length}/${sales.length} ventas rechazadas por el servidor`, failedEntries);
         }
     } catch (err) {
-        // HTTP-level failure — retry the whole batch
+        // Distinguish network/offline errors from real server errors.
+        // For offline errors, don't burn retry attempts — leave items as 'pending'
+        // so they get processed as soon as connectivity is restored.
+        const isOfflineError =
+            err instanceof OfflineError ||
+            (err instanceof TypeError && /fetch|network/i.test(err.message)) ||
+            !navigator.onLine;
+
         const message = err instanceof Error ? err.message : String(err);
         await db.transaction('rw', db.sync_queue, async () => {
             await Promise.all(
                 batch.map(async (q) => {
+                    if (isOfflineError) {
+                        // Don't increment tries — item stays 'pending' until back online
+                        const nextAttemptAt = new Date(Date.now() + MIN_BACKOFF_MS).toISOString();
+                        await db.sync_queue.put({
+                            ...q,
+                            lastError: message,
+                            updatedAt: nowIso(),
+                            nextAttemptAt,
+                        });
+                        return;
+                    }
                     const tries = (q.tries ?? 0) + 1;
                     const updatedAt = nowIso();
                     const nextAttemptAt = new Date(Date.now() + computeBackoffMs(tries)).toISOString();

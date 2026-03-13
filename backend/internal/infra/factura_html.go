@@ -69,8 +69,7 @@ type facturaHTMLData struct {
 	CondicionPago string
 
 	// Items
-	Items     []facturaHTMLItem
-	EmptyRows []struct{}
+	Items []facturaHTMLItem
 
 	// Totals
 	TotalEnLetras   string
@@ -96,12 +95,14 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
   <title>{{.TipoNombre}} {{.TipoLetra}} {{.NumeroFormateado}}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; background: #ddd; }
     @page { size: A4 portrait; margin: 8mm; }
     @media print {
       body { background: #fff; }
       .no-print { display: none !important; }
-      .invoice-wrap { box-shadow: none !important; margin: 0 !important; }
+      .invoice-wrap { box-shadow: none !important; margin: 0 !important; padding: 0 !important; }
+      .invoice { min-height: 281mm; }
     }
     /* Print bar */
     .no-print {
@@ -112,8 +113,8 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold;
     }
     /* Invoice wrapper */
-    .invoice-wrap { max-width: 800px; margin: 14px auto; background: #fff; box-shadow: 0 2px 14px rgba(0,0,0,.25); }
-    .invoice { border: 1px solid #000; }
+    .invoice-wrap { max-width: 794px; margin: 14px auto; background: #fff; box-shadow: 0 2px 14px rgba(0,0,0,.25); padding: 0; }
+    .invoice { border: 1px solid #000; display: flex; flex-direction: column; min-height: 281mm; }
 
     /* === HEADER === */
     .header { display: grid; grid-template-columns: 42% 16% 42%; border-bottom: 1px solid #000; min-height: 85px; }
@@ -158,11 +159,13 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     .condicion-val { font-size: 8.5px; }
 
     /* === ITEMS TABLE === */
+    .items-section { flex: 1; display: flex; flex-direction: column; }
     .items-tbl { width: 100%; border-collapse: collapse; }
     .items-tbl thead tr { background: #3d3d3d; color: #fff; }
     .items-tbl th { padding: 4px 8px; font-size: 8.5px; font-weight: bold; border: 1px solid #000; }
     .items-tbl td { padding: 3px 8px; font-size: 9px; border-left: 1px solid #000; border-right: 1px solid #000; height: 18px; }
-    .items-tbl tbody tr:last-child td { border-bottom: 1px solid #000; }
+    .items-tbl tbody tr:last-child td { border-bottom: none; }
+    .items-filler { flex: 1; border-left: 1px solid #000; border-right: 1px solid #000; border-bottom: 1px solid #000; min-height: 4px; }
     .tr { text-align: right; }
     .tc { text-align: center; }
 
@@ -278,29 +281,29 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     </div>
 
     <!-- TABLA DE ÍTEMS -->
-    <table class="items-tbl">
-      <thead>
-        <tr>
-          <th class="tc" style="width:56px;">Cantidad</th>
-          <th style="text-align:left;">Detalle</th>
-          <th class="tr" style="width:118px;">Precio Unitario</th>
-          <th class="tr" style="width:118px;">Precio total</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Items}}
-        <tr>
-          <td class="tc">{{.Cantidad}}</td>
-          <td>{{.Nombre}}</td>
-          <td class="tr">{{.PrecioUnitario}}</td>
-          <td class="tr">{{.PrecioTotal}}</td>
-        </tr>
-        {{end}}
-        {{range .EmptyRows}}
-        <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
-        {{end}}
-      </tbody>
-    </table>
+    <div class="items-section">
+      <table class="items-tbl">
+        <thead>
+          <tr>
+            <th class="tc" style="width:56px;">Cantidad</th>
+            <th style="text-align:left;">Detalle</th>
+            <th class="tr" style="width:118px;">Precio Unitario</th>
+            <th class="tr" style="width:118px;">Precio total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Items}}
+          <tr>
+            <td class="tc">{{.Cantidad}}</td>
+            <td>{{.Nombre}}</td>
+            <td class="tr">{{.PrecioUnitario}}</td>
+            <td class="tr">{{.PrecioTotal}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      <div class="items-filler"></div>
+    </div>
 
     <!-- SON PESOS + IMPORTE TOTAL -->
     <div class="totals-row">
@@ -487,11 +490,6 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 			PrecioTotal:    formatMoneyAFIP(item.Subtotal),
 		})
 	}
-	emptyCount := 10 - len(htmlItems)
-	if emptyCount < 0 {
-		emptyCount = 0
-	}
-
 	// ── CAE ───────────────────────────────────────────────────────────────
 	cae := ""
 	if comp.CAE != nil {
@@ -541,7 +539,6 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 		ReceptorDocNumero: receptorDocNumero,
 		CondicionPago:     condPago,
 		Items:             htmlItems,
-		EmptyRows:         make([]struct{}, emptyCount),
 		TotalEnLetras:     amountToWords(venta.Total) + " con 00/100",
 		TotalFormateado:   formatMoneyAFIP(venta.Total),
 		CAE:               cae,
