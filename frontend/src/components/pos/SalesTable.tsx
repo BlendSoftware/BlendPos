@@ -38,6 +38,8 @@ type IndividualRow = {
     subtotal: number;
     /** Cart index for keyboard nav sync. */
     cartIndex: number;
+    /** True if this product belongs to a multi-product combo (leftover units pay full price). */
+    isComboProduct: boolean;
 };
 
 type DisplayRow = ComboRow | IndividualRow;
@@ -50,6 +52,8 @@ function buildDisplayRows(cart: CartItem[], promociones: PromocionResponse[]): D
     cart.forEach((item) => { remaining[item.id] = item.cantidad; });
 
     const rows: DisplayRow[] = [];
+    // Products that are part of a multi-product combo — leftover units pay full price
+    const comboProductIds = new Set<string>();
 
     // 1. Create combo rows for complete multi-product combos
     for (const promo of promociones) {
@@ -94,9 +98,10 @@ function buildDisplayRows(cart: CartItem[], promociones: PromocionResponse[]): D
             totalConDescuento,
         });
 
-        // Consume combo units from remaining pool
+        // Consume combo units from remaining pool and mark as combo products
         promo.productos.forEach((p) => {
             remaining[p.id] = (remaining[p.id] ?? 0) - completeSets * n;
+            comboProductIds.add(p.id);
         });
     }
 
@@ -105,8 +110,12 @@ function buildDisplayRows(cart: CartItem[], promociones: PromocionResponse[]): D
         const qty = remaining[item.id] ?? 0;
         if (qty <= 0) return;
 
-        // Single-product quantity promos (2x1 etc.) keep their badge on individual rows
-        const effectivePct = Math.max(item.descuento, item.promoDescuento ?? 0);
+        // Combo leftover units always pay full price (promo discount only applies inside the combo row).
+        // Single-product quantity promos (2x1 etc.) keep their discount on individual rows.
+        const isComboProduct = comboProductIds.has(item.id);
+        const effectivePct = isComboProduct
+            ? item.descuento
+            : Math.max(item.descuento, item.promoDescuento ?? 0);
         const subtotal = qty * item.precio * (1 - effectivePct / 100);
 
         rows.push({
@@ -116,6 +125,7 @@ function buildDisplayRows(cart: CartItem[], promociones: PromocionResponse[]): D
             displayQty: qty,
             subtotal,
             cartIndex,
+            isComboProduct,
         });
     });
 
@@ -302,10 +312,13 @@ export function SalesTable() {
                         }
 
                         // ── INDIVIDUAL ROW ────────────────────────────────────
-                        const { cartItem, displayQty, subtotal } = row;
+                        const { cartItem, displayQty, subtotal, isComboProduct } = row;
                         const isLastAdded = lastAdded?.id === cartItem.id;
                         const isEditing = editingId === cartItem.id;
-                        const effectivePct = Math.max(cartItem.descuento, cartItem.promoDescuento ?? 0);
+                        // Combo leftovers only show manual discount; single-product promos keep their pct
+                        const effectivePct = isComboProduct
+                            ? cartItem.descuento
+                            : Math.max(cartItem.descuento, cartItem.promoDescuento ?? 0);
 
                         return (
                             <Table.Tr
@@ -337,7 +350,7 @@ export function SalesTable() {
                                                 −{Math.round(effectivePct * 10) / 10}% dto.
                                             </Badge>
                                         )}
-                                        {effectivePct > 0 && cartItem.promoNombre && (
+                                        {effectivePct > 0 && cartItem.promoNombre && !isComboProduct && (
                                             <Badge size="xs" color="orange" variant="light" mt={2}>
                                                 🏷 {cartItem.promoNombre}
                                             </Badge>
