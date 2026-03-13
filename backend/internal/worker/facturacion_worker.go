@@ -161,7 +161,8 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 		pdfPath := w.generatePDF(ctx, venta, comp, payload.VentaID)
 		// Send email even if PDF generation failed (user still wants the receipt)
 		if payload.ClienteEmail != nil && *payload.ClienteEmail != "" {
-			w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath, "")
+			htmlBody := w.generateHTMLBody(ctx, venta, comp)
+			w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath, htmlBody)
 		}
 		return
 	}
@@ -178,7 +179,8 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 	// 6. Async email if customer email was provided (AC-06.5)
 	// Send email even if PDF generation failed (user still wants the receipt)
 	if payload.ClienteEmail != nil && *payload.ClienteEmail != "" {
-		w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath, "")
+		htmlBody := w.generateHTMLBody(ctx, venta, comp)
+		w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath, htmlBody)
 	}
 }
 
@@ -401,7 +403,7 @@ func (w *FacturacionWorker) generateHTMLBody(ctx context.Context, venta *model.V
 		log.Warn().Err(err).Msg("facturacion_worker: could not load fiscal config for HTML email body")
 		return ""
 	}
-	html, err := infra.GenerateFacturaHTML(venta, comp, config, false, false)
+	html, err := infra.GenerateFacturaEmailHTML(venta, comp, config)
 	if err != nil {
 		log.Warn().Err(err).Str("venta_id", venta.ID.String()).Msg("facturacion_worker: HTML body generation failed")
 		return ""

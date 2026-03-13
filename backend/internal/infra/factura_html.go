@@ -389,6 +389,211 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
 </body>
 </html>`
 
+// ─── Email-safe template (table layout, inline styles) ───────────────────────
+// Gmail and Outlook strip CSS Grid / Flexbox from email bodies.
+// This template uses only <table> for layout and inline styles so it renders
+// correctly in all major email clients.
+
+const facturaEmailHTMLTmpl = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>{{.TipoNombre}} {{.TipoLetra}} &#8212; {{.NumeroFormateado}}</title>
+</head>
+<body style="margin:0;padding:16px;background:#e0e4ea;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;">
+
+<table width="620" cellpadding="0" cellspacing="0" border="0" align="center" style="background:#ffffff;border:1px solid #888888;border-collapse:collapse;">
+
+  <!-- ═══ ENCABEZADO ═══ -->
+  <tr>
+    <!-- Columna izquierda: emisor -->
+    <td width="261" valign="top" style="padding:10px 12px;border-right:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;">
+      {{if .LogoDataURL}}<img src="{{.LogoDataURL}}" alt="Logo" style="max-height:48px;max-width:110px;display:block;margin-bottom:5px;" width="110">{{end}}
+      <div style="font-size:13px;font-weight:700;line-height:1.3;color:#111111;">{{.RazonSocial}}</div>
+      {{if .Domicilio}}<div style="font-size:8.5px;color:#555555;margin-top:3px;line-height:1.5;">{{.Domicilio}}</div>{{end}}
+      <div style="font-size:8.5px;font-weight:700;margin-top:4px;color:#222222;">{{.CondicionFiscal}}</div>
+    </td>
+    <!-- Columna central: letra grande -->
+    <td width="98" align="center" valign="middle" style="border-right:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;padding:8px 4px;text-align:center;">
+      <div style="font-size:7.5px;color:#666666;text-transform:uppercase;letter-spacing:0.5px;">{{.TipoNombre}}</div>
+      <div style="font-size:56px;font-weight:900;line-height:1;color:#111111;">{{.TipoLetra}}</div>
+      <div style="font-size:7.5px;color:#666666;margin-top:2px;">COD. {{.TipoCodigo}}</div>
+    </td>
+    <!-- Columna derecha: datos del comprobante -->
+    <td width="261" valign="top" style="padding:10px 12px;border-bottom:1px solid #bbbbbb;">
+      <table width="100%" cellpadding="1" cellspacing="0" border="0">
+        <tr>
+          <td style="font-size:9px;color:#555555;">{{.TipoNombre}}</td>
+          <td align="right" style="font-size:12px;font-weight:700;color:#111111;">N&#186; {{.NumeroFormateado}}</td>
+        </tr>
+        <tr>
+          <td style="font-size:9px;color:#444444;">Fecha &nbsp;<strong>{{.FechaStr}}</strong></td>
+          <td align="right" style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#222222;">{{.CopiaLabel}}</td>
+        </tr>
+        <tr>
+          <td colspan="2" style="padding-top:5px;">
+            <table cellpadding="1" cellspacing="0" border="0" width="100%">
+              <tr>
+                <td style="font-size:8px;color:#666666;white-space:nowrap;padding-right:4px;">CUIT:</td>
+                <td style="font-size:8px;color:#111111;">{{.CUIT}}</td>
+              </tr>
+              {{if .IIBB}}<tr>
+                <td style="font-size:8px;color:#666666;white-space:nowrap;padding-right:4px;">Ing. Brutos:</td>
+                <td style="font-size:8px;color:#111111;">{{.IIBB}}</td>
+              </tr>{{end}}
+              {{if .FechaInicioActiv}}<tr>
+                <td style="font-size:8px;color:#666666;white-space:nowrap;padding-right:4px;">Inicio de act.:</td>
+                <td style="font-size:8px;color:#111111;">{{.FechaInicioActiv}}</td>
+              </tr>{{end}}
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ═══ DATOS DEL RECEPTOR ═══ -->
+  <tr>
+    <td valign="top" style="padding:4px 10px;border-right:1px solid #e0e0e0;border-bottom:1px solid #e0e0e0;">
+      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Nombre:</span>
+      <span style="font-size:9.5px;color:#111111;">{{.ReceptorNombre}}</span>
+    </td>
+    <td colspan="2" valign="top" style="padding:4px 10px;border-bottom:1px solid #e0e0e0;">
+      {{if .ReceptorDocLabel}}
+      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">{{.ReceptorDocLabel}}:</span>
+      <span style="font-size:9.5px;color:#111111;">{{.ReceptorDocNumero}}</span>
+      {{end}}
+    </td>
+  </tr>
+  <tr>
+    <td valign="top" style="padding:4px 10px;border-right:1px solid #e0e0e0;border-bottom:1px solid #bbbbbb;">
+      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Domicilio:</span>
+      <span style="font-size:9.5px;color:#111111;">{{if .ReceptorDomicilio}}{{.ReceptorDomicilio}}{{else}}-{{end}}</span>
+    </td>
+    <td colspan="2" valign="top" style="padding:4px 10px;border-bottom:1px solid #bbbbbb;">
+      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Cond. IVA:</span>
+      <span style="font-size:9.5px;color:#111111;">{{.ReceptorCondicionIVA}}</span>
+    </td>
+  </tr>
+
+  <!-- ═══ CONDICIÓN DE PAGO ═══ -->
+  <tr style="background:#fafafa;">
+    <td colspan="3" style="padding:4px 10px;border-bottom:1px solid #bbbbbb;">
+      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:8px;">Condici&#243;n y forma de pago:</span>
+      <span style="font-size:9px;color:#111111;">{{.CondicionPago}}</span>
+    </td>
+  </tr>
+
+  <!-- ═══ TABLA DE ÍTEMS ═══ -->
+  <tr>
+    <td colspan="3" style="padding:0;">
+      <table width="100%" cellpadding="5" cellspacing="0" border="0" style="border-collapse:collapse;">
+        <thead>
+          <tr style="background:#f2f4f7;">
+            <th width="52" align="center" style="font-size:7.5px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 8px;">Cantidad</th>
+            <th align="left" style="font-size:7.5px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 8px;">Producto / Detalle</th>
+            <th width="100" align="right" style="font-size:7.5px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 8px;">Precio Unit.</th>
+            <th width="80" align="right" style="font-size:7.5px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 8px;">Bonif.</th>
+            <th width="108" align="right" style="font-size:7.5px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;padding:5px 8px;">Importe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Items}}
+          <tr>
+            <td align="center" style="font-size:9px;color:#111111;padding:4px 8px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;">{{.Cantidad}}</td>
+            <td style="font-size:9px;color:#111111;padding:4px 8px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;">{{.Nombre}}</td>
+            <td align="right" style="font-size:9px;color:#111111;padding:4px 8px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;">{{.PrecioUnitario}}</td>
+            <td align="right" style="font-size:9px;padding:4px 8px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;{{if .Descuento}}color:#aa0000;{{else}}color:#bbbbbb;{{end}}">{{if .Descuento}}{{.Descuento}}{{else}}-{{end}}</td>
+            <td align="right" style="font-size:9px;color:#111111;padding:4px 8px;border-bottom:1px solid #eeeeee;">{{.PrecioTotal}}</td>
+          </tr>
+          {{end}}
+          <!-- Spacer -->
+          <tr><td colspan="5" style="height:32px;"></td></tr>
+        </tbody>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ═══ DESCUENTOS GLOBALES ═══ -->
+  {{if .TieneDescuento}}
+  <tr style="background:#fffbf0;">
+    <td colspan="3" style="padding:4px 10px;border-top:1px solid #e0e0e0;border-bottom:1px solid #bbbbbb;">
+      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Subtotal:</span>
+      <span style="font-size:9px;color:#111111;margin-right:20px;">{{.SubtotalFormateado}}</span>
+      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Bonif. / Descuento:</span>
+      <span style="font-size:9px;color:#bb0000;font-weight:600;">&#8722; {{.DescuentoTotal}}</span>
+    </td>
+  </tr>
+  {{end}}
+
+  <!-- ═══ SON PESOS + IMPORTE TOTAL ═══ -->
+  <tr>
+    <td colspan="2" valign="middle" style="padding:5px 10px;border-right:1px solid #bbbbbb;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;">
+      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Son pesos:</span>
+      <span style="font-size:8.5px;font-style:italic;color:#333333;">{{.TotalEnLetras}}</span>
+    </td>
+    <td valign="middle" style="padding:5px 14px;background:#f0f3f8;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="font-weight:700;font-size:8.5px;text-transform:uppercase;color:#444444;">Importe total</td>
+          <td align="right" style="font-weight:900;font-size:15px;color:#111111;">$ {{.TotalFormateado}}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ═══ CAE FOOTER ═══ -->
+  <tr>
+    <td colspan="2" valign="top" style="padding:8px 12px;border-right:1px solid #bbbbbb;border-top:1px solid #bbbbbb;">
+      <div style="font-weight:700;font-size:9.5px;margin-bottom:4px;color:#222222;">Comprobante autorizado</div>
+      {{if .CAE}}
+      <div style="font-size:8.5px;margin-bottom:2px;color:#333333;">CAE N&#186;: &nbsp;<strong>{{.CAE}}</strong></div>
+      {{if .CAEVencimiento}}<div style="font-size:8.5px;color:#333333;">Fecha de vencimiento del CAE: &nbsp;<strong>{{.CAEVencimiento}}</strong></div>{{end}}
+      {{else}}
+      <div style="font-size:8.5px;color:#cc0000;">Pendiente de autorizaci&#243;n ARCA / AFIP</div>
+      {{end}}
+    </td>
+    <td align="center" valign="middle" style="padding:8px 12px;border-top:1px solid #bbbbbb;">
+      {{if .BarcodeDataURL}}<img src="{{.BarcodeDataURL}}" alt="C&#243;digo de barras CAE" style="max-height:48px;max-width:200px;" width="200">{{end}}
+      {{if .BarcodeText}}<div style="font-size:8px;letter-spacing:0.8px;text-align:center;color:#444444;font-family:'Courier New',Courier,monospace;margin-top:3px;">{{.BarcodeText}}</div>{{end}}
+    </td>
+  </tr>
+
+  <!-- ═══ PIE LEGAL ═══ -->
+  <tr>
+    <td colspan="3" style="padding:5px 12px;border-top:1px solid #dddddd;font-size:7px;font-style:italic;color:#777777;line-height:1.7;">
+      Esta Administraci&#243;n Federal no se responsabiliza por los datos ingresados en el detalle de la operaci&#243;n.<br>
+      Comprobante autorizado seg&#250;n Resoluci&#243;n General ARCA (ex AFIP). &nbsp; Verificaci&#243;n: www.afip.gob.ar/genericos/consultaCAE
+    </td>
+  </tr>
+
+</table>
+</body>
+</html>`
+
+// GenerateFacturaEmailHTML renders an email-safe version of the fiscal invoice.
+// It uses the same data model as GenerateFacturaHTML but with a table-based layout
+// and inline styles, so it renders correctly in Gmail, Outlook, and Apple Mail.
+func GenerateFacturaEmailHTML(venta *model.Venta, comp *model.Comprobante, config *model.ConfiguracionFiscal) (string, error) {
+	// Re-use GenerateFacturaHTML to produce the full data, then swap template
+	// Build data the same way (inline to avoid duplication risk)
+	tmpl, err := template.New("factura_email").Parse(facturaEmailHTMLTmpl)
+	if err != nil {
+		return "", fmt.Errorf("factura_email: parse template: %w", err)
+	}
+
+	data, err := buildFacturaData(venta, comp, config, false, false)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("factura_email: execute template: %w", err)
+	}
+	return buf.String(), nil
+}
+
 // ─── Helper: condición IVA del receptor ──────────────────────────────────────
 
 func condicionIVALabel(codigo *int) string {
@@ -415,19 +620,11 @@ func condicionIVALabel(codigo *int) string {
 	}
 }
 
-// ─── Generator function ───────────────────────────────────────────────────────
+// ─── Shared data builder ──────────────────────────────────────────────────────
 
-// GenerateFacturaHTML renders a complete self-contained HTML invoice page.
-// The returned string can be served with Content-Type: text/html; charset=utf-8.
-// All assets (logo, barcode) are embedded as base64 data URLs.
-// If autoPrint is true, the HTML will automatically trigger the print dialog on load.
-// If esCopia is true, the header label shows "DUPLICADO" instead of "ORIGINAL".
-func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *model.ConfiguracionFiscal, autoPrint bool, esCopia bool) (string, error) {
-	tmpl, err := template.New("factura").Parse(facturaHTMLTmpl)
-	if err != nil {
-		return "", fmt.Errorf("factura_html: parse template: %w", err)
-	}
-
+// buildFacturaData prepares the template data struct shared by both the browser
+// HTML template and the email-safe table template.
+func buildFacturaData(venta *model.Venta, comp *model.Comprobante, config *model.ConfiguracionFiscal, autoPrint bool, esCopia bool) (*facturaHTMLData, error) {
 	// ── Tipo comprobante ──────────────────────────────────────────────────
 	tipoLetra := "X"
 	tipoNombre := "FACTURA"
@@ -450,7 +647,6 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 		pvDisplay = config.PuntoDeVenta
 	}
 
-	// ── Copia label ───────────────────────────────────────────────────────
 	copiaLabel := "ORIGINAL"
 	if esCopia {
 		copiaLabel = "DUPLICADO"
@@ -610,7 +806,7 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 		}
 	}
 
-	data := facturaHTMLData{
+	return &facturaHTMLData{
 		LogoDataURL:          logoDataURL,
 		RazonSocial:          config.RazonSocial,
 		Domicilio:            domicilio,
@@ -641,8 +837,25 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 		BarcodeDataURL:       barcodeDataURL,
 		BarcodeText:          barcodeText,
 		AutoPrint:            autoPrint,
-	}
+	}, nil
+}
 
+// ─── Generator functions ──────────────────────────────────────────────────────
+
+// GenerateFacturaHTML renders a complete self-contained HTML invoice page.
+// The returned string can be served with Content-Type: text/html; charset=utf-8.
+// All assets (logo, barcode) are embedded as base64 data URLs.
+// If autoPrint is true, the HTML will automatically trigger the print dialog on load.
+// If esCopia is true, the header label shows "DUPLICADO" instead of "ORIGINAL".
+func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *model.ConfiguracionFiscal, autoPrint bool, esCopia bool) (string, error) {
+	tmpl, err := template.New("factura").Parse(facturaHTMLTmpl)
+	if err != nil {
+		return "", fmt.Errorf("factura_html: parse template: %w", err)
+	}
+	data, err := buildFacturaData(venta, comp, config, autoPrint, esCopia)
+	if err != nil {
+		return "", err
+	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("factura_html: execute template: %w", err)
