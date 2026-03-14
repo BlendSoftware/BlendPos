@@ -33,15 +33,19 @@ import (
 
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/code128"
+	"github.com/shopspring/decimal"
 )
 
 // ─── Data model ──────────────────────────────────────────────────────────────
 
 type facturaHTMLItem struct {
-	Cantidad       int
+	Codigo         string
 	Nombre         string
+	Cantidad       string
+	UnidadMedida   string
 	PrecioUnitario string
-	Descuento      string // "" if none
+	BonifPct       string
+	BonifImporte   string
 	PrecioTotal    string
 }
 
@@ -60,6 +64,7 @@ type facturaHTMLData struct {
 	// Right header
 	CopiaLabel       string // "ORIGINAL" or "DUPLICADO"
 	NumeroFormateado string // "0001-00000016"
+	PuntoDeVenta     string // "0001"
 	FechaStr         string // "9/3/2026"
 	CUIT             string
 	IIBB             string
@@ -78,12 +83,10 @@ type facturaHTMLData struct {
 	// Items
 	Items []facturaHTMLItem
 
-	// Descuentos globales
-	TieneDescuento     bool
-	SubtotalFormateado string
-	DescuentoTotal     string
+	// Totales
+	SubtotalBrutoFormateado     string
+	BonificacionTotalFormateado string
 
-	// Totals
 	TotalEnLetras   string
 	TotalFormateado string // "2.000,00"
 
@@ -249,7 +252,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
         {{if .LogoDataURL}}<img class="hdr-left-logo" src="{{.LogoDataURL}}" alt="Logo">{{end}}
         <div class="hdr-left-name">{{.RazonSocial}}</div>
         {{if .Domicilio}}<div class="hdr-left-addr">{{.Domicilio}}</div>{{end}}
-        <div class="hdr-left-cond">{{.CondicionFiscal}}</div>
+        <div class="hdr-left-cond">Condici&#243;n frente al IVA: {{.CondicionFiscal}}</div>
       </div>
 
       <div class="hdr-center">
@@ -270,6 +273,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
         <div class="hdr-r-data">
           <table class="dtbl">
             <tr><td class="lbl">CUIT:</td><td>{{.CUIT}}</td></tr>
+            <tr><td class="lbl">Punto de venta:</td><td>{{.PuntoDeVenta}}</td></tr>
             {{if .IIBB}}<tr><td class="lbl">Ing. Brutos:</td><td>{{.IIBB}}</td></tr>{{end}}
             {{if .FechaInicioActiv}}<tr><td class="lbl">Inicio de act.:</td><td>{{.FechaInicioActiv}}</td></tr>{{end}}
           </table>
@@ -297,7 +301,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
           <span class="rec-val">{{if .ReceptorDomicilio}}{{.ReceptorDomicilio}}{{else}}-{{end}}</span>
         </div>
         <div class="rec-cell">
-          <span class="rec-lbl">Cond. IVA:</span>
+          <span class="rec-lbl">Cond. frente al IVA:</span>
           <span class="rec-val">{{.ReceptorCondicionIVA}}</span>
         </div>
       </div>
@@ -314,20 +318,26 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       <table class="items-tbl">
         <thead>
           <tr>
-            <th class="tc" style="width:52px;">Cantidad</th>
-            <th style="text-align:left;">Producto / Detalle</th>
-            <th class="tr" style="width:100px;">Precio Unit.</th>
-            <th class="tr" style="width:80px;">Bonif.</th>
+            <th style="text-align:left;width:88px;">C&#243;digo</th>
+            <th style="text-align:left;">Producto / Servicio</th>
+            <th class="tr" style="width:72px;">Cantidad</th>
+            <th class="tc" style="width:62px;">U. Medida</th>
+            <th class="tr" style="width:92px;">Precio Unit.</th>
+            <th class="tr" style="width:72px;">% Bonif.</th>
+            <th class="tr" style="width:88px;">Imp. Bonif.</th>
             <th class="tr" style="width:108px;">Importe</th>
           </tr>
         </thead>
         <tbody>
           {{range .Items}}
           <tr>
-            <td class="tc">{{.Cantidad}}</td>
+            <td>{{.Codigo}}</td>
             <td>{{.Nombre}}</td>
+            <td class="tr">{{.Cantidad}}</td>
+            <td class="tc">{{.UnidadMedida}}</td>
             <td class="tr">{{.PrecioUnitario}}</td>
-            <td class="tr" style="color:{{if .Descuento}}#a00{{else}}#bbb{{end}}">{{if .Descuento}}{{.Descuento}}{{else}}-{{end}}</td>
+            <td class="tr" style="color:{{if ne .BonifPct "-"}}#a00{{else}}#bbb{{end}}">{{.BonifPct}}</td>
+            <td class="tr" style="color:{{if ne .BonifImporte "-"}}#a00{{else}}#bbb{{end}}">{{.BonifImporte}}</td>
             <td class="tr">{{.PrecioTotal}}</td>
           </tr>
           {{end}}
@@ -336,19 +346,21 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       <div class="items-filler"></div>
     </div>
 
-    <!-- DESCUENTOS GLOBALES (si aplica) -->
-    {{if .TieneDescuento}}
+    <!-- SUBTOTAL / BONIFICACION / TOTAL -->
     <div class="descuento-row">
       <div class="desc-cell">
         <span class="desc-lbl">Subtotal:</span>
-        <span>{{.SubtotalFormateado}}</span>
+        <span>{{.SubtotalBrutoFormateado}}</span>
       </div>
       <div class="desc-cell">
-        <span class="desc-lbl">Bonif. / Descuento:</span>
-        <span class="desc-val-red">&#8722; {{.DescuentoTotal}}</span>
+        <span class="desc-lbl">Bonificaci&#243;n:</span>
+        <span class="desc-val-red">&#8722; {{.BonificacionTotalFormateado}}</span>
+      </div>
+      <div class="desc-cell">
+        <span class="desc-lbl">Total:</span>
+        <span>{{.TotalFormateado}}</span>
       </div>
     </div>
-    {{end}}
 
     <!-- SON PESOS + IMPORTE TOTAL -->
     <div class="totals-row">
@@ -412,7 +424,7 @@ const facturaEmailHTMLTmpl = `<!DOCTYPE html>
       {{if .LogoDataURL}}<img src="{{.LogoDataURL}}" alt="Logo" style="max-height:48px;max-width:110px;display:block;margin-bottom:5px;" width="110">{{end}}
       <div style="font-size:13px;font-weight:700;line-height:1.3;color:#111111;">{{.RazonSocial}}</div>
       {{if .Domicilio}}<div style="font-size:8.5px;color:#555555;margin-top:3px;line-height:1.5;">{{.Domicilio}}</div>{{end}}
-      <div style="font-size:8.5px;font-weight:700;margin-top:4px;color:#222222;">{{.CondicionFiscal}}</div>
+      <div style="font-size:8.5px;font-weight:700;margin-top:4px;color:#222222;">Condici&#243;n frente al IVA: {{.CondicionFiscal}}</div>
     </td>
     <!-- Columna central: letra grande -->
     <td width="98" align="center" valign="middle" style="border-right:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;padding:8px 4px;text-align:center;">
@@ -437,6 +449,10 @@ const facturaEmailHTMLTmpl = `<!DOCTYPE html>
               <tr>
                 <td style="font-size:8px;color:#666666;white-space:nowrap;padding-right:4px;">CUIT:</td>
                 <td style="font-size:8px;color:#111111;">{{.CUIT}}</td>
+              </tr>
+              <tr>
+                <td style="font-size:8px;color:#666666;white-space:nowrap;padding-right:4px;">Punto de venta:</td>
+                <td style="font-size:8px;color:#111111;">{{.PuntoDeVenta}}</td>
               </tr>
               {{if .IIBB}}<tr>
                 <td style="font-size:8px;color:#666666;white-space:nowrap;padding-right:4px;">Ing. Brutos:</td>
@@ -472,7 +488,7 @@ const facturaEmailHTMLTmpl = `<!DOCTYPE html>
       <span style="font-size:9.5px;color:#111111;">{{if .ReceptorDomicilio}}{{.ReceptorDomicilio}}{{else}}-{{end}}</span>
     </td>
     <td colspan="2" valign="top" style="padding:4px 10px;border-bottom:1px solid #bbbbbb;">
-      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Cond. IVA:</span>
+      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Cond. frente al IVA:</span>
       <span style="font-size:9.5px;color:#111111;">{{.ReceptorCondicionIVA}}</span>
     </td>
   </tr>
@@ -491,41 +507,47 @@ const facturaEmailHTMLTmpl = `<!DOCTYPE html>
       <table width="100%" cellpadding="5" cellspacing="0" border="0" style="border-collapse:collapse;">
         <thead>
           <tr style="background:#f2f4f7;">
-            <th width="52" align="center" style="font-size:7.5px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 8px;">Cantidad</th>
-            <th align="left" style="font-size:7.5px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 8px;">Producto / Detalle</th>
-            <th width="100" align="right" style="font-size:7.5px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 8px;">Precio Unit.</th>
-            <th width="80" align="right" style="font-size:7.5px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 8px;">Bonif.</th>
-            <th width="108" align="right" style="font-size:7.5px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;padding:5px 8px;">Importe</th>
+            <th width="74" align="left" style="font-size:7px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 6px;">C&#243;digo</th>
+            <th align="left" style="font-size:7px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 6px;">Producto / Servicio</th>
+            <th width="56" align="right" style="font-size:7px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 6px;">Cantidad</th>
+            <th width="54" align="center" style="font-size:7px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 6px;">U. Medida</th>
+            <th width="78" align="right" style="font-size:7px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 6px;">Precio Unit.</th>
+            <th width="52" align="right" style="font-size:7px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 6px;">% Bonif.</th>
+            <th width="74" align="right" style="font-size:7px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;border-right:1px solid #dddddd;padding:5px 6px;">Imp. Bonif.</th>
+            <th width="82" align="right" style="font-size:7px;font-weight:700;text-transform:uppercase;color:#444444;border-top:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;padding:5px 6px;">Importe</th>
           </tr>
         </thead>
         <tbody>
           {{range .Items}}
           <tr>
-            <td align="center" style="font-size:9px;color:#111111;padding:4px 8px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;">{{.Cantidad}}</td>
-            <td style="font-size:9px;color:#111111;padding:4px 8px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;">{{.Nombre}}</td>
-            <td align="right" style="font-size:9px;color:#111111;padding:4px 8px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;">{{.PrecioUnitario}}</td>
-            <td align="right" style="font-size:9px;padding:4px 8px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;{{if .Descuento}}color:#aa0000;{{else}}color:#bbbbbb;{{end}}">{{if .Descuento}}{{.Descuento}}{{else}}-{{end}}</td>
-            <td align="right" style="font-size:9px;color:#111111;padding:4px 8px;border-bottom:1px solid #eeeeee;">{{.PrecioTotal}}</td>
+            <td style="font-size:8.5px;color:#111111;padding:4px 6px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;">{{.Codigo}}</td>
+            <td style="font-size:8.5px;color:#111111;padding:4px 6px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;">{{.Nombre}}</td>
+            <td align="right" style="font-size:8.5px;color:#111111;padding:4px 6px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;">{{.Cantidad}}</td>
+            <td align="center" style="font-size:8.5px;color:#111111;padding:4px 6px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;">{{.UnidadMedida}}</td>
+            <td align="right" style="font-size:8.5px;color:#111111;padding:4px 6px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;">{{.PrecioUnitario}}</td>
+            <td align="right" style="font-size:8.5px;padding:4px 6px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;{{if ne .BonifPct "-"}}color:#aa0000;{{else}}color:#bbbbbb;{{end}}">{{.BonifPct}}</td>
+            <td align="right" style="font-size:8.5px;padding:4px 6px;border-bottom:1px solid #eeeeee;border-right:1px solid #eeeeee;{{if ne .BonifImporte "-"}}color:#aa0000;{{else}}color:#bbbbbb;{{end}}">{{.BonifImporte}}</td>
+            <td align="right" style="font-size:8.5px;color:#111111;padding:4px 6px;border-bottom:1px solid #eeeeee;">{{.PrecioTotal}}</td>
           </tr>
           {{end}}
           <!-- Spacer -->
-          <tr><td colspan="5" style="height:32px;"></td></tr>
+          <tr><td colspan="8" style="height:32px;"></td></tr>
         </tbody>
       </table>
     </td>
   </tr>
 
-  <!-- ═══ DESCUENTOS GLOBALES ═══ -->
-  {{if .TieneDescuento}}
+  <!-- ═══ SUBTOTAL / BONIFICACION / TOTAL ═══ -->
   <tr style="background:#fffbf0;">
     <td colspan="3" style="padding:4px 10px;border-top:1px solid #e0e0e0;border-bottom:1px solid #bbbbbb;">
       <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Subtotal:</span>
-      <span style="font-size:9px;color:#111111;margin-right:20px;">{{.SubtotalFormateado}}</span>
-      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Bonif. / Descuento:</span>
-      <span style="font-size:9px;color:#bb0000;font-weight:600;">&#8722; {{.DescuentoTotal}}</span>
+      <span style="font-size:9px;color:#111111;margin-right:20px;">{{.SubtotalBrutoFormateado}}</span>
+      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Bonificaci&#243;n:</span>
+      <span style="font-size:9px;color:#bb0000;font-weight:600;margin-right:20px;">&#8722; {{.BonificacionTotalFormateado}}</span>
+      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Total:</span>
+      <span style="font-size:9px;color:#111111;">{{.TotalFormateado}}</span>
     </td>
   </tr>
-  {{end}}
 
   <!-- ═══ SON PESOS + IMPORTE TOTAL ═══ -->
   <tr>
@@ -618,6 +640,65 @@ func safeNumero(n *int64) int64 {
 		return 0
 	}
 	return *n
+}
+
+func formatDecimalAFIP(value decimal.Decimal, decimals int32) string {
+	negative := value.IsNegative()
+	abs := value.Abs().RoundBank(decimals)
+	parts := strings.Split(abs.StringFixed(decimals), ".")
+	intPart := parts[0]
+	fracPart := ""
+	if len(parts) > 1 {
+		fracPart = parts[1]
+	}
+
+	var grouped strings.Builder
+	for idx, ch := range intPart {
+		if idx > 0 && (len(intPart)-idx)%3 == 0 {
+			grouped.WriteRune('.')
+		}
+		grouped.WriteRune(ch)
+	}
+
+	formatted := grouped.String()
+	if decimals > 0 {
+		formatted += "," + fracPart
+	}
+	if negative {
+		formatted = "-" + formatted
+	}
+	return formatted
+}
+
+func formatCantidadFactura(cantidad int) string {
+	return formatDecimalAFIP(decimal.NewFromInt(int64(cantidad)), 2)
+}
+
+func formatPercentFactura(value decimal.Decimal) string {
+	return formatDecimalAFIP(value, 2) + "%"
+}
+
+func normalizeInvoiceUnit(unit string) string {
+	clean := strings.TrimSpace(strings.ToLower(unit))
+	switch clean {
+	case "", "unidad", "unidades", "unit", "units":
+		return "Unid"
+	case "kg", "kilo", "kilos", "kilogramo", "kilogramos":
+		return "Kg"
+	case "g", "gramo", "gramos":
+		return "Gr"
+	case "l", "lt", "lts", "litro", "litros":
+		return "Lt"
+	case "ml":
+		return "Ml"
+	case "m", "metro", "metros":
+		return "M"
+	default:
+		if clean == "servicio" || clean == "servicios" {
+			return "Serv"
+		}
+		return strings.ToUpper(clean[:1]) + clean[1:]
+	}
 }
 
 // ─── Helper: condición IVA del receptor ──────────────────────────────────────
@@ -776,30 +857,43 @@ func buildFacturaData(venta *model.Venta, comp *model.Comprobante, config *model
 
 	// ── Items ─────────────────────────────────────────────────────────────
 	htmlItems := make([]facturaHTMLItem, 0, len(venta.Items))
+	grossSubtotal := decimal.Zero
 	for _, item := range venta.Items {
 		nombre := "Producto"
+		codigo := "-"
+		unidadMedida := "Unid"
 		if item.Producto != nil {
 			nombre = item.Producto.Nombre
+			if item.Producto.CodigoBarras != "" {
+				codigo = item.Producto.CodigoBarras
+			}
+			unidadMedida = normalizeInvoiceUnit(item.Producto.UnidadMedida)
 		}
-		descuentoStr := ""
+		cantidad := decimal.NewFromInt(int64(item.Cantidad))
+		lineBase := item.PrecioUnitario.Mul(cantidad)
+		grossSubtotal = grossSubtotal.Add(lineBase)
+		bonifPct := "-"
+		bonifImporte := "-"
 		if !item.DescuentoItem.IsZero() {
-			descuentoStr = formatMoneyAFIP(item.DescuentoItem)
+			bonifImporte = formatMoneyAFIP(item.DescuentoItem)
+			if !lineBase.IsZero() {
+				bonifPct = formatPercentFactura(item.DescuentoItem.Div(lineBase).Mul(decimal.NewFromInt(100)))
+			}
 		}
 		htmlItems = append(htmlItems, facturaHTMLItem{
-			Cantidad:       item.Cantidad,
+			Codigo:         codigo,
 			Nombre:         nombre,
+			Cantidad:       formatCantidadFactura(item.Cantidad),
+			UnidadMedida:   unidadMedida,
 			PrecioUnitario: formatMoneyAFIP(item.PrecioUnitario),
-			Descuento:      descuentoStr,
+			BonifPct:       bonifPct,
+			BonifImporte:   bonifImporte,
 			PrecioTotal:    formatMoneyAFIP(item.Subtotal),
 		})
 	}
 
-	// ── Descuentos globales ───────────────────────────────────────────────
-	tieneDescuento := !venta.DescuentoTotal.IsZero()
-	subtotalStr := formatMoneyAFIP(venta.Subtotal)
-	descuentoGlobalStr := ""
-	if tieneDescuento {
-		descuentoGlobalStr = formatMoneyAFIP(venta.DescuentoTotal)
+	if grossSubtotal.IsZero() {
+		grossSubtotal = venta.Subtotal.Add(venta.DescuentoTotal)
 	}
 
 	// ── CAE ───────────────────────────────────────────────────────────────
@@ -833,36 +927,36 @@ func buildFacturaData(venta *model.Venta, comp *model.Comprobante, config *model
 	}
 
 	return &facturaHTMLData{
-		LogoDataURL:          logoDataURL,
-		RazonSocial:          config.RazonSocial,
-		Domicilio:            domicilio,
-		CondicionFiscal:      config.CondicionFiscal,
-		TipoLetra:            tipoLetra,
-		TipoNombre:           tipoNombre,
-		TipoCodigo:           fmt.Sprintf("%02d", tipoCodigo),
-		CopiaLabel:           copiaLabel,
-		NumeroFormateado:     fmt.Sprintf("%04d-%08d", pvDisplay, numero),
-		FechaStr:             venta.CreatedAt.Format("2/1/2006"),
-		CUIT:                 config.CUITEmsior,
-		IIBB:                 iibb,
-		FechaInicioActiv:     fechaInicioActiv,
-		ReceptorNombre:       receptorNombre,
-		ReceptorDomicilio:    receptorDomicilio,
-		ReceptorDocLabel:     receptorDocLabel,
-		ReceptorDocNumero:    receptorDocNumero,
-		ReceptorCondicionIVA: receptorCondicionIVA,
-		CondicionPago:        condPago,
-		Items:                htmlItems,
-		TieneDescuento:       tieneDescuento,
-		SubtotalFormateado:   subtotalStr,
-		DescuentoTotal:       descuentoGlobalStr,
-		TotalEnLetras:        amountToWords(venta.Total) + " con 00/100",
-		TotalFormateado:      formatMoneyAFIP(venta.Total),
-		CAE:                  cae,
-		CAEVencimiento:       caeVencimiento,
-		BarcodeDataURL:       barcodeDataURL,
-		BarcodeText:          barcodeText,
-		AutoPrint:            autoPrint,
+		LogoDataURL:                 logoDataURL,
+		RazonSocial:                 config.RazonSocial,
+		Domicilio:                   domicilio,
+		CondicionFiscal:             config.CondicionFiscal,
+		TipoLetra:                   tipoLetra,
+		TipoNombre:                  tipoNombre,
+		TipoCodigo:                  fmt.Sprintf("%02d", tipoCodigo),
+		CopiaLabel:                  copiaLabel,
+		NumeroFormateado:            fmt.Sprintf("%04d-%08d", pvDisplay, numero),
+		PuntoDeVenta:                fmt.Sprintf("%04d", pvDisplay),
+		FechaStr:                    venta.CreatedAt.Format("2/1/2006"),
+		CUIT:                        config.CUITEmsior,
+		IIBB:                        iibb,
+		FechaInicioActiv:            fechaInicioActiv,
+		ReceptorNombre:              receptorNombre,
+		ReceptorDomicilio:           receptorDomicilio,
+		ReceptorDocLabel:            receptorDocLabel,
+		ReceptorDocNumero:           receptorDocNumero,
+		ReceptorCondicionIVA:        receptorCondicionIVA,
+		CondicionPago:               condPago,
+		Items:                       htmlItems,
+		SubtotalBrutoFormateado:     formatMoneyAFIP(grossSubtotal),
+		BonificacionTotalFormateado: formatMoneyAFIP(venta.DescuentoTotal),
+		TotalEnLetras:               amountToWords(venta.Total),
+		TotalFormateado:             formatMoneyAFIP(venta.Total),
+		CAE:                         cae,
+		CAEVencimiento:              caeVencimiento,
+		BarcodeDataURL:              barcodeDataURL,
+		BarcodeText:                 barcodeText,
+		AutoPrint:                   autoPrint,
 	}, nil
 }
 

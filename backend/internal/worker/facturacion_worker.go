@@ -351,7 +351,7 @@ func (w *FacturacionWorker) handleAFIPResult(ctx context.Context, comp *model.Co
 func (w *FacturacionWorker) generatePDF(ctx context.Context, venta *model.Venta, comp *model.Comprobante, ventaID string) string {
 	// Determine which PDF generator to use based on comprobante type
 	isFiscal := comp.Tipo == "factura_a" || comp.Tipo == "factura_b" || comp.Tipo == "factura_c"
-	
+
 	var pdfPath string
 	var pdfErr error
 
@@ -382,12 +382,12 @@ func (w *FacturacionWorker) generatePDF(ctx context.Context, venta *model.Venta,
 		log.Warn().Err(pdfErr).Str("venta_id", ventaID).Msg("facturacion_worker: PDF generation failed")
 		return ""
 	}
-	
+
 	comp.PDFPath = &pdfPath
 	if err := w.comprobanteRepo.Update(ctx, comp); err != nil {
 		log.Error().Err(err).Str("comprobante_id", comp.ID.String()).Msg("facturacion_worker: failed to persist PDF path")
 	}
-	
+
 	log.Info().Str("pdf", pdfPath).Str("tipo", comp.Tipo).Str("venta_id", ventaID).Msg("facturacion_worker: PDF generated")
 	return pdfPath
 }

@@ -200,31 +200,30 @@ func (h *FacturacionHandler) DescargarPDF(c *gin.Context) {
 		pdfPath = *comp.PDFPath
 	}
 
-	// Self-heal legacy comprobantes that stored an HTML path in pdf_path.
-	if pdfPath == "" || strings.ToLower(filepath.Ext(pdfPath)) != ".pdf" {
-		venta, ventaErr := h.ventaRepo.FindByID(ctx, comp.VentaID)
-		if ventaErr != nil {
-			c.JSON(http.StatusNotFound, apierror.New("Venta no encontrada"))
+	venta, ventaErr := h.ventaRepo.FindByID(ctx, comp.VentaID)
+	if ventaErr != nil {
+		c.JSON(http.StatusNotFound, apierror.New("Venta no encontrada"))
+		return
+	}
+
+	isFiscal := comp.Tipo == "factura_a" || comp.Tipo == "factura_b" || comp.Tipo == "factura_c"
+	if isFiscal {
+		fiscalCfg, cfgErr := h.configFiscalSvc.ObtenerConfiguracionCompleta(ctx)
+		if cfgErr != nil || fiscalCfg == nil || fiscalCfg.CUITEmsior == "" {
+			c.JSON(http.StatusServiceUnavailable, apierror.New("Configuración fiscal no disponible"))
 			return
 		}
+		pdfPath, err = infra.GenerateFacturaFiscalPDF(venta, comp, fiscalCfg, h.pdfBasePath)
+	} else if pdfPath == "" || strings.ToLower(filepath.Ext(pdfPath)) != ".pdf" {
+		pdfPath, err = infra.GenerateTicketPDF(venta, h.pdfBasePath)
+	}
+	if err != nil {
+		log.Error().Err(err).Str("comprobante_id", id.String()).Msg("DescargarPDF: generation failed")
+		c.JSON(http.StatusInternalServerError, apierror.New("Error al generar PDF"))
+		return
+	}
 
-		isFiscal := comp.Tipo == "factura_a" || comp.Tipo == "factura_b" || comp.Tipo == "factura_c"
-		if isFiscal {
-			fiscalCfg, cfgErr := h.configFiscalSvc.ObtenerConfiguracionCompleta(ctx)
-			if cfgErr != nil || fiscalCfg == nil || fiscalCfg.CUITEmsior == "" {
-				c.JSON(http.StatusServiceUnavailable, apierror.New("Configuración fiscal no disponible"))
-				return
-			}
-			pdfPath, err = infra.GenerateFacturaFiscalPDF(venta, comp, fiscalCfg, h.pdfBasePath)
-		} else {
-			pdfPath, err = infra.GenerateTicketPDF(venta, h.pdfBasePath)
-		}
-		if err != nil {
-			log.Error().Err(err).Str("comprobante_id", id.String()).Msg("DescargarPDF: generation failed")
-			c.JSON(http.StatusInternalServerError, apierror.New("Error al generar PDF"))
-			return
-		}
-
+	if pdfPath != "" {
 		comp.PDFPath = &pdfPath
 		if upErr := h.comprobanteRepo.Update(ctx, comp); upErr != nil {
 			log.Warn().Err(upErr).Str("comprobante_id", id.String()).Msg("DescargarPDF: could not persist regenerated pdf_path")
@@ -495,9 +494,9 @@ func (h *FacturacionHandler) EnviarEmailComprobante(c *gin.Context) {
 		pdfPath = *comp.PDFPath
 	}
 
-	// Ensure fiscal comprobantes are attached as real PDF files (not HTML legacy files).
+	// Always regenerate fiscal PDFs before attaching, so emails use the latest layout.
 	isFiscal := comp.Tipo == "factura_a" || comp.Tipo == "factura_b" || comp.Tipo == "factura_c"
-	if isFiscal && (pdfPath == "" || strings.ToLower(filepath.Ext(pdfPath)) != ".pdf") {
+	if isFiscal {
 		fiscalCfg, cfgErr := h.configFiscalSvc.ObtenerConfiguracionCompleta(ctx)
 		if cfgErr == nil && fiscalCfg != nil && fiscalCfg.CUITEmsior != "" {
 			if generatedPath, genErr := infra.GenerateFacturaFiscalPDF(venta, comp, fiscalCfg, h.pdfBasePath); genErr == nil {
