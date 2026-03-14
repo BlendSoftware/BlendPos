@@ -7,6 +7,7 @@ import { DateInput } from '@mantine/dates';
 import { Printer, Download, FileText, ChevronDown, ChevronUp, Search, Ban, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
+import { usePrinterStore } from '../../store/usePrinterStore';
 import { type MetodoPago } from '../../store/useSaleStore';
 import { anularVenta, listarVentas, type VentaListItem } from '../../services/api/ventas';
 import { getComprobante, abrirFacturaHTML, descargarPDF } from '../../services/api/facturacion';
@@ -40,6 +41,7 @@ function matchesPeriodo(fecha: string, periodo: Periodo): boolean {
 
 export function FacturacionPage() {
     const { hasRole } = useAuthStore();
+    const { config: printerConfig } = usePrinterStore();
     const [apiVentas, setApiVentas] = useState<VentaListItem[]>([]);
     const [loadingVentas, setLoadingVentas] = useState(false);
     const [desde, setDesde] = useState<Date | null>(null);
@@ -180,10 +182,115 @@ export function FacturacionPage() {
         return result;
     }, [ventas, anuladas, busqueda, periodo, filtroMetodo, filtroEstado, desde, hasta, sortBy, sortDir]);
 
+    const buildTicketHTML = (v: IVenta): string => {
+        const storeName = printerConfig.storeName || 'BLEND POS';
+        const storeSub  = printerConfig.storeSubtitle || '';
+        const storeAddr = printerConfig.storeAddress || '';
+        const storePhone = printerConfig.storePhone || '';
+        const storeFooter = printerConfig.storeFooter || '¡Gracias por su compra!';
+        return `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Ticket #${v.numeroTicket}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Courier New', monospace; background: white; display: flex; justify-content: center; padding: 10mm; }
+        .ticket { width: 76mm; max-width: 76mm; background: white; padding: 5mm; }
+        .header { text-align: center; margin-bottom: 12px; }
+        .store-name { font-size: 20px; font-weight: bold; margin-bottom: 3px; }
+        .store-sub { font-size: 10px; color: #555; margin-bottom: 2px; }
+        .store-addr { font-size: 9px; color: #555; margin-bottom: 1px; }
+        .divider { border-top: 1px dashed #555; margin: 8px 0; }
+        .divider-solid { border-top: 2px solid #000; margin: 8px 0; }
+        .section { margin: 6px 0; }
+        .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 11px; }
+        .label { color: #444; }
+        .value { font-weight: bold; text-align: right; }
+        .items-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+        .items-table thead th { font-size: 10px; font-weight: bold; border-bottom: 1px solid #000; padding: 3px 2px; text-align: left; }
+        .items-table thead th:not(:first-child) { text-align: right; }
+        .items-table tbody td { font-size: 10px; padding: 3px 2px; }
+        .items-table tbody td:not(:first-child) { text-align: right; }
+        .items-table .name-col { max-width: 36mm; word-break: break-word; }
+        .total-row { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; }
+        .footer { text-align: center; margin-top: 14px; padding-top: 10px; border-top: 1px dashed #555; }
+        .footer p { font-size: 11px; margin: 3px 0; }
+        .no-print { text-align: center; margin-bottom: 14px; }
+        .btn-print { padding: 9px 22px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-family: sans-serif; }
+        @media print { body { padding: 0; } .no-print { display: none !important; } @page { size: 80mm auto; margin: 5mm; } }
+    </style>
+</head>
+<body>
+<div class="ticket">
+    <div class="no-print"><button class="btn-print" onclick="window.print()">Imprimir</button></div>
+    <div class="header">
+        <div class="store-name">${storeName}</div>
+        ${storeSub ? `<div class="store-sub">${storeSub}</div>` : ''}
+        ${storeAddr ? `<div class="store-addr">${storeAddr}</div>` : ''}
+        ${storePhone ? `<div class="store-addr">${storePhone}</div>` : ''}
+    </div>
+    <div class="divider-solid"></div>
+    <div class="section">
+        <div class="row"><span class="label">Ticket N°</span><span class="value">#${v.numeroTicket}</span></div>
+        <div class="row"><span class="label">Fecha</span><span class="value">${new Date(v.fecha).toLocaleDateString('es-AR')} ${new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span></div>
+        <div class="row"><span class="label">Cajero</span><span class="value">${v.cajeroNombre}</span></div>
+    </div>
+    <div class="divider"></div>
+    <div class="section">
+        <table class="items-table">
+            <thead><tr><th class="name-col">Producto</th><th>Cant</th><th>P.Unit</th><th>Total</th></tr></thead>
+            <tbody>${v.items.map(item => `
+                <tr>
+                    <td class="name-col">${item.productoNombre}</td>
+                    <td>${item.cantidad}</td>
+                    <td>${formatARS(item.precioUnitario)}</td>
+                    <td>${formatARS(item.subtotal)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>
+    <div class="divider"></div>
+    <div class="section">
+        ${v.descuentoGlobal > 0 ? `
+        <div class="row"><span class="label">Subtotal</span><span class="value">${formatARS(v.subtotal)}</span></div>
+        <div class="row"><span class="label">Descuento</span><span class="value">-${formatARS(v.descuentoGlobal)}</span></div>
+        ` : ''}
+        <div class="row total-row"><span class="label">TOTAL</span><span class="value">${formatARS(v.total)}</span></div>
+    </div>
+    <div class="divider"></div>
+    <div class="section">
+        <div class="row"><span class="label">Método de pago</span><span class="value">${METODO_LABEL[v.metodoPago] ?? v.metodoPago}</span></div>
+    </div>
+    ${v.anulada ? `<div class="divider"></div><div class="section" style="text-align:center;color:red;font-weight:bold;">*** ANULADA ***</div>` : ''}
+    <div class="footer">
+        <p>${storeFooter}</p>
+    </div>
+</div>
+</body>
+</html>`;
+    };
+
     const handleReprint = async (v: IVenta) => {
         try {
-            const comp = await getComprobante(v.id);
-            await abrirFacturaHTML(comp.id, true, false);
+            const printWindow = window.open('', '_blank', 'width=800,height=700');
+            if (!printWindow) {
+                throw new Error('El navegador bloqueó la ventana emergente. Permití las ventanas emergentes para este sitio.');
+            }
+            printWindow.document.open();
+            printWindow.document.write(buildTicketHTML(v));
+            printWindow.document.close();
+            printWindow.onload = () => {
+                printWindow.focus();
+                printWindow.print();
+                setTimeout(() => printWindow.close(), 100);
+            };
+            notifications.show({
+                title: 'Reimpresión iniciada',
+                message: `Ticket #${v.numeroTicket}`,
+                color: 'blue',
+                icon: <Printer size={14} />,
+            });
         } catch (e: unknown) {
             notifications.show({
                 title: 'No se pudo reimprimir',

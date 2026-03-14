@@ -5,6 +5,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { CheckCircle, Printer, X, Mail, Receipt, AlertCircle, Info, FileText } from 'lucide-react';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
+import { usePrinterStore } from '../../store/usePrinterStore';
 import { formatARS } from '../../utils/format';
 import { getComprobante, abrirFacturaHTML, enviarEmailComprobante, type FacturacionResponse } from '../../services/api/facturacion';
 
@@ -23,6 +24,7 @@ export function PostSaleModal() {
     const isOpen = usePOSUIStore((s) => s.isPostSaleModalOpen);
     const record = usePOSUIStore((s) => s.lastSaleRecord);
     const close = usePOSUIStore((s) => s.closePostSaleModal);
+    const { config: printerConfig } = usePrinterStore();
     const [printing, setPrinting] = useState(false);
     const [smtpConfigured, setSMTPConfigured] = useState<boolean | null>(null);
     const [comprobante, setComprobante] = useState<FacturacionResponse | null>(null);
@@ -115,21 +117,141 @@ export function PostSaleModal() {
         metodoPago: record.metodoPago,
     });
 
-    const handlePrintTicket = async () => {
-        setPrinting(true);
-        try {
-            const comp = await getComprobante(record.id);
-            await abrirFacturaHTML(comp.id, true, false);
-        } catch (err) {
+    const handlePrint = () => {
+        const printWindow = window.open('', '_blank', 'width=800,height=700');
+        if (!printWindow) {
             notifications.show({
-                title: 'No se pudo abrir el comprobante',
-                message: err instanceof Error ? err.message : 'Error desconocido.',
+                title: 'Error de impresión',
+                message: 'Los popups están bloqueados. Permití las ventanas emergentes para este sitio e intentá de nuevo.',
                 color: 'red',
-                autoClose: 5000,
+                autoClose: 8000,
             });
-        } finally {
-            setPrinting(false);
+            return;
         }
+
+        setPrinting(true);
+
+        const totalFinal = record.totalConDescuento || record.total;
+        const tieneDescuento = record.totalConDescuento > 0 && record.total !== record.totalConDescuento;
+        const vuelto = record.vuelto ?? 0;
+
+        const METODO_PRINT: Record<string, string> = {
+            efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito',
+            qr: 'QR', transferencia: 'Transferencia', mixto: 'Mixto',
+        };
+
+        const storeName = printerConfig.storeName || 'BLEND POS';
+        const storeSub  = printerConfig.storeSubtitle || '';
+        const storeAddr = printerConfig.storeAddress || '';
+        const storePhone = printerConfig.storePhone || '';
+        const storeFooter = printerConfig.storeFooter || '¡Gracias por su compra!';
+        const ars = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(n);
+
+        const ticketHTML = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Ticket #${record.numeroTicket}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Courier New', monospace; background: white; display: flex; justify-content: center; padding: 10mm; }
+        .ticket { width: 76mm; max-width: 76mm; background: white; padding: 5mm; }
+        .header { text-align: center; margin-bottom: 12px; }
+        .store-name { font-size: 20px; font-weight: bold; margin-bottom: 3px; }
+        .store-sub { font-size: 10px; color: #555; margin-bottom: 2px; }
+        .store-addr { font-size: 9px; color: #555; margin-bottom: 1px; }
+        .divider { border-top: 1px dashed #555; margin: 8px 0; }
+        .divider-solid { border-top: 2px solid #000; margin: 8px 0; }
+        .section { margin: 6px 0; }
+        .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 11px; }
+        .label { color: #444; }
+        .value { font-weight: bold; text-align: right; }
+        .items-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+        .items-table thead th { font-size: 10px; font-weight: bold; border-bottom: 1px solid #000; padding: 3px 2px; text-align: left; }
+        .items-table thead th:not(:first-child) { text-align: right; }
+        .items-table tbody td { font-size: 10px; padding: 3px 2px; }
+        .items-table tbody td:not(:first-child) { text-align: right; }
+        .items-table .name-col { max-width: 36mm; word-break: break-word; }
+        .total-row { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; }
+        .pagos-mixtos { margin-left: 8px; }
+        .footer { text-align: center; margin-top: 14px; padding-top: 10px; border-top: 1px dashed #555; }
+        .footer p { font-size: 11px; margin: 3px 0; }
+        .no-print { text-align: center; margin-bottom: 14px; }
+        .btn-print { padding: 9px 22px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-family: sans-serif; }
+        @media print { body { padding: 0; } .no-print { display: none !important; } @page { size: 80mm auto; margin: 5mm; } }
+    </style>
+</head>
+<body>
+<div class="ticket">
+    <div class="no-print"><button class="btn-print" onclick="window.print()">Imprimir</button></div>
+    <div class="header">
+        <div class="store-name">${storeName}</div>
+        ${storeSub ? `<div class="store-sub">${storeSub}</div>` : ''}
+        ${storeAddr ? `<div class="store-addr">${storeAddr}</div>` : ''}
+        ${storePhone ? `<div class="store-addr">${storePhone}</div>` : ''}
+    </div>
+    <div class="divider-solid"></div>
+    <div class="section">
+        <div class="row"><span class="label">Ticket N°</span><span class="value">#${record.numeroTicket}</span></div>
+        <div class="row"><span class="label">Fecha</span><span class="value">${new Date(record.fecha).toLocaleDateString('es-AR')} ${new Date(record.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span></div>
+        <div class="row"><span class="label">Cajero</span><span class="value">${record.cajero}</span></div>
+    </div>
+    <div class="divider"></div>
+    <div class="section">
+        <table class="items-table">
+            <thead><tr><th class="name-col">Producto</th><th>Cant</th><th>P.Unit</th><th>Total</th></tr></thead>
+            <tbody>${record.items.map(item => `
+                <tr>
+                    <td class="name-col">${item.nombre}</td>
+                    <td>${item.cantidad}</td>
+                    <td>${ars(item.precio)}</td>
+                    <td>${ars(item.cantidad * item.precio)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>
+    <div class="divider"></div>
+    <div class="section">
+        ${tieneDescuento ? `
+        <div class="row"><span class="label">Subtotal</span><span class="value">${ars(record.total)}</span></div>
+        <div class="row"><span class="label">Descuento</span><span class="value">-${ars(record.total - record.totalConDescuento)}</span></div>
+        ` : ''}
+        <div class="row total-row"><span class="label">TOTAL</span><span class="value">${ars(totalFinal)}</span></div>
+    </div>
+    <div class="divider"></div>
+    <div class="section">
+        <div class="row"><span class="label">Método de pago</span><span class="value">${METODO_PRINT[record.metodoPago] ?? record.metodoPago}</span></div>
+        ${record.metodoPago === 'mixto' && record.pagos ? `<div class="pagos-mixtos">${record.pagos.map(p => `<div class="row"><span class="label">• ${METODO_PRINT[p.metodo] ?? p.metodo}</span><span class="value">${ars(p.monto)}</span></div>`).join('')}</div>` : ''}
+        ${record.efectivoRecibido && record.efectivoRecibido > 0 ? `
+        <div class="row"><span class="label">Efectivo recibido</span><span class="value">${ars(record.efectivoRecibido)}</span></div>
+        ${vuelto > 0 ? `<div class="row"><span class="label">Vuelto</span><span class="value">${ars(vuelto)}</span></div>` : ''}` : ''}
+    </div>
+    ${record.clienteEmail ? `<div class="divider"></div><div class="section"><div class="row"><span class="label">Email</span><span class="value">${record.clienteEmail}</span></div></div>` : ''}
+    <div class="footer">
+        <p>${storeFooter}</p>
+    </div>
+</div>
+</body>
+</html>`;
+
+        printWindow.document.open();
+        printWindow.document.write(ticketHTML);
+        printWindow.document.close();
+        printWindow.onload = () => {
+            printWindow.focus();
+            printWindow.print();
+            setTimeout(() => printWindow.close(), 100);
+        };
+
+        notifications.show({
+            title: 'Impresión iniciada',
+            message: `Ticket #${record.numeroTicket}`,
+            color: 'blue',
+            icon: <Printer size={14} />,
+            autoClose: 3000,
+        });
+
+        setPrinting(false);
     };
 
     // Abre el HTML de la factura (ORIGINAL o DUPLICADO)
@@ -473,7 +595,7 @@ export function PostSaleModal() {
                     <Button
                         size="lg"
                         leftSection={<Printer size={18} />}
-                        onClick={handlePrintTicket}
+                        onClick={handlePrint}
                         loading={printing}
                         variant="light"
                         color="blue"
@@ -486,15 +608,11 @@ export function PostSaleModal() {
                     <Button
                         size="lg"
                         leftSection={<Receipt size={18} />}
-                        onClick={async () => {
-                            if (isFiscal && comprobante?.estado === 'emitido') {
-                                await handleOpenFactura(false);
-                            } else if (!isFiscal) {
-                                await handlePrintTicket();
-                            }
+                        onClick={() => {
+                            handlePrint();
                             close();
                         }}
-                        loading={printing || openingFactura}
+                        loading={printing}
                         color="teal"
                         fullWidth
                     >

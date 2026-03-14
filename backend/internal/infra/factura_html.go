@@ -116,17 +116,11 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     html, body { height: 100%; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; background: #e0e4ea; }
     @page { size: A4 portrait; margin: 6mm; }
-    @media screen {
-      .invoice { min-height: 281mm; }
-    }
     @media print {
-      html, body { height: auto !important; overflow: visible !important; }
+      html, body { height: auto !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
       body { background: #fff; }
       .no-print { display: none !important; }
-      .invoice-wrap { box-shadow: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; width: 100% !important; }
-      .invoice { min-height: 0 !important; height: auto !important; }
-      .items-filler { display: none !important; }
-      .items-section { flex: none !important; }
+      .invoice-wrap { box-shadow: none !important; margin: 0 !important; padding: 0 !important; width: 100% !important; max-width: 100% !important; }
     }
     /* ── Print bar ── */
     .no-print {
@@ -139,7 +133,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     .btn-print:hover { background: #1d4ed8; }
     /* ── Invoice wrapper ── */
     .invoice-wrap { max-width: 794px; margin: 16px auto; background: #fff; box-shadow: 0 3px 18px rgba(0,0,0,.16); }
-    .invoice { border: 1px solid #888; display: flex; flex-direction: column; }
+    .invoice { border: 1px solid #888; display: flex; flex-direction: column; min-height: 281mm; }
 
     /* ── HEADER ── */
     .header { display: grid; grid-template-columns: 42% 16% 42%; border-bottom: 1px solid #bbb; min-height: 92px; }
