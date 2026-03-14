@@ -23,7 +23,7 @@ RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/
 # ── Runtime Stage ──────────────────────────────────────────────────────────────
 FROM alpine:3.19
 
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata chromium nss freetype harfbuzz ttf-freefont
 
 # Non-root user for security
 RUN adduser -D -u 1001 blendpos

@@ -20,16 +20,20 @@ package infra
 //   - Legal legends
 
 import (
+	"context"
 	"fmt"
-	"image/png"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 
 	"blendpos/internal/model"
 
-	"github.com/boombuler/barcode"
-	"github.com/boombuler/barcode/code128"
+	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/chromedp"
 	"github.com/go-pdf/fpdf"
 	"github.com/shopspring/decimal"
 )
@@ -225,16 +229,19 @@ func GenerateFacturaFiscalPDF(
 		return "", fmt.Errorf("pdf: create storage dir: %w", err)
 	}
 
-	data, err := buildFacturaData(venta, comp, config, false, false)
+	html, err := GenerateFacturaHTML(venta, comp, config, false, false)
 	if err != nil {
-		return "", fmt.Errorf("pdf: build factura data: %w", err)
+		return "", fmt.Errorf("pdf: generate factura html: %w", err)
 	}
 
-	tipoLetra := data.TipoLetra
+	tipoLetra := "X"
 	switch comp.Tipo {
 	case "factura_a":
+		tipoLetra = "A"
 	case "factura_b":
+		tipoLetra = "B"
 	case "factura_c":
+		tipoLetra = "C"
 	}
 
 	var numeroComprobante int64
@@ -249,298 +256,139 @@ func GenerateFacturaFiscalPDF(
 	fileName := fmt.Sprintf("factura_%s_%04d_%08d.pdf", tipoLetra, pvDisplay, numeroComprobante)
 	filePath := filepath.Join(storagePath, fileName)
 
-	pdf := fpdf.New("P", "mm", "A4", "")
-	pdf.SetMargins(8, 8, 8)
-	pdf.AddPage()
-	tr := pdf.UnicodeTranslatorFromDescriptor("")
-
-	pageW, _ := pdf.GetPageSize()
-	marginL := 8.0
-	marginR := 8.0
-	contentW := pageW - marginL - marginR
-	pageTop := 10.0
-	pageBottom := 282.0
-
-	pdf.SetDrawColor(0, 0, 0)
-	pdf.SetLineWidth(0.35)
-	pdf.Rect(marginL, pageTop, contentW, pageBottom-pageTop, "D")
-
-	headerH := 36.0
-	leftW := contentW * 0.42
-	centerW := contentW * 0.16
-	rightW := contentW * 0.42
-	startY := pageTop
-
-	pdf.SetLineWidth(0.3)
-	pdf.Line(marginL, startY+headerH, marginL+contentW, startY+headerH)
-	pdf.Line(marginL+leftW, startY, marginL+leftW, startY+headerH)
-	pdf.Line(marginL+leftW+centerW, startY, marginL+leftW+centerW, startY+headerH)
-
-	xL := marginL + 3
-	logoRendered := false
-	logoFilePDF := "/app/static/logo.png"
-	if config.LogoPath != nil && *config.LogoPath != "" {
-		logoFilePDF = *config.LogoPath
+	tempHTMLFile, err := os.CreateTemp(storagePath, "factura-*.html")
+	if err != nil {
+		return "", fmt.Errorf("pdf: create temp html: %w", err)
 	}
-	if _, statErr := os.Stat(logoFilePDF); statErr == nil {
-		// Logo height proportional, max 18mm, positioned top-left of left column
-		pdf.Image(logoFilePDF, xL, startY+2, leftW*0.45, 0, false, "", 0, "")
-		logoRendered = true
+	tempHTMLPath := tempHTMLFile.Name()
+	defer os.Remove(tempHTMLPath)
+	if _, err := tempHTMLFile.WriteString(html); err != nil {
+		tempHTMLFile.Close()
+		return "", fmt.Errorf("pdf: write temp html: %w", err)
 	}
-	textStartY := startY + 3
-	if logoRendered {
-		textStartY = startY + 18
-	}
-	pdf.SetXY(xL, textStartY)
-	pdf.SetFont("Helvetica", "B", 12)
-	pdf.CellFormat(leftW-6, 5.5, tr(data.RazonSocial), "", 1, "L", false, 0, "")
-
-	pdf.SetFont("Helvetica", "", 7.4)
-	if data.Domicilio != "" {
-		pdf.SetXY(xL, pdf.GetY()+0.5)
-		pdf.MultiCell(leftW-6, 3.6, tr(data.Domicilio), "", "L", false)
-	}
-	pdf.SetXY(xL, pdf.GetY()+0.8)
-	pdf.SetFont("Helvetica", "B", 7.2)
-	pdf.MultiCell(leftW-6, 3.6, tr("Condición frente al IVA: "+data.CondicionFiscal), "", "L", false)
-
-	boxX := marginL + leftW
-	pdf.SetXY(boxX, startY+1.5)
-	pdf.SetFont("Helvetica", "B", 7)
-	pdf.CellFormat(centerW, 4, tr(data.TipoNombre), "", 1, "C", false, 0, "")
-	pdf.SetXY(boxX, startY+5.5)
-	pdf.SetFont("Helvetica", "B", 42)
-	pdf.CellFormat(centerW, 18, tr(data.TipoLetra), "", 1, "C", false, 0, "")
-	pdf.SetXY(boxX, startY+24.5)
-	pdf.SetFont("Helvetica", "", 7)
-	pdf.CellFormat(centerW, 4, tr("COD. "+data.TipoCodigo), "", 1, "C", false, 0, "")
-
-	xR := marginL + leftW + centerW + 3
-	pdf.SetXY(xR, startY+2.5)
-	pdf.SetFont("Helvetica", "", 9)
-	pdf.CellFormat(22, 5, tr(data.TipoNombre), "", 0, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "B", 10)
-	pdf.CellFormat(rightW-28, 5, tr("N° "+data.NumeroFormateado), "", 1, "R", false, 0, "")
-
-	pdf.SetXY(xR, pdf.GetY()+0.2)
-	pdf.SetFont("Helvetica", "", 9)
-	pdf.CellFormat(14, 4.2, tr("Fecha"), "", 0, "L", false, 0, "")
-	dateValW := rightW - 6 - 14 - 24
-	pdf.CellFormat(dateValW, 4.2, tr(data.FechaStr), "", 0, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "B", 9)
-	pdf.CellFormat(24, 4.2, tr(data.CopiaLabel), "", 1, "R", false, 0, "")
-
-	pdf.SetXY(xR, pdf.GetY()+0.8)
-	pdf.SetFont("Helvetica", "", 7.2)
-	rowH := 3.7
-	metaRows := [][2]string{{"CUIT:", data.CUIT}, {"Punto de venta:", data.PuntoDeVenta}}
-	if data.IIBB != "" {
-		metaRows = append(metaRows, [2]string{"Ing. Brutos:", data.IIBB})
-	}
-	if data.FechaInicioActiv != "" {
-		metaRows = append(metaRows, [2]string{"Inicio de act.:", data.FechaInicioActiv})
-	}
-	for _, row := range metaRows {
-		pdf.SetXY(xR, pdf.GetY())
-		pdf.CellFormat(28, rowH, tr(row[0]), "", 0, "L", false, 0, "")
-		pdf.CellFormat(rightW-31, rowH, tr(row[1]), "", 1, "L", false, 0, "")
+	if err := tempHTMLFile.Close(); err != nil {
+		return "", fmt.Errorf("pdf: close temp html: %w", err)
 	}
 
-	recY := startY + headerH
-	recH := 20.0
-	pdf.Line(marginL, recY+recH, marginL+contentW, recY+recH)
-	midX := marginL + contentW/2
-	pdf.Line(midX, recY, midX, recY+recH)
-
-	pdf.SetXY(marginL+3, recY+2)
-	pdf.SetFont("Helvetica", "B", 8)
-	pdf.CellFormat(20, 5, tr("NOMBRE:"), "", 0, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 9)
-	halfW := contentW/2 - 23
-	pdf.CellFormat(halfW, 5, tr(data.ReceptorNombre), "", 0, "L", false, 0, "")
-
-	xRecR := midX + 3
-	pdf.SetXY(xRecR, recY+2)
-	pdf.SetFont("Helvetica", "B", 8)
-	docLabel := data.ReceptorDocLabel
-	if docLabel == "" {
-		docLabel = "DOCUMENTO"
+	pdfBytes, err := renderFacturaHTMLToPDF(tempHTMLPath)
+	if err != nil {
+		return "", err
 	}
-	docNumero := data.ReceptorDocNumero
-	if docNumero == "" {
-		docNumero = "-"
-	}
-	pdf.CellFormat(22, 5, tr(docLabel+":"), "", 0, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 8)
-	pdf.CellFormat(rightW-26, 5, tr(docNumero), "", 1, "L", false, 0, "")
-
-	pdf.SetXY(marginL+3, recY+8)
-	pdf.SetFont("Helvetica", "B", 8)
-	pdf.CellFormat(20, 5, tr("DOMICILIO:"), "", 0, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 8)
-	domReceptor := data.ReceptorDomicilio
-	if domReceptor == "" {
-		domReceptor = "-"
-	}
-	pdf.CellFormat(halfW, 5, tr(domReceptor), "", 0, "L", false, 0, "")
-
-	pdf.SetXY(xRecR, recY+8)
-	pdf.SetFont("Helvetica", "B", 8)
-	pdf.CellFormat(34, 5, tr("COND. FRENTE AL IVA:"), "", 0, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 8)
-	pdf.CellFormat(rightW-38, 5, tr(data.ReceptorCondicionIVA), "", 1, "L", false, 0, "")
-
-	condPagoY := recY + recH - 7
-	pdf.Line(marginL, condPagoY, marginL+contentW, condPagoY)
-	pdf.SetXY(marginL+3, condPagoY+1.5)
-	pdf.SetFont("Helvetica", "B", 7.5)
-	pdf.CellFormat(58, 4, tr("CONDICIÓN Y FORMA DE PAGO:"), "", 0, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 7.5)
-	pdf.CellFormat(contentW-61, 4, tr(data.CondicionPago), "", 1, "L", false, 0, "")
-
-	tableY := recY + recH
-	pdf.SetXY(marginL, tableY)
-	colCode := 22.0
-	colDetail := 54.0
-	colQty := 18.0
-	colUnit := 16.0
-	colPU := 23.0
-	colPct := 16.0
-	colBonif := 20.0
-	colImporte := contentW - colCode - colDetail - colQty - colUnit - colPU - colPct - colBonif
-	hRowH := 6.0
-	itemRowH := 5.8
-	tableBottomY := 232.0
-
-	pdf.SetFillColor(242, 244, 247)
-	pdf.SetTextColor(0, 0, 0)
-	pdf.SetFont("Helvetica", "B", 6.4)
-	pdf.SetTextColor(68, 68, 68)
-	for _, header := range []struct {
-		w     float64
-		label string
-		align string
-	}{{colCode, "CÓDIGO", "L"}, {colDetail, "PRODUCTO / SERVICIO", "L"}, {colQty, "CANTIDAD", "R"}, {colUnit, "U. MEDIDA", "C"}, {colPU, "PRECIO UNIT.", "R"}, {colPct, "% BONIF.", "R"}, {colBonif, "IMP. BONIF.", "R"}, {colImporte, "IMPORTE", "R"}} {
-		pdf.CellFormat(header.w, hRowH, tr(header.label), "1", 0, header.align, true, 0, "")
-	}
-	pdf.Ln(-1)
-
-	pdf.SetTextColor(17, 17, 17)
-	pdf.SetFont("Helvetica", "", 7.2)
-	availableRows := int((tableBottomY - (tableY + hRowH)) / itemRowH)
-	if availableRows < len(data.Items) {
-		availableRows = len(data.Items)
-	}
-	if availableRows < 18 {
-		availableRows = 18
-	}
-	for idx := 0; idx < availableRows; idx++ {
-		item := facturaHTMLItem{Codigo: "", Nombre: "", Cantidad: "", UnidadMedida: "", PrecioUnitario: "", BonifPct: "", BonifImporte: "", PrecioTotal: ""}
-		if idx < len(data.Items) {
-			item = data.Items[idx]
-		}
-		pdf.SetX(marginL)
-		pdf.CellFormat(colCode, itemRowH, tr(item.Codigo), "LR", 0, "L", false, 0, "")
-		pdf.CellFormat(colDetail, itemRowH, tr(item.Nombre), "LR", 0, "L", false, 0, "")
-		pdf.CellFormat(colQty, itemRowH, tr(item.Cantidad), "LR", 0, "R", false, 0, "")
-		pdf.CellFormat(colUnit, itemRowH, tr(item.UnidadMedida), "LR", 0, "C", false, 0, "")
-		pdf.CellFormat(colPU, itemRowH, tr(item.PrecioUnitario), "LR", 0, "R", false, 0, "")
-		pdf.CellFormat(colPct, itemRowH, tr(item.BonifPct), "LR", 0, "R", false, 0, "")
-		pdf.CellFormat(colBonif, itemRowH, tr(item.BonifImporte), "LR", 0, "R", false, 0, "")
-		pdf.CellFormat(colImporte, itemRowH, tr(item.PrecioTotal), "LR", 1, "R", false, 0, "")
-	}
-	pdf.SetX(marginL)
-	pdf.CellFormat(contentW, 0, "", "T", 1, "", false, 0, "")
-
-	summaryY := pdf.GetY()
-	summaryH := 6.5
-	summaryW := contentW / 3
-	pdf.SetFillColor(255, 251, 240)
-	pdf.SetFont("Helvetica", "B", 7.2)
-	pdf.SetTextColor(102, 102, 102)
-	pdf.SetXY(marginL, summaryY)
-	pdf.CellFormat(summaryW, summaryH, tr("Subtotal: "+data.SubtotalBrutoFormateado), "1", 0, "L", true, 0, "")
-	pdf.CellFormat(summaryW, summaryH, tr("Bonificación: - "+data.BonificacionTotalFormateado), "1", 0, "L", true, 0, "")
-	pdf.CellFormat(contentW-summaryW-summaryW, summaryH, tr("Total: "+data.TotalFormateado), "1", 1, "L", true, 0, "")
-
-	sonPesosW := contentW - 78.0
-	totalW := 78.0
-	sonPesosH := 8.0
-	pdf.SetXY(marginL, pdf.GetY())
-	pdf.SetTextColor(0, 0, 0)
-	pdf.SetFont("Helvetica", "B", 7.4)
-	pdf.CellFormat(20, sonPesosH, tr("SON PESOS:"), "1", 0, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "I", 7.2)
-	pdf.CellFormat(sonPesosW-20, sonPesosH, tr(data.TotalEnLetras), "1", 0, "L", false, 0, "")
-	pdf.SetFillColor(240, 243, 248)
-	pdf.SetFont("Helvetica", "B", 9)
-	pdf.CellFormat(totalW*0.52, sonPesosH, tr("IMPORTE TOTAL"), "1", 0, "R", true, 0, "")
-	pdf.SetFont("Helvetica", "B", 12)
-	pdf.CellFormat(totalW*0.48, sonPesosH, tr("$ "+data.TotalFormateado), "1", 1, "R", true, 0, "")
-
-	caeY := pdf.GetY()
-	footerH := 28.0
-	pdf.Line(marginL, caeY, marginL+contentW, caeY)
-	pdf.Line(marginL, caeY+footerH, marginL+contentW, caeY+footerH)
-	pdf.Line(marginL+contentW*0.48, caeY, marginL+contentW*0.48, caeY+footerH)
-
-	pdf.SetXY(marginL+3, caeY+2)
-	pdf.SetFont("Helvetica", "B", 8.5)
-	pdf.CellFormat(contentW*0.48-6, 5, tr("Comprobante autorizado"), "", 1, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 7.6)
-	if data.CAE != "" {
-		pdf.SetX(marginL + 3)
-		pdf.CellFormat(contentW*0.48-6, 4.2, tr("CAE N°: "+data.CAE), "", 1, "L", false, 0, "")
-		if data.CAEVencimiento != "" {
-			pdf.SetX(marginL + 3)
-			pdf.CellFormat(contentW*0.48-6, 4.2, tr("Fecha de vencimiento del CAE: "+data.CAEVencimiento), "", 1, "L", false, 0, "")
-		}
-	} else {
-		pdf.SetX(marginL + 3)
-		pdf.SetTextColor(180, 0, 0)
-		pdf.CellFormat(contentW*0.48-6, 4.2, tr("Pendiente de autorización ARCA / AFIP"), "", 1, "L", false, 0, "")
-		pdf.SetTextColor(0, 0, 0)
-	}
-
-	if data.BarcodeText != "" {
-		barcodeImg, bcErr := code128.Encode(data.BarcodeText)
-		if bcErr == nil {
-			scaledBarcode, scErr := barcode.Scale(barcodeImg, 760, 70)
-			if scErr == nil {
-				tmpBarcode := filepath.Join(storagePath, ".tmp_bc_"+comp.ID.String()+".png")
-				f, fileErr := os.Create(tmpBarcode)
-				if fileErr == nil {
-					defer os.Remove(tmpBarcode)
-					if encErr := png.Encode(f, scaledBarcode); encErr == nil {
-						f.Close()
-						barcodeX := marginL + contentW*0.48 + 4
-						barcodeY := caeY + 4
-						barcodeW := contentW*0.52 - 8
-						pdf.Image(tmpBarcode, barcodeX, barcodeY, barcodeW, 0, false, "", 0, "")
-						pdf.SetXY(barcodeX, caeY+20.5)
-						pdf.SetFont("Helvetica", "", 6.4)
-						pdf.CellFormat(barcodeW, 3.5, tr(data.BarcodeText), "", 0, "C", false, 0, "")
-					} else {
-						f.Close()
-					}
-				}
-			}
-		}
-	}
-
-	legalY := caeY + footerH + 2
-	pdf.SetXY(marginL+3, legalY)
-	pdf.SetFont("Helvetica", "I", 6.2)
-	pdf.SetTextColor(100, 100, 100)
-	legal := "Esta Administración Federal no se responsabiliza por los datos ingresados en el detalle de la operación.\n"
-	legal += "Comprobante autorizado según Resolución General ARCA (ex AFIP). Verificación: www.afip.gob.ar/genericos/consultaCAE"
-	pdf.MultiCell(contentW-6, 3.2, tr(legal), "", "L", false)
-
-	if err := pdf.OutputFileAndClose(filePath); err != nil {
+	if err := os.WriteFile(filePath, pdfBytes, 0644); err != nil {
 		return "", fmt.Errorf("pdf: write file: %w", err)
 	}
 
 	return filePath, nil
+}
+
+func renderFacturaHTMLToPDF(htmlPath string) ([]byte, error) {
+	absPath, err := filepath.Abs(htmlPath)
+	if err != nil {
+		return nil, fmt.Errorf("pdf: resolve html path: %w", err)
+	}
+
+	browserPath, err := findChromeExecutable()
+	if err != nil {
+		return nil, err
+	}
+
+	allocOpts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath(browserPath),
+		chromedp.NoSandbox,
+		chromedp.DisableGPU,
+		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("allow-file-access-from-files", true),
+		chromedp.Flag("hide-scrollbars", true),
+	)
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), allocOpts...)
+	defer cancelAlloc()
+
+	ctx, cancelCtx := chromedp.NewContext(allocCtx)
+	defer cancelCtx()
+
+	ctx, cancelTimeout := context.WithTimeout(ctx, 45*time.Second)
+	defer cancelTimeout()
+
+	fileURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(absPath)}).String()
+	var pdfBytes []byte
+	err = chromedp.Run(ctx,
+		chromedp.Navigate(fileURL),
+		chromedp.WaitReady("body", chromedp.ByQuery),
+		chromedp.Sleep(800*time.Millisecond),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			buf, _, err := page.PrintToPDF().
+				WithPrintBackground(true).
+				WithPreferCSSPageSize(true).
+				WithMarginTop(0).
+				WithMarginBottom(0).
+				WithMarginLeft(0).
+				WithMarginRight(0).
+				Do(ctx)
+			if err != nil {
+				return err
+			}
+			pdfBytes = buf
+			return nil
+		}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("pdf: render html with chrome: %w", err)
+	}
+
+	return pdfBytes, nil
+}
+
+func findChromeExecutable() (string, error) {
+	if envPath := strings.TrimSpace(os.Getenv("CHROME_BIN")); envPath != "" {
+		if _, err := os.Stat(envPath); err == nil {
+			return envPath, nil
+		}
+	}
+	if envPath := strings.TrimSpace(os.Getenv("GOOGLE_CHROME_BIN")); envPath != "" {
+		if _, err := os.Stat(envPath); err == nil {
+			return envPath, nil
+		}
+	}
+
+	candidates := []string{
+		"chromium-browser",
+		"chromium",
+		"google-chrome",
+		"chrome",
+		"msedge",
+	}
+	for _, candidate := range candidates {
+		if path, err := exec.LookPath(candidate); err == nil {
+			return path, nil
+		}
+	}
+
+	if runtime.GOOS == "windows" {
+		windowsCandidates := []string{
+			filepath.Join(os.Getenv("ProgramFiles"), "Google", "Chrome", "Application", "chrome.exe"),
+			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Google", "Chrome", "Application", "chrome.exe"),
+			filepath.Join(os.Getenv("LocalAppData"), "Google", "Chrome", "Application", "chrome.exe"),
+			filepath.Join(os.Getenv("ProgramFiles"), "Microsoft", "Edge", "Application", "msedge.exe"),
+			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
+		}
+		for _, candidate := range windowsCandidates {
+			if candidate == "" {
+				continue
+			}
+			if _, err := os.Stat(candidate); err == nil {
+				return candidate, nil
+			}
+		}
+	}
+
+	linuxCandidates := []string{"/usr/bin/chromium-browser", "/usr/bin/chromium", "/usr/bin/google-chrome", "/snap/bin/chromium"}
+	for _, candidate := range linuxCandidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("pdf: no se encontró Chrome/Chromium para renderizar la factura. Configure CHROME_BIN o instale Chromium en el servidor")
 }
 
 // tipoComprobanteCode returns the AFIP numeric code for comprobante type.

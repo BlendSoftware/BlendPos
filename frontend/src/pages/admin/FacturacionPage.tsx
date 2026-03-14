@@ -307,7 +307,12 @@ export function FacturacionPage() {
             if (!comp) {
                 throw new Error('Comprobante no disponible para esta venta.');
             }
-            await descargarPDF(comp.id, `comprobante_${v.numeroTicket}.pdf`);
+            const tipoLetra = comp.tipo === 'factura_a' ? 'A' : comp.tipo === 'factura_b' ? 'B' : comp.tipo === 'factura_c' ? 'C' : '';
+            const numeroFormateado = `${String(comp.punto_de_venta).padStart(4, '0')}-${String(comp.numero ?? 0).padStart(8, '0')}`;
+            const nombreArchivo = tipoLetra
+                ? `FACTURA ${tipoLetra} ${numeroFormateado}.pdf`
+                : `comprobante_${numeroFormateado}.pdf`;
+            await descargarPDF(comp.id, nombreArchivo);
         } catch (e: unknown) {
             notifications.show({
                 title: 'No se pudo descargar el PDF',

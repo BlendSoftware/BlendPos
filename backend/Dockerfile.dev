@@ -1,7 +1,7 @@
 # backend/Dockerfile.dev — Development image with Air hot reload
 FROM golang:1.24-alpine
 
-RUN apk --no-cache add git curl
+RUN apk --no-cache add git curl chromium nss freetype harfbuzz ttf-freefont
 RUN go install github.com/air-verse/air@v1.62.0
 
 WORKDIR /app

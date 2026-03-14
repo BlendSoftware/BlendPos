@@ -246,6 +246,22 @@ func (h *FacturacionHandler) DescargarPDF(c *gin.Context) {
 	}
 
 	fileName := filepath.Base(pdfPath)
+	if comp.Tipo == "factura_a" || comp.Tipo == "factura_b" || comp.Tipo == "factura_c" {
+		tipoLetra := "C"
+		switch comp.Tipo {
+		case "factura_a":
+			tipoLetra = "A"
+		case "factura_b":
+			tipoLetra = "B"
+		case "factura_c":
+			tipoLetra = "C"
+		}
+		var numeroComprobante int64
+		if comp.Numero != nil {
+			numeroComprobante = *comp.Numero
+		}
+		fileName = fmt.Sprintf("FACTURA %s %04d-%08d.pdf", tipoLetra, comp.PuntoDeVenta, numeroComprobante)
+	}
 	c.Header("Content-Disposition", "attachment; filename=\""+fileName+"\"")
 	c.Header("Content-Type", "application/pdf")
 	c.File(pdfPath)
