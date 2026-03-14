@@ -132,6 +132,16 @@ export function CierreCajaPage() {
         diferencia: apiResult.desvio?.monto ?? 0,
     } : null;
 
+    const efectivoEsperadoResultado = statsDia.totalEfectivoEsperado;
+    const desvioPorcentual = resultado
+        ? efectivoEsperadoResultado > 0
+            ? Math.abs(resultado.diferencia) / efectivoEsperadoResultado
+            : Math.abs(resultado.diferencia) > 0
+                ? 1
+                : 0
+        : 0;
+    const cierreDentroUmbral = resultado ? desvioPorcentual <= 0.05 : false;
+
     return (
         <Stack gap="xl">
             <div>
@@ -249,22 +259,22 @@ export function CierreCajaPage() {
                         resultado && (
                             <Stack gap="lg">
                                 <Alert
-                                    color={resultado.diferencia === 0 ? 'teal' : resultado.diferencia > 0 ? 'blue' : 'red'}
+                                    color={cierreDentroUmbral ? 'teal' : resultado.diferencia > 0 ? 'blue' : 'red'}
                                     variant="light"
-                                    icon={resultado.diferencia === 0 ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+                                    icon={cierreDentroUmbral ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
                                     title={
-                                        resultado.diferencia === 0
-                                            ? 'Arqueo exacto'
+                                        cierreDentroUmbral
+                                            ? 'Buen cierre de caja'
                                             : resultado.diferencia > 0
                                                 ? 'Sobrante de caja'
                                                 : 'Faltante de caja'
                                     }
                                 >
-                                    {esSupervisor
-                                        ? resultado.diferencia === 0
-                                            ? 'El efectivo contado coincide exactamente con lo esperado.'
-                                            : `Diferencia: ${formatARS(Math.abs(resultado.diferencia))} ${resultado.diferencia > 0 ? 'sobrante' : 'faltante'}.`
-                                        : 'El arqueo fue registrado. Un supervisor revisará las diferencias.'}
+                                    {cierreDentroUmbral
+                                        ? `Buen cierre validado: la diferencia de ${formatARS(Math.abs(resultado.diferencia))} representa ${(desvioPorcentual * 100).toFixed(2)}% del efectivo esperado (margen permitido: 5%).`
+                                        : esSupervisor
+                                            ? `Diferencia: ${formatARS(Math.abs(resultado.diferencia))} ${resultado.diferencia > 0 ? 'sobrante' : 'faltante'}.`
+                                            : 'El arqueo fue registrado. Un supervisor revisará las diferencias.'}
                                 </Alert>
 
                                 {esSupervisor && (
