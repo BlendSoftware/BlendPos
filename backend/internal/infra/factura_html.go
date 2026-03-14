@@ -114,7 +114,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; background: #e0e4ea; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #111; background: #e0e4ea; }
     @page { size: A4 portrait; margin: 6mm; }
     @media print {
       html, body { height: auto !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
@@ -139,25 +139,25 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     .header { display: grid; grid-template-columns: 42% 16% 42%; border-bottom: 1px solid #bbb; min-height: 92px; }
     .hdr-left  { padding: 10px 12px; border-right: 1px solid #bbb; }
     .hdr-left-logo { max-height: 52px; max-width: 120px; object-fit: contain; display: block; margin-bottom: 6px; }
-    .hdr-left-name { font-size: 13px; font-weight: 700; line-height: 1.3; color: #111; }
-    .hdr-left-addr { font-size: 8.5px; line-height: 1.6; margin-top: 3px; color: #555; }
-    .hdr-left-cond { font-size: 8.5px; font-weight: 700; margin-top: 5px; color: #222; }
+    .hdr-left-name { font-size: 14px; font-weight: 700; line-height: 1.3; color: #111; }
+    .hdr-left-addr { font-size: 9.5px; line-height: 1.6; margin-top: 3px; color: #555; }
+    .hdr-left-cond { font-size: 9.5px; font-weight: 700; margin-top: 5px; color: #222; }
     .hdr-center {
       border-right: 1px solid #bbb; display: flex; flex-direction: column;
       align-items: center; justify-content: center; padding: 6px; text-align: center;
     }
-    .hdr-center-label { font-size: 7.5px; letter-spacing: 0.5px; text-transform: uppercase; color: #666; }
-    .hdr-center-letra { font-size: 64px; font-weight: 900; line-height: 1; color: #111; }
-    .hdr-center-cod   { font-size: 7.5px; margin-top: 2px; color: #666; }
+    .hdr-center-label { font-size: 8.5px; letter-spacing: 0.5px; text-transform: uppercase; color: #666; }
+    .hdr-center-letra { font-size: 64px; font-weight: 700; line-height: 1; color: #111; }
+    .hdr-center-cod   { font-size: 8.5px; margin-top: 2px; color: #666; }
     .hdr-right { padding: 10px 12px; }
     .hdr-r-row1 { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
-    .hdr-r-tipo { font-size: 10px; color: #555; }
-    .hdr-r-num  { font-size: 12px; font-weight: 700; color: #111; }
+    .hdr-r-tipo { font-size: 11px; color: #555; }
+    .hdr-r-num  { font-size: 13px; font-weight: 700; color: #111; }
     .hdr-r-row2 { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-    .hdr-r-fecha { font-size: 9px; color: #444; }
-    .hdr-r-copia { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; color: #222; }
+    .hdr-r-fecha { font-size: 10px; color: #444; }
+    .hdr-r-copia { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; color: #222; }
     .dtbl { width: 100%; border-collapse: collapse; }
-    .dtbl td { padding: 1.5px 0; vertical-align: top; font-size: 8.5px; }
+    .dtbl td { padding: 1.5px 0; vertical-align: top; font-size: 9.5px; }
     .dtbl .lbl { white-space: nowrap; padding-right: 6px; min-width: 90px; color: #666; }
 
     /* ── RECEPTOR ── */
@@ -166,27 +166,27 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     .rec-row:last-child { border-bottom: none; }
     .rec-cell { padding: 4px 10px; display: flex; align-items: baseline; gap: 6px; }
     .rec-cell:first-child { border-right: 1px solid #e0e0e0; }
-    .rec-lbl { font-weight: 700; font-size: 7.5px; white-space: nowrap; min-width: 72px; text-transform: uppercase; color: #666; }
-    .rec-val  { font-size: 9.5px; color: #111; }
+    .rec-lbl { font-weight: 700; font-size: 8.5px; white-space: nowrap; min-width: 72px; text-transform: uppercase; color: #666; }
+    .rec-val  { font-size: 10.5px; color: #111; }
 
     /* ── CONDICIÓN DE PAGO ── */
     .condicion-row {
       padding: 4px 10px; display: flex; align-items: center; gap: 8px;
       border-bottom: 1px solid #bbb; background: #fafafa;
     }
-    .condicion-lbl { font-weight: 700; font-size: 7.5px; white-space: nowrap; text-transform: uppercase; color: #666; }
-    .condicion-val { font-size: 9px; color: #111; }
+    .condicion-lbl { font-weight: 700; font-size: 8.5px; white-space: nowrap; text-transform: uppercase; color: #666; }
+    .condicion-val { font-size: 10px; color: #111; }
 
     /* ── ITEMS TABLE ── */
     .items-section { flex: 1; display: flex; flex-direction: column; }
     .items-tbl { width: 100%; border-collapse: collapse; }
     .items-tbl thead tr { background: #f2f4f7; }
     .items-tbl th {
-      padding: 5px 8px; font-size: 7.5px; font-weight: 700; text-transform: uppercase;
+      padding: 5px 8px; font-size: 8.5px; font-weight: 700; text-transform: uppercase;
       border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; letter-spacing: 0.3px; color: #444;
     }
     .items-tbl th + th { border-left: 1px solid #ddd; }
-    .items-tbl td { padding: 4px 8px; font-size: 9px; height: 20px; border-bottom: 1px solid #eee; color: #111; }
+    .items-tbl td { padding: 4px 8px; font-size: 10px; height: 20px; border-bottom: 1px solid #eee; color: #111; }
     .items-tbl td + td { border-left: 1px solid #eee; }
     .items-tbl tbody tr:last-child td { border-bottom: none; }
     .items-filler { flex: 1; min-height: 8px; }
@@ -198,39 +198,39 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
       display: flex; border-top: 1px solid #e0e0e0; border-bottom: 1px solid #bbb;
       padding: 4px 10px; gap: 24px; align-items: center; background: #fffbf0;
     }
-    .desc-cell { display: flex; align-items: baseline; gap: 6px; font-size: 9px; }
-    .desc-lbl { font-weight: 700; color: #666; font-size: 7.5px; text-transform: uppercase; }
+    .desc-cell { display: flex; align-items: baseline; gap: 6px; font-size: 10px; }
+    .desc-lbl { font-weight: 700; color: #666; font-size: 8.5px; text-transform: uppercase; }
     .desc-val-red { color: #b00000; font-weight: 600; }
 
     /* ── TOTALS ── */
     .totals-row { display: flex; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; }
     .son-pesos {
       flex: 1; display: flex; align-items: center; gap: 6px;
-      padding: 5px 10px; border-right: 1px solid #bbb; font-size: 8.5px;
+      padding: 5px 10px; border-right: 1px solid #bbb; font-size: 9.5px;
     }
-    .son-pesos-lbl { white-space: nowrap; font-weight: 700; color: #666; font-size: 7.5px; text-transform: uppercase; }
+    .son-pesos-lbl { white-space: nowrap; font-weight: 700; color: #666; font-size: 8.5px; text-transform: uppercase; }
     .son-pesos-val { font-style: italic; color: #333; }
     .importe-total {
       min-width: 210px; display: flex; align-items: center; justify-content: space-between;
       padding: 5px 14px; background: #f0f3f8; gap: 12px;
     }
-    .imp-lbl { font-weight: 700; font-size: 8.5px; white-space: nowrap; text-transform: uppercase; color: #444; }
-    .imp-val { font-weight: 900; font-size: 15px; color: #111; }
+    .imp-lbl { font-weight: 700; font-size: 9.5px; white-space: nowrap; text-transform: uppercase; color: #444; }
+    .imp-val { font-weight: 900; font-size: 16px; color: #111; }
 
     /* ── CAE FOOTER ── */
     .cae-footer { display: grid; grid-template-columns: 50% 50%; border-top: 1px solid #bbb; min-height: 58px; }
     .cae-left { padding: 8px 12px; border-right: 1px solid #bbb; }
-    .cae-title { font-weight: 700; font-size: 9.5px; margin-bottom: 4px; color: #222; }
-    .cae-data  { font-size: 8.5px; margin-bottom: 2px; color: #333; }
+    .cae-title { font-weight: 700; font-size: 10.5px; margin-bottom: 4px; color: #222; }
+    .cae-data  { font-size: 9.5px; margin-bottom: 2px; color: #333; }
     .cae-right {
       padding: 8px 12px; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 4px;
     }
     .barcode-img { max-height: 48px; max-width: 100%; }
-    .barcode-text { font-size: 8px; letter-spacing: 0.8px; line-height: 1; text-align: center; color: #444; font-family: 'Courier New', monospace; }
+    .barcode-text { font-size: 9px; letter-spacing: 0.8px; line-height: 1; text-align: center; color: #444; font-family: 'Courier New', monospace; }
 
     /* ── LEGAL ── */
-    .legal { padding: 5px 12px; border-top: 1px solid #ddd; font-size: 7px; font-style: italic; color: #777; line-height: 1.7; break-inside: avoid; page-break-inside: avoid; }
+    .legal { padding: 5px 12px; border-top: 1px solid #ddd; font-size: 8px; font-style: italic; color: #777; line-height: 1.7; break-inside: avoid; page-break-inside: avoid; }
   </style>
   {{if .AutoPrint}}
   <script>
@@ -252,8 +252,8 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     <div class="header">
       <div class="hdr-left">
         {{if .LogoDataURL}}<img class="hdr-left-logo" src="{{.LogoDataURL}}" alt="Logo">{{end}}
-        <div class="hdr-left-name">{{.RazonSocial}}</div>
-        {{if .Domicilio}}<div class="hdr-left-addr">{{.Domicilio}}</div>{{end}}
+        <div class="hdr-left-name">Raz&#243;n Social: {{.RazonSocial}}</div>
+        {{if .Domicilio}}<div class="hdr-left-addr">Domicilio Comercial: {{.Domicilio}}</div>{{end}}
         <div class="hdr-left-cond">Condici&#243;n frente al IVA: {{.CondicionFiscal}}</div>
       </div>
 
@@ -269,7 +269,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
           <span class="hdr-r-num">N&#186; {{.NumeroFormateado}}</span>
         </div>
         <div class="hdr-r-row2">
-          <span class="hdr-r-fecha">Fecha &nbsp;<strong>{{.FechaStr}}</strong></span>
+          <span class="hdr-r-fecha">Fecha de Emisi&#243;n: &nbsp;<strong>{{.FechaStr}}</strong></span>
           <span class="hdr-r-copia">{{.CopiaLabel}}</span>
         </div>
         <div class="hdr-r-data">
@@ -277,7 +277,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
             <tr><td class="lbl">CUIT:</td><td>{{.CUIT}}</td></tr>
             <tr><td class="lbl">Punto de venta:</td><td>{{.PuntoDeVenta}}</td></tr>
             {{if .IIBB}}<tr><td class="lbl">Ing. Brutos:</td><td>{{.IIBB}}</td></tr>{{end}}
-            {{if .FechaInicioActiv}}<tr><td class="lbl">Inicio de act.:</td><td>{{.FechaInicioActiv}}</td></tr>{{end}}
+            {{if .FechaInicioActiv}}<tr><td class="lbl">Fecha de Inicio de Actividades:</td><td>{{.FechaInicioActiv}}</td></tr>{{end}}
           </table>
         </div>
       </div>
@@ -287,7 +287,7 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
     <div class="receptor">
       <div class="rec-row">
         <div class="rec-cell">
-          <span class="rec-lbl">Nombre:</span>
+          <span class="rec-lbl">Apellido y Nombre / Raz&#243;n Social:</span>
           <span class="rec-val">{{.ReceptorNombre}}</span>
         </div>
         <div class="rec-cell">
@@ -419,7 +419,7 @@ const facturaEmailHTMLTmpl = `<!DOCTYPE html>
   <meta charset="UTF-8">
   <title>{{.TipoNombre}} {{.TipoLetra}} &#8212; {{.NumeroFormateado}}</title>
 </head>
-<body style="margin:0;padding:16px;background:#e0e4ea;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;">
+<body style="margin:0;padding:16px;background:#e0e4ea;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;">
 
 <table width="620" cellpadding="0" cellspacing="0" border="0" align="center" style="background:#ffffff;border:1px solid #888888;border-collapse:collapse;">
 
@@ -428,45 +428,45 @@ const facturaEmailHTMLTmpl = `<!DOCTYPE html>
     <!-- Columna izquierda: emisor -->
     <td width="261" valign="top" style="padding:10px 12px;border-right:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;">
       {{if .LogoDataURL}}<img src="{{.LogoDataURL}}" alt="Logo" style="max-height:48px;max-width:110px;display:block;margin-bottom:5px;" width="110">{{end}}
-      <div style="font-size:13px;font-weight:700;line-height:1.3;color:#111111;">{{.RazonSocial}}</div>
-      {{if .Domicilio}}<div style="font-size:8.5px;color:#555555;margin-top:3px;line-height:1.5;">{{.Domicilio}}</div>{{end}}
-      <div style="font-size:8.5px;font-weight:700;margin-top:4px;color:#222222;">Condici&#243;n frente al IVA: {{.CondicionFiscal}}</div>
+      <div style="font-size:14px;font-weight:700;line-height:1.3;color:#111111;">Raz&#243;n Social: {{.RazonSocial}}</div>
+      {{if .Domicilio}}<div style="font-size:9.5px;color:#555555;margin-top:3px;line-height:1.5;">Domicilio Comercial: {{.Domicilio}}</div>{{end}}
+      <div style="font-size:9.5px;font-weight:700;margin-top:4px;color:#222222;">Condici&#243;n frente al IVA: {{.CondicionFiscal}}</div>
     </td>
     <!-- Columna central: letra grande -->
     <td width="98" align="center" valign="middle" style="border-right:1px solid #bbbbbb;border-bottom:1px solid #bbbbbb;padding:8px 4px;text-align:center;">
-      <div style="font-size:7.5px;color:#666666;text-transform:uppercase;letter-spacing:0.5px;">{{.TipoNombre}}</div>
-      <div style="font-size:56px;font-weight:900;line-height:1;color:#111111;">{{.TipoLetra}}</div>
-      <div style="font-size:7.5px;color:#666666;margin-top:2px;">COD. {{.TipoCodigo}}</div>
+      <div style="font-size:8.5px;color:#666666;text-transform:uppercase;letter-spacing:0.5px;">{{.TipoNombre}}</div>
+      <div style="font-size:57px;font-weight:700;line-height:1;color:#111111;">{{.TipoLetra}}</div>
+      <div style="font-size:8.5px;color:#666666;margin-top:2px;">COD. {{.TipoCodigo}}</div>
     </td>
     <!-- Columna derecha: datos del comprobante -->
     <td width="261" valign="top" style="padding:10px 12px;border-bottom:1px solid #bbbbbb;">
       <table width="100%" cellpadding="1" cellspacing="0" border="0">
         <tr>
-          <td style="font-size:9px;color:#555555;">{{.TipoNombre}}</td>
-          <td align="right" style="font-size:12px;font-weight:700;color:#111111;">N&#186; {{.NumeroFormateado}}</td>
+          <td style="font-size:10px;color:#555555;">{{.TipoNombre}}</td>
+          <td align="right" style="font-size:13px;font-weight:700;color:#111111;">N&#186; {{.NumeroFormateado}}</td>
         </tr>
         <tr>
-          <td style="font-size:9px;color:#444444;">Fecha &nbsp;<strong>{{.FechaStr}}</strong></td>
-          <td align="right" style="font-size:10px;font-weight:700;letter-spacing:0.8px;color:#222222;">{{.CopiaLabel}}</td>
+          <td style="font-size:10px;color:#444444;">Fecha de Emisi&#243;n: &nbsp;<strong>{{.FechaStr}}</strong></td>
+          <td align="right" style="font-size:11px;font-weight:700;letter-spacing:0.8px;color:#222222;">{{.CopiaLabel}}</td>
         </tr>
         <tr>
           <td colspan="2" style="padding-top:5px;">
             <table cellpadding="1" cellspacing="0" border="0" width="100%">
               <tr>
-                <td style="font-size:8px;color:#666666;white-space:nowrap;padding-right:4px;">CUIT:</td>
-                <td style="font-size:8px;color:#111111;">{{.CUIT}}</td>
+                <td style="font-size:9px;color:#666666;white-space:nowrap;padding-right:4px;">CUIT:</td>
+                <td style="font-size:9px;color:#111111;">{{.CUIT}}</td>
               </tr>
               <tr>
-                <td style="font-size:8px;color:#666666;white-space:nowrap;padding-right:4px;">Punto de venta:</td>
-                <td style="font-size:8px;color:#111111;">{{.PuntoDeVenta}}</td>
+                <td style="font-size:9px;color:#666666;white-space:nowrap;padding-right:4px;">Punto de venta:</td>
+                <td style="font-size:9px;color:#111111;">{{.PuntoDeVenta}}</td>
               </tr>
               {{if .IIBB}}<tr>
-                <td style="font-size:8px;color:#666666;white-space:nowrap;padding-right:4px;">Ing. Brutos:</td>
-                <td style="font-size:8px;color:#111111;">{{.IIBB}}</td>
+                <td style="font-size:9px;color:#666666;white-space:nowrap;padding-right:4px;">Ing. Brutos:</td>
+                <td style="font-size:9px;color:#111111;">{{.IIBB}}</td>
               </tr>{{end}}
               {{if .FechaInicioActiv}}<tr>
-                <td style="font-size:8px;color:#666666;white-space:nowrap;padding-right:4px;">Inicio de act.:</td>
-                <td style="font-size:8px;color:#111111;">{{.FechaInicioActiv}}</td>
+                <td style="font-size:9px;color:#666666;white-space:nowrap;padding-right:4px;">Fecha de Inicio de Actividades:</td>
+                <td style="font-size:9px;color:#111111;">{{.FechaInicioActiv}}</td>
               </tr>{{end}}
             </table>
           </td>
@@ -478,32 +478,32 @@ const facturaEmailHTMLTmpl = `<!DOCTYPE html>
   <!-- ═══ DATOS DEL RECEPTOR ═══ -->
   <tr>
     <td valign="top" style="padding:4px 10px;border-right:1px solid #e0e0e0;border-bottom:1px solid #e0e0e0;">
-      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Nombre:</span>
-      <span style="font-size:9.5px;color:#111111;">{{.ReceptorNombre}}</span>
+      <span style="font-weight:700;font-size:8.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Apellido y Nombre / Raz&#243;n Social:</span>
+      <span style="font-size:10.5px;color:#111111;">{{.ReceptorNombre}}</span>
     </td>
     <td colspan="2" valign="top" style="padding:4px 10px;border-bottom:1px solid #e0e0e0;">
       {{if .ReceptorDocLabel}}
-      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">{{.ReceptorDocLabel}}:</span>
-      <span style="font-size:9.5px;color:#111111;">{{.ReceptorDocNumero}}</span>
+      <span style="font-weight:700;font-size:8.5px;text-transform:uppercase;color:#666666;margin-right:6px;">{{.ReceptorDocLabel}}:</span>
+      <span style="font-size:10.5px;color:#111111;">{{.ReceptorDocNumero}}</span>
       {{end}}
     </td>
   </tr>
   <tr>
     <td valign="top" style="padding:4px 10px;border-right:1px solid #e0e0e0;border-bottom:1px solid #bbbbbb;">
-      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Domicilio:</span>
-      <span style="font-size:9.5px;color:#111111;">{{if .ReceptorDomicilio}}{{.ReceptorDomicilio}}{{else}}-{{end}}</span>
+      <span style="font-weight:700;font-size:8.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Domicilio:</span>
+      <span style="font-size:10.5px;color:#111111;">{{if .ReceptorDomicilio}}{{.ReceptorDomicilio}}{{else}}-{{end}}</span>
     </td>
     <td colspan="2" valign="top" style="padding:4px 10px;border-bottom:1px solid #bbbbbb;">
-      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Cond. frente al IVA:</span>
-      <span style="font-size:9.5px;color:#111111;">{{.ReceptorCondicionIVA}}</span>
+      <span style="font-weight:700;font-size:8.5px;text-transform:uppercase;color:#666666;margin-right:6px;">Cond. frente al IVA:</span>
+      <span style="font-size:10.5px;color:#111111;">{{.ReceptorCondicionIVA}}</span>
     </td>
   </tr>
 
   <!-- ═══ CONDICIÓN DE PAGO ═══ -->
   <tr style="background:#fafafa;">
     <td colspan="3" style="padding:4px 10px;border-bottom:1px solid #bbbbbb;">
-      <span style="font-weight:700;font-size:7.5px;text-transform:uppercase;color:#666666;margin-right:8px;">Condici&#243;n y forma de pago:</span>
-      <span style="font-size:9px;color:#111111;">{{.CondicionPago}}</span>
+      <span style="font-weight:700;font-size:8.5px;text-transform:uppercase;color:#666666;margin-right:8px;">Condici&#243;n y forma de pago:</span>
+      <span style="font-size:10px;color:#111111;">{{.CondicionPago}}</span>
     </td>
   </tr>
 
@@ -941,7 +941,7 @@ func buildFacturaData(venta *model.Venta, comp *model.Comprobante, config *model
 		CondicionFiscal:             config.CondicionFiscal,
 		TipoLetra:                   tipoLetra,
 		TipoNombre:                  tipoNombre,
-		TipoCodigo:                  fmt.Sprintf("%02d", tipoCodigo),
+		TipoCodigo:                  fmt.Sprintf("%03d", tipoCodigo),
 		CopiaLabel:                  copiaLabel,
 		NumeroFormateado:            fmt.Sprintf("%04d-%08d", pvDisplay, numero),
 		PuntoDeVenta:                fmt.Sprintf("%04d", pvDisplay),
