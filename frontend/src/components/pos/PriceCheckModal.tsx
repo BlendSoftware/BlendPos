@@ -62,11 +62,14 @@ export function PriceCheckModal() {
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
+            e.preventDefault();
             e.stopPropagation();
             handleSearch(e.currentTarget.value);
         } else if (e.key === 'Escape') {
+            // Some scanners can append Escape as suffix; never auto-close this modal on scan.
+            e.preventDefault();
             e.stopPropagation();
-            handleClose();
+            return;
         }
     };
 
@@ -81,6 +84,7 @@ export function PriceCheckModal() {
         <Modal
             opened={isOpen}
             onClose={handleClose}
+            closeOnEscape={false}
             title={
                 <Group gap="xs">
                     <Tag size={20} />
