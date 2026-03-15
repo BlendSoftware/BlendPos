@@ -415,15 +415,15 @@ func (w *FacturacionWorker) enqueueEmail(ctx context.Context, venta *model.Venta
 	// Plain-text fallback body
 	var body string
 	if pdfPath != "" {
-		body = fmt.Sprintf("Adjunto encontrarás tu comprobante de compra.\nTotal: $%.2f\n\nGracias por tu compra.", venta.Total.InexactFloat64())
+		body = fmt.Sprintf("Adjunto encontrarás tu comprobante de compra.\nTotal: $%.2f\n\nGracias por comprar en Mix de Dulzura, esperamos que vuelvas pronto.", venta.Total.InexactFloat64())
 	} else {
-		body = fmt.Sprintf("Comprobante de tu compra.\nTotal: $%.2f\n\nTicket #%d\n\nPuedes solicitar una copia impresa en nuestro local.\nGracias por tu compra.", venta.Total.InexactFloat64(), venta.NumeroTicket)
+		body = fmt.Sprintf("Comprobante de tu compra.\nTotal: $%.2f\n\nTicket #%d\n\nPuedes solicitar una copia impresa en nuestro local.\nGracias por comprar en Mix de Dulzura, esperamos que vuelvas pronto.", venta.Total.InexactFloat64(), venta.NumeroTicket)
 		log.Warn().Str("email", email).Msg("facturacion_worker: sending email without PDF attachment")
 	}
 
 	emailJob := EmailJobPayload{
 		ToEmail:  email,
-		Subject:  fmt.Sprintf("Comprobante BlendPOS — Ticket #%d", venta.NumeroTicket),
+		Subject:  fmt.Sprintf("Comprobante Mix de Dulzura — Ticket #%d", venta.NumeroTicket),
 		Body:     body,
 		HTMLBody: htmlBody,
 		PDFPath:  pdfPath,

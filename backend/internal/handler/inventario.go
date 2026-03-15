@@ -532,12 +532,12 @@ func (h *FacturacionHandler) EnviarEmailComprobante(c *gin.Context) {
 	// Build email payload
 	emailPayload := map[string]interface{}{
 		"to_email": body.Email,
-		"subject":  fmt.Sprintf("Comprobante BlendPOS — Ticket #%d", venta.NumeroTicket),
+		"subject":  fmt.Sprintf("Comprobante Mix de Dulzura — Ticket #%d", venta.NumeroTicket),
 		"body": func() string {
 			if pdfPath != "" {
-				return fmt.Sprintf("Adjunto encontrarás tu comprobante de compra.\nTotal: $%.2f\n\nGracias por tu compra.", venta.Total.InexactFloat64())
+				return fmt.Sprintf("Adjunto encontrarás tu comprobante de compra.\nTotal: $%.2f\n\nGracias por comprar en Mix de Dulzura, esperamos que vuelvas pronto.", venta.Total.InexactFloat64())
 			}
-			return fmt.Sprintf("Comprobante de tu compra.\nTotal: $%.2f\n\nTicket #%d\n\nPuedes solicitar una copia impresa en nuestro local.\nGracias por tu compra.", venta.Total.InexactFloat64(), venta.NumeroTicket)
+			return fmt.Sprintf("Comprobante de tu compra.\nTotal: $%.2f\n\nTicket #%d\n\nPuedes solicitar una copia impresa en nuestro local.\nGracias por comprar en Mix de Dulzura, esperamos que vuelvas pronto.", venta.Total.InexactFloat64(), venta.NumeroTicket)
 		}(),
 		"pdf_path": pdfPath,
 	}
