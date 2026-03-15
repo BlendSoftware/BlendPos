@@ -124,7 +124,7 @@ func buildMessage(from, to, subject, body, htmlBody, attachPath string) ([]byte,
 	}
 
 	if attachPath == "" {
-		fmt.Fprintf(&buf, "From: BlendPOS <%s>\r\n", from)
+		fmt.Fprintf(&buf, "From: Mix de Dulzura <%s>\r\n", from)
 		fmt.Fprintf(&buf, "To: %s\r\n", to)
 		fmt.Fprintf(&buf, "Subject: %s\r\n", subject)
 		fmt.Fprintf(&buf, "MIME-Version: 1.0\r\n")
@@ -149,7 +149,7 @@ func buildMessage(from, to, subject, body, htmlBody, attachPath string) ([]byte,
 	}
 
 	boundary := "==BlendPOS_Boundary=="
-	fmt.Fprintf(&buf, "From: BlendPOS <%s>\r\n", from)
+	fmt.Fprintf(&buf, "From: Mix de Dulzura <%s>\r\n", from)
 	fmt.Fprintf(&buf, "To: %s\r\n", to)
 	fmt.Fprintf(&buf, "Subject: %s\r\n", subject)
 	fmt.Fprintf(&buf, "MIME-Version: 1.0\r\n")

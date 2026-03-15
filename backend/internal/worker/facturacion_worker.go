@@ -161,8 +161,7 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 		pdfPath := w.generatePDF(ctx, venta, comp, payload.VentaID)
 		// Send email even if PDF generation failed (user still wants the receipt)
 		if payload.ClienteEmail != nil && *payload.ClienteEmail != "" {
-			htmlBody := w.generateHTMLBody(ctx, venta, comp)
-			w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath, htmlBody)
+			w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath, "")
 		}
 		return
 	}
@@ -179,8 +178,7 @@ func (w *FacturacionWorker) Process(ctx context.Context, raw json.RawMessage) {
 	// 6. Async email if customer email was provided (AC-06.5)
 	// Send email even if PDF generation failed (user still wants the receipt)
 	if payload.ClienteEmail != nil && *payload.ClienteEmail != "" {
-		htmlBody := w.generateHTMLBody(ctx, venta, comp)
-		w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath, htmlBody)
+		w.enqueueEmail(ctx, venta, *payload.ClienteEmail, pdfPath, "")
 	}
 }
 
