@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -59,8 +59,8 @@ RUN useradd -m -u 1001 afipsidecar && \
     chown -R afipsidecar:afipsidecar /tmp/afip_cache && \
     chown -R afipsidecar:afipsidecar /usr/local/lib/python3.11/site-packages/pyafipws/cache
 
-# Bajar la seguridad a Nivel 1 para que acepte los certificados prehistóricos de AFIP
-RUN sed -i 's/SECLEVEL=2/SECLEVEL=1/g' /etc/ssl/openssl.cnf
+# Bajar seguridad a Nivel Cero para AFIP
+RUN sed -i 's/DEFAULT@SECLEVEL=2/DEFAULT@SECLEVEL=0/g' /etc/ssl/openssl.cnf
 
 # En Docker Desktop/Windows los volúmenes se montan con UID root.
 # Corremos como root en dev; en producción Linux el volumen se puede chown correctamente.
