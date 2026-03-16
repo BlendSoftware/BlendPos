@@ -241,6 +241,7 @@ class AFIPClient:
         try:
             # Inicializar cliente WSAA
             wsaa = WSAA()
+            wsaa.HOMO = self.homologacion
             
             # Cache file para el ticket de acceso (en subdirectorio tickets/)
             ta_file = self.tickets_dir / f"ta_{self.cuit_emisor}_wsfe.xml"
@@ -319,6 +320,7 @@ class AFIPClient:
         # Crear instancia WSFEv1 si no existe
         if self._wsfev1 is None:
             self._wsfev1 = WSFEv1()
+            self._wsfev1.HOMO = self.homologacion
             self._wsfev1.Conectar(
                 wsdl=self.wsfev1_url,
                 cache=str(self.wsdl_cache_dir)
