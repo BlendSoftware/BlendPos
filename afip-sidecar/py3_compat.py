@@ -4,28 +4,6 @@ Se importa al inicio para monkey-patch funciones que requieren bytes en Python 3
 """
 import hashlib
 import sys
-import ssl
-
-# --- PARCHE NUCLEAR PARA AFIP ---
-# Rebaja la seguridad de TODO el sistema a Nivel 0 para que pase el DH_KEY_TOO_SMALL
-_orig_context = ssl.create_default_context
-def _hacked_context(*args, **kwargs):
-    ctx = _orig_context(*args, **kwargs)
-    ctx.set_ciphers('DEFAULT@SECLEVEL=0')
-    return ctx
-ssl.create_default_context = _hacked_context
-
-_OrigSSL = ssl.SSLContext
-class AFIPSSLContext(_OrigSSL):
-    def __new__(cls, *args, **kwargs):
-        ctx = super().__new__(cls, *args, **kwargs)
-        try:
-            ctx.set_ciphers('DEFAULT@SECLEVEL=0')
-        except:
-            pass
-        return ctx
-ssl.SSLContext = AFIPSSLContext
-# --------------------------------
 
 # Guardar las funciones originales
 _orig_md5 = hashlib.md5
@@ -104,15 +82,3 @@ hashlib.sha256 = _wrapped_sha256
 hashlib.sha512 = _wrapped_sha512
 
 print("[py3_compat] Monkey-patch de hashlib aplicado para compatibilidad Python 2->3", file=sys.stderr)
-
-# --- PARCHE NUCLEAR PARA AFIP (SSL: DH_KEY_TOO_SMALL) ---
-import ssl
-import urllib.request
-
-# Crear un contexto SSL que acepte seguridad legacy (Nivel 1)
-ctx = ssl.create_default_context()
-ctx.set_ciphers('DEFAULT@SECLEVEL=1')
-# Forzar a Python a usar este contexto por defecto en TODAS las peticiones HTTPS
-ssl._create_default_https_context = lambda *args, **kwargs: ctx
-
-print("[py3_compat] Monkey-patch SSL aplicado: SECLEVEL bajado a 1 para AFIP", file=sys.stderr)
