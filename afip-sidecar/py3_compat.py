@@ -82,3 +82,20 @@ hashlib.sha256 = _wrapped_sha256
 hashlib.sha512 = _wrapped_sha512
 
 print("[py3_compat] Monkey-patch de hashlib aplicado para compatibilidad Python 2->3", file=sys.stderr)
+
+# --- PARCHE SEGURO PARA AFIP (DH_KEY_TOO_SMALL) ---
+import ssl
+
+_orig_create_default_context = ssl.create_default_context
+
+def _legacy_default_context(*args, **kwargs):
+    ctx = _orig_create_default_context(*args, **kwargs)
+    # Forzamos Nivel Cero solo en los cifrados, sin romper la clase base
+    ctx.set_ciphers('DEFAULT@SECLEVEL=0')
+    return ctx
+
+# Reemplazamos los creadores de contexto por defecto
+ssl.create_default_context = _legacy_default_context
+if hasattr(ssl, '_create_default_https_context'):
+    ssl._create_default_https_context = _legacy_default_context
+# --------------------------------------------------
