@@ -4,6 +4,28 @@ Se importa al inicio para monkey-patch funciones que requieren bytes en Python 3
 """
 import hashlib
 import sys
+import ssl
+
+# --- PARCHE NUCLEAR PARA AFIP ---
+# Rebaja la seguridad de TODO el sistema a Nivel 0 para que pase el DH_KEY_TOO_SMALL
+_orig_context = ssl.create_default_context
+def _hacked_context(*args, **kwargs):
+    ctx = _orig_context(*args, **kwargs)
+    ctx.set_ciphers('DEFAULT@SECLEVEL=0')
+    return ctx
+ssl.create_default_context = _hacked_context
+
+_OrigSSL = ssl.SSLContext
+class AFIPSSLContext(_OrigSSL):
+    def __new__(cls, *args, **kwargs):
+        ctx = super().__new__(cls, *args, **kwargs)
+        try:
+            ctx.set_ciphers('DEFAULT@SECLEVEL=0')
+        except:
+            pass
+        return ctx
+ssl.SSLContext = AFIPSSLContext
+# --------------------------------
 
 # Guardar las funciones originales
 _orig_md5 = hashlib.md5
