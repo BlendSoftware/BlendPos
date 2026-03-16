@@ -66,7 +66,7 @@ services:
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
       REDIS_URL: ${REDIS_URL}
     volumes:
-      - ./afip-sidecar/certs:/certs:ro
+      - ./afip-sidecar/certs:/certs
 
   frontend:
     build:
