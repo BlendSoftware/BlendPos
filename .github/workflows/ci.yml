@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [master, main]
 
+env:
+  REGISTRY: ghcr.io
+
 jobs:
   backend-test:
     runs-on: ubuntu-latest
@@ -86,6 +89,7 @@ jobs:
         working-directory: frontend
         run: npm run build
         env:
+          # Para los tests de GitHub Actions está bien dejar localhost
           VITE_API_URL: http://localhost:8080
           VITE_API_BASE: http://localhost:8080
 
@@ -93,23 +97,47 @@ jobs:
         working-directory: frontend
         run: npm test
 
-  docker-build:
+  build-and-push:
+    needs: [backend-test, frontend-lint]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build backend image
-        run: docker build -t blendpos-backend ./backend
+      - name: Loguearse en GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build frontend image
-        run: docker build -t blendpos-frontend ./frontend --build-arg VITE_API_URL=http://localhost:8080
+      - name: Formatear nombre del repo
+        run: echo "REPO_LOWER=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Build y Push Backend
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.REPO_LOWER }}/backend:latest ./backend
+          docker push ${{ env.REGISTRY }}/${{ env.REPO_LOWER }}/backend:latest
+
+      - name: Build y Push AFIP Sidecar
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.REPO_LOWER }}/afip-sidecar:latest ./afip-sidecar
+          docker push ${{ env.REGISTRY }}/${{ env.REPO_LOWER }}/afip-sidecar:latest
+
+      - name: Build y Push Frontend
+        run: |
+          # ¡ATENCIÓN ACÁ! Cambiá el dominio falso por la API de producción.
+          docker build -t ${{ env.REGISTRY }}/${{ env.REPO_LOWER }}/frontend:latest ./frontend --build-arg VITE_API_URL=https://api.blendpos.tech
+          docker push ${{ env.REGISTRY }}/${{ env.REPO_LOWER }}/frontend:latest
 
   deploy-vps:
     name: Deploy to VPS
-    needs: [backend-test, frontend-lint, docker-build]
+    needs: build-and-push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
 
     steps:
       - name: Executing remote SSH commands
@@ -119,7 +147,18 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
             cd ~/blendpos
+            
             git pull origin master
-            docker compose -f docker-compose.vps.yml build frontend backend
+            
+            # Loguearse con tu Personal Access Token (CR_PAT)
+            echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            export GITHUB_REPOSITORY=$REPO_LOWER
+            
+            # Bajar solo las imágenes ya construidas
+            docker compose -f docker-compose.vps.yml pull backend frontend afip-sidecar
+            
+            # Levantar con cero estrés
             docker compose -f docker-compose.vps.yml up -d --remove-orphans

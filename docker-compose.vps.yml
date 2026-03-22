@@ -27,9 +27,7 @@ services:
       retries: 5
 
   backend:
-    build:
-      context: ./backend # <--- Su propia carpeta
-      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY}/backend:latest
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -49,14 +47,15 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_FROM: ${SMTP_FROM}
     depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      afip-sidecar: { condition: service_healthy }
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      afip-sidecar:
+        condition: service_healthy
 
   afip-sidecar:
-    build:
-      context: ./afip-sidecar
-      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY}/afip-sidecar:latest
     restart: unless-stopped
     environment:
       AFIP_CUIT_EMISOR: ${AFIP_CUIT_EMISOR}
@@ -67,11 +66,16 @@ services:
       REDIS_URL: ${REDIS_URL}
     volumes:
       - ./afip-sidecar/certs:/certs
+    # Te agregué el healthcheck acá para que el backend no se quede colgado esperando
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY}/frontend:latest
     restart: unless-stopped
     ports:
       - "3000:80"
