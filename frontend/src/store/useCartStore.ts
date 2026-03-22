@@ -78,7 +78,13 @@ export const useCartStore = create<CartState>()((set, get) => ({
     lastAdded: null,
     selectedRowIndex: -1,
 
-    addItem: async (item) => {
+    addItem: async (raw) => {
+        // Defensive: ensure precio is always a number (backend sends decimal as string)
+        const item = {
+            ...raw,
+            precio: typeof raw.precio === 'number' ? raw.precio : parseFloat(raw.precio as unknown as string) || 0,
+        };
+
         // ── Stock validation ──────────────────────────────────────────────
         try {
             const localStock = await getLocalStock(item.id);

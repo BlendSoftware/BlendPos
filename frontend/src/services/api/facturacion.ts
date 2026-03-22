@@ -67,13 +67,15 @@ export async function fetchFacturaHTML(comprobanteId: string): Promise<string> {
  * @param comprobanteId - ID del comprobante
  * @param autoPrint - Si es true, el HTML abrirá automáticamente el diálogo de impresión
  * @param esCopia - Si es true, muestra "DUPLICADO" en lugar de "ORIGINAL"
+ * @param formato - Formato de salida: 'ticket' para impresora térmica 80mm, undefined para A4
  */
-export async function abrirFacturaHTML(comprobanteId: string, autoPrint = false, esCopia = false): Promise<void> {
+export async function abrirFacturaHTML(comprobanteId: string, autoPrint = false, esCopia = false, formato?: 'ticket'): Promise<void> {
     const token = tokenStore.getAccessToken();
     const baseUrl = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000';
     const params = new URLSearchParams();
     if (autoPrint) params.set('autoprint', 'true');
     if (esCopia) params.set('copia', 'true');
+    if (formato) params.set('formato', formato);
     const queryParam = params.toString() ? `?${params.toString()}` : '';
     const url = `${baseUrl}/v1/facturacion/html/${comprobanteId}${queryParam}`;
 

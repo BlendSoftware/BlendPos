@@ -23,7 +23,7 @@
 .storeSubtitle {
     font-size: 11px;
     margin: 0;
-    color: #666;
+    color: #222;
 }
 
 .section {
@@ -34,12 +34,12 @@
     display: flex;
     justify-content: space-between;
     margin: 4px 0;
-    font-size: 11px;
+    font-size: 13px;
 }
 
 .label {
-    font-weight: normal;
-    color: #333;
+    font-weight: 600;
+    color: #000;
 }
 
 .value {
@@ -48,7 +48,7 @@
 }
 
 .totalRow {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: bold;
     margin-top: 8px;
     padding-top: 8px;
@@ -68,7 +68,7 @@
 .itemsTable {
     width: 100%;
     border-collapse: collapse;
-    font-size: 10px;
+    font-size: 12px;
     margin: 5px 0;
 }
 
@@ -77,12 +77,12 @@
     padding: 4px 2px;
     font-weight: bold;
     text-align: left;
-    font-size: 10px;
+    font-size: 12px;
 }
 
 .itemsTable tbody td {
     padding: 3px 2px;
-    font-size: 10px;
+    font-size: 12px;
 }
 
 .pagosMixtos {
@@ -99,11 +99,11 @@
 
 .footer p {
     margin: 5px 0;
-    font-size: 11px;
+    font-size: 12px;
 }
 
 .small {
-    font-size: 9px !important;
+    font-size: 10px !important;
     color: #666;
 }
 
@@ -126,37 +126,37 @@
         width: 80mm;
         padding: 5mm;
         margin: 0;
-        font-size: 11px;
+        font-size: 13px;
         page-break-after: avoid;
     }
 
     .storeName {
-        font-size: 18px;
+        font-size: 20px;
     }
 
     .row {
-        font-size: 10px;
+        font-size: 12px;
     }
 
     .totalRow {
-        font-size: 13px;
+        font-size: 16px;
     }
 
     .itemsTable {
-        font-size: 9px;
+        font-size: 12px;
     }
 
     .itemsTable thead th,
     .itemsTable tbody td {
-        font-size: 9px;
+        font-size: 12px;
     }
 
     .footer p {
-        font-size: 10px;
+        font-size: 11px;
     }
 
     .small {
-        font-size: 8px !important;
+        font-size: 10px !important;
     }
 
     /* Ocultar elementos no necesarios en la impresión */
@@ -171,7 +171,7 @@
     .ticket {
         max-width: 58mm;
         width: 58mm;
-        font-size: 10px;
+        font-size: 11px;
     }
 
     .storeName {
@@ -182,11 +182,11 @@
     .itemsTable,
     .itemsTable thead th,
     .itemsTable tbody td {
-        font-size: 8px;
+        font-size: 10px;
     }
 
     .totalRow {
-        font-size: 11px;
+        font-size: 14px;
     }
 
     @page {

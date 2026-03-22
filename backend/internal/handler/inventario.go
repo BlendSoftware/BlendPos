@@ -447,8 +447,14 @@ func (h *FacturacionHandler) ObtenerHTML(c *gin.Context) {
 	// ?copia=true      → muestra el label "DUPLICADO" en lugar de "ORIGINAL"
 	autoPrint := c.Query("autoprint") == "true"
 	esCopia := c.Query("copia") == "true"
+	formato := c.Query("formato") // "ticket" for thermal printer format
 
-	htmlContent, err := infra.GenerateFacturaHTML(venta, comp, fiscalCfg, autoPrint, esCopia)
+	var htmlContent string
+	if formato == "ticket" {
+		htmlContent, err = infra.GenerateFacturaTicketHTML(venta, comp, fiscalCfg, autoPrint, esCopia)
+	} else {
+		htmlContent, err = infra.GenerateFacturaHTML(venta, comp, fiscalCfg, autoPrint, esCopia)
+	}
 	if err != nil {
 		log.Error().Err(err).Str("comprobante_id", id.String()).Msg("ObtenerHTML: generation failed")
 		c.JSON(http.StatusInternalServerError, apierror.New("Error al generar HTML de la factura"))

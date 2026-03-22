@@ -57,18 +57,55 @@ func promocionToResponse(p *model.Promocion) dto.PromocionResponse {
 	if cantReq < 1 {
 		cantReq = 1
 	}
+
+	modo := p.Modo
+	if modo == "" {
+		modo = "clasico"
+	}
+
+	// Map grupos
+	grupos := make([]dto.PromocionGrupoResponse, 0, len(p.Grupos))
+	for _, g := range p.Grupos {
+		gProds := make([]dto.PromocionProducto, 0, len(g.Productos))
+		for _, pr := range g.Productos {
+			gProds = append(gProds, dto.PromocionProducto{
+				ID:          pr.ID.String(),
+				Nombre:      pr.Nombre,
+				PrecioVenta: pr.PrecioVenta.InexactFloat64(),
+			})
+		}
+		gr := dto.PromocionGrupoResponse{
+			ID:                g.ID.String(),
+			Nombre:            g.Nombre,
+			Orden:             g.Orden,
+			CantidadRequerida: g.CantidadRequerida,
+			TipoSeleccion:     g.TipoSeleccion,
+			Productos:         gProds,
+		}
+		if g.CategoriaID != nil {
+			catID := g.CategoriaID.String()
+			gr.CategoriaID = &catID
+		}
+		if g.Categoria != nil {
+			gr.CategoriaNombre = &g.Categoria.Nombre
+		}
+		grupos = append(grupos, gr)
+	}
+
 	return dto.PromocionResponse{
 		ID:                p.ID.String(),
 		Nombre:            p.Nombre,
 		Descripcion:       p.Descripcion,
 		Tipo:              p.Tipo,
 		Valor:             p.Valor.InexactFloat64(),
+		Modo:              modo,
 		CantidadRequerida: cantReq,
 		FechaInicio:       p.FechaInicio.Format(time.RFC3339),
 		FechaFin:          p.FechaFin.Format(time.RFC3339),
 		Activa:            p.Activa,
 		Estado:            calcEstado(p),
 		Productos:         prods,
+		Grupos:            grupos,
 		CreatedAt:         p.CreatedAt.Format(time.RFC3339),
 	}
 }
@@ -106,6 +143,41 @@ func parseFechas(inicio, fin string) (time.Time, time.Time, error) {
 	return fi, ff, nil
 }
 
+// buildGrupoModels converts DTO grupo requests into model structs ready for persistence.
+func buildGrupoModels(grupos []dto.PromocionGrupoRequest) ([]model.PromocionGrupo, error) {
+	out := make([]model.PromocionGrupo, 0, len(grupos))
+	for _, g := range grupos {
+		prodIDs, err := parseProductoIDs(g.ProductoIDs)
+		if err != nil {
+			return nil, err
+		}
+		prods := make([]model.Producto, 0, len(prodIDs))
+		for _, pid := range prodIDs {
+			prods = append(prods, model.Producto{ID: pid})
+		}
+
+		mg := model.PromocionGrupo{
+			Nombre:            g.Nombre,
+			Orden:             g.Orden,
+			CantidadRequerida: g.CantidadRequerida,
+			TipoSeleccion:     g.TipoSeleccion,
+			Productos:         prods,
+		}
+		if mg.CantidadRequerida < 1 {
+			mg.CantidadRequerida = 1
+		}
+		if g.CategoriaID != nil && *g.CategoriaID != "" {
+			catID, err := uuid.Parse(*g.CategoriaID)
+			if err != nil {
+				return nil, fmt.Errorf("categoria_id inválido: %s", *g.CategoriaID)
+			}
+			mg.CategoriaID = &catID
+		}
+		out = append(out, mg)
+	}
+	return out, nil
+}
+
 // ── Service methods ──────────────────────────────────────────────────────────
 
 func (s *promocionService) Crear(ctx context.Context, req dto.CrearPromocionRequest) (*dto.PromocionResponse, error) {
@@ -113,31 +185,49 @@ func (s *promocionService) Crear(ctx context.Context, req dto.CrearPromocionRequ
 	if err != nil {
 		return nil, err
 	}
-	prodIDs, err := parseProductoIDs(req.ProductoIDs)
-	if err != nil {
-		return nil, err
-	}
 
-	// Build the Productos slice for GORM's many2many
-	prods := make([]model.Producto, 0, len(prodIDs))
-	for _, id := range prodIDs {
-		prods = append(prods, model.Producto{ID: id})
+	modo := req.Modo
+	if modo == "" {
+		modo = "clasico"
 	}
 
 	qtyReq := req.CantidadRequerida
 	if qtyReq < 1 {
 		qtyReq = 1
 	}
+
 	p := &model.Promocion{
 		Nombre:            req.Nombre,
 		Descripcion:       req.Descripcion,
 		Tipo:              req.Tipo,
 		Valor:             decimal.NewFromFloat(req.Valor),
+		Modo:              modo,
 		CantidadRequerida: qtyReq,
 		FechaInicio:       fi,
 		FechaFin:          ff,
 		Activa:            true,
-		Productos:         prods,
+	}
+
+	if modo == "grupos" {
+		if len(req.Grupos) < 2 {
+			return nil, errors.New("las promociones por grupos requieren al menos 2 grupos")
+		}
+		grupoModels, err := buildGrupoModels(req.Grupos)
+		if err != nil {
+			return nil, err
+		}
+		p.Grupos = grupoModels
+	} else {
+		// Classic mode: products via many-to-many
+		prodIDs, err := parseProductoIDs(req.ProductoIDs)
+		if err != nil {
+			return nil, err
+		}
+		prods := make([]model.Producto, 0, len(prodIDs))
+		for _, id := range prodIDs {
+			prods = append(prods, model.Producto{ID: id})
+		}
+		p.Productos = prods
 	}
 
 	if err := s.repo.Create(ctx, p); err != nil {
@@ -192,15 +282,17 @@ func (s *promocionService) Actualizar(ctx context.Context, id string, req dto.Ac
 	if err != nil {
 		return nil, err
 	}
-	prodIDs, err := parseProductoIDs(req.ProductoIDs)
-	if err != nil {
-		return nil, err
+
+	modo := req.Modo
+	if modo == "" {
+		modo = "clasico"
 	}
 
 	p.Nombre = req.Nombre
 	p.Descripcion = req.Descripcion
 	p.Tipo = req.Tipo
 	p.Valor = decimal.NewFromFloat(req.Valor)
+	p.Modo = modo
 	p.FechaInicio = fi
 	p.FechaFin = ff
 	p.Activa = req.Activa
@@ -210,8 +302,27 @@ func (s *promocionService) Actualizar(ctx context.Context, id string, req dto.Ac
 	}
 	p.CantidadRequerida = qtyReqUpd
 
-	if err := s.repo.Update(ctx, p, prodIDs); err != nil {
-		return nil, err
+	if modo == "grupos" {
+		if len(req.Grupos) < 2 {
+			return nil, errors.New("las promociones por grupos requieren al menos 2 grupos")
+		}
+		grupoModels, err := buildGrupoModels(req.Grupos)
+		if err != nil {
+			return nil, err
+		}
+		// Update scalar fields + replace grupos
+		if err := s.repo.UpdateWithGrupos(ctx, p, grupoModels); err != nil {
+			return nil, err
+		}
+	} else {
+		// Classic mode
+		prodIDs, err := parseProductoIDs(req.ProductoIDs)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.repo.Update(ctx, p, prodIDs); err != nil {
+			return nil, err
+		}
 	}
 
 	full, err := s.repo.FindByID(ctx, uid)

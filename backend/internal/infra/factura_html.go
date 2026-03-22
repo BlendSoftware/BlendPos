@@ -408,6 +408,157 @@ const facturaHTMLTmpl = `<!DOCTYPE html>
 </body>
 </html>`
 
+// ─── Ticket template (80mm thermal printer) ──────────────────────────────────
+// Compact single-column layout optimized for 80mm thermal printers.
+// Uses the same facturaHTMLData struct as the A4 template.
+
+const facturaTicketHTMLTmpl = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>{{.TipoNombre}} {{.TipoLetra}} {{.NumeroFormateado}}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #111; background: #e0e4ea; display: flex; justify-content: center; padding: 10mm; }
+    @page { size: 80mm auto; margin: 3mm; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .no-print { display: none !important; }
+      .ticket-wrap { box-shadow: none !important; margin: 0 !important; }
+    }
+    .no-print { text-align: center; margin-bottom: 10px; }
+    .btn-print {
+      padding: 7px 24px; background: #2563eb; color: #fff; border: none;
+      border-radius: 5px; cursor: pointer; font-size: 13px; font-weight: 600;
+      font-family: Arial, sans-serif;
+    }
+    .btn-print:hover { background: #1d4ed8; }
+    .ticket-wrap { width: 80mm; max-width: 80mm; background: #fff; padding: 4mm; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+    .header { text-align: center; margin-bottom: 6px; }
+    .store-name { font-size: 16px; font-weight: bold; }
+    .store-info { font-size: 11px; color: #555; margin-top: 2px; }
+    .tipo-letra { font-size: 36px; font-weight: bold; text-align: center; border: 2px solid #000; width: 48px; height: 48px; line-height: 48px; margin: 6px auto; }
+    .divider { border-top: 1px dashed #555; margin: 6px 0; }
+    .divider-solid { border-top: 2px solid #000; margin: 6px 0; }
+    .row { display: flex; justify-content: space-between; font-size: 11px; margin: 2px 0; }
+    .row .label { color: #444; }
+    .row .value { font-weight: bold; text-align: right; }
+    .section-title { font-size: 11px; font-weight: bold; text-transform: uppercase; margin: 4px 0 2px; }
+    .items-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+    .items-table thead th { font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding: 2px 1px; text-align: left; }
+    .items-table thead th:not(:first-child) { text-align: right; }
+    .items-table tbody td { font-size: 12px; padding: 2px 1px; }
+    .items-table tbody td:not(:first-child) { text-align: right; }
+    .items-table .name-col { max-width: 40mm; word-break: break-word; }
+    .total-row { font-size: 16px; font-weight: bold; margin-top: 4px; padding-top: 4px; border-top: 2px solid #000; display: flex; justify-content: space-between; }
+    .cae-section { font-size: 11px; margin-top: 6px; }
+    .cae-section .cae-label { font-weight: bold; }
+    .barcode { text-align: center; margin: 6px 0; }
+    .barcode img { max-width: 70mm; height: auto; }
+    .barcode-text { font-size: 9px; color: #555; text-align: center; word-break: break-all; }
+    .legal { font-size: 9px; color: #666; text-align: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #555; line-height: 1.4; }
+  </style>
+</head>
+<body>
+<div class="ticket-wrap">
+  <div class="no-print"><button class="btn-print" onclick="window.print()">Imprimir</button></div>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="store-name">{{.RazonSocial}}</div>
+    {{if .Domicilio}}<div class="store-info">{{.Domicilio}}</div>{{end}}
+    <div class="store-info">CUIT: {{.CUIT}}</div>
+    <div class="store-info">{{.CondicionFiscal}}</div>
+  </div>
+
+  <!-- TIPO COMPROBANTE -->
+  <div class="tipo-letra">{{.TipoLetra}}</div>
+  <div style="text-align:center;font-size:11px;font-weight:bold;margin-bottom:4px;">{{.TipoNombre}} {{.TipoLetra}} &mdash; C&#243;d. {{.TipoCodigo}}</div>
+
+  <div class="divider-solid"></div>
+
+  <!-- DATOS COMPROBANTE -->
+  <div class="row"><span class="label">N&#186;</span><span class="value">{{.NumeroFormateado}}</span></div>
+  <div class="row"><span class="label">Fecha</span><span class="value">{{.FechaStr}}</span></div>
+  <div class="row"><span class="label">Copia</span><span class="value">{{.CopiaLabel}}</span></div>
+
+  <div class="divider"></div>
+
+  <!-- RECEPTOR -->
+  <div class="section-title">Receptor</div>
+  <div class="row"><span class="label">Nombre</span><span class="value">{{.ReceptorNombre}}</span></div>
+  {{if .ReceptorDomicilio}}<div class="row"><span class="label">Domicilio</span><span class="value">{{.ReceptorDomicilio}}</span></div>{{end}}
+  {{if .ReceptorDocNumero}}<div class="row"><span class="label">{{.ReceptorDocLabel}}</span><span class="value">{{.ReceptorDocNumero}}</span></div>{{end}}
+  <div class="row"><span class="label">IVA</span><span class="value">{{.ReceptorCondicionIVA}}</span></div>
+  {{if .CondicionPago}}<div class="row"><span class="label">Pago</span><span class="value">{{.CondicionPago}}</span></div>{{end}}
+
+  <div class="divider"></div>
+
+  <!-- ITEMS -->
+  <table class="items-table">
+    <thead><tr><th class="name-col">Producto</th><th>Cant</th><th>Total</th></tr></thead>
+    <tbody>
+    {{range .Items}}
+      <tr>
+        <td class="name-col">{{.Nombre}}</td>
+        <td>{{.Cantidad}}</td>
+        <td>{{.PrecioTotal}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+
+  <div class="divider"></div>
+
+  <!-- TOTALES -->
+  {{if .BonificacionTotalFormateado}}
+  <div class="row"><span class="label">Subtotal</span><span class="value">{{.SubtotalBrutoFormateado}}</span></div>
+  <div class="row"><span class="label">Bonificaci&#243;n</span><span class="value">-{{.BonificacionTotalFormateado}}</span></div>
+  {{end}}
+  <div class="total-row"><span>TOTAL</span><span>$ {{.TotalFormateado}}</span></div>
+  {{if .TotalEnLetras}}<div style="font-size:10px;color:#555;margin-top:2px;">Son pesos: {{.TotalEnLetras}}</div>{{end}}
+
+  {{if not .EsTicket}}
+  <div class="divider"></div>
+
+  <!-- CAE -->
+  <div class="cae-section">
+    {{if .CAE}}
+    <div><span class="cae-label">CAE N&#186;:</span> {{.CAE}}</div>
+    {{if .CAEVencimiento}}<div><span class="cae-label">Vto. CAE:</span> {{.CAEVencimiento}}</div>{{end}}
+    {{else}}
+    <div style="color:#c00;">Pendiente de autorizaci&#243;n ARCA / AFIP</div>
+    {{end}}
+  </div>
+
+  {{if .BarcodeDataURL}}
+  <div class="barcode">
+    <img src="{{.BarcodeDataURL}}" alt="C&#243;digo de barras CAE">
+    {{if .BarcodeText}}<div class="barcode-text">{{.BarcodeText}}</div>{{end}}
+  </div>
+  {{end}}
+  {{end}}
+
+  <!-- PIE LEGAL -->
+  <div class="legal">
+    {{if .EsTicket}}
+    Este comprobante no tiene validez fiscal.
+    {{else}}
+    Comprobante autorizado &mdash; Res. Gral. ARCA (ex AFIP)<br>
+    Verificaci&#243;n: www.afip.gob.ar/genericos/consultaCAE
+    {{end}}
+  </div>
+
+</div><!-- /ticket-wrap -->
+
+{{if .AutoPrint}}
+<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},300)});</script>
+{{end}}
+
+</body>
+</html>`
+
 // ─── Email-safe template (table layout, inline styles) ───────────────────────
 // Gmail and Outlook strip CSS Grid / Flexbox from email bodies.
 // This template uses only <table> for layout and inline styles so it renders
@@ -988,6 +1139,23 @@ func GenerateFacturaHTML(venta *model.Venta, comp *model.Comprobante, config *mo
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("factura_html: execute template: %w", err)
+	}
+	return buf.String(), nil
+}
+
+// GenerateFacturaTicketHTML generates a ticket-format (80mm) HTML for a fiscal invoice.
+func GenerateFacturaTicketHTML(venta *model.Venta, comp *model.Comprobante, config *model.ConfiguracionFiscal, autoPrint bool, esCopia bool) (string, error) {
+	tmpl, err := template.New("factura-ticket").Parse(facturaTicketHTMLTmpl)
+	if err != nil {
+		return "", fmt.Errorf("factura_html: parse ticket template: %w", err)
+	}
+	data, err := buildFacturaData(venta, comp, config, autoPrint, esCopia)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("factura_html: execute ticket template: %w", err)
 	}
 	return buf.String(), nil
 }

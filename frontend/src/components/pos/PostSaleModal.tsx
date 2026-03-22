@@ -158,24 +158,24 @@ export function PostSaleModal() {
         .ticket { width: 76mm; max-width: 76mm; background: white; padding: 5mm; }
         .header { text-align: center; margin-bottom: 12px; }
         .store-name { font-size: 20px; font-weight: bold; margin-bottom: 3px; }
-        .store-sub { font-size: 10px; color: #555; margin-bottom: 2px; }
-        .store-addr { font-size: 9px; color: #555; margin-bottom: 1px; }
+        .store-sub { font-size: 11px; color: #222; margin-bottom: 2px; }
+        .store-addr { font-size: 10px; color: #222; margin-bottom: 1px; }
         .divider { border-top: 1px dashed #555; margin: 8px 0; }
         .divider-solid { border-top: 2px solid #000; margin: 8px 0; }
         .section { margin: 6px 0; }
-        .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 11px; }
-        .label { color: #444; }
+        .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 13px; }
+        .label { color: #000; font-weight: 600; }
         .value { font-weight: bold; text-align: right; }
         .items-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
-        .items-table thead th { font-size: 10px; font-weight: bold; border-bottom: 1px solid #000; padding: 3px 2px; text-align: left; }
+        .items-table thead th { font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding: 3px 2px; text-align: left; }
         .items-table thead th:not(:first-child) { text-align: right; }
-        .items-table tbody td { font-size: 10px; padding: 3px 2px; }
+        .items-table tbody td { font-size: 12px; padding: 3px 2px; }
         .items-table tbody td:not(:first-child) { text-align: right; }
         .items-table .name-col { max-width: 36mm; word-break: break-word; }
-        .total-row { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; }
+        .total-row { font-size: 18px; font-weight: bold; margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; }
         .pagos-mixtos { margin-left: 8px; }
         .footer { text-align: center; margin-top: 14px; padding-top: 10px; border-top: 1px dashed #555; }
-        .footer p { font-size: 11px; margin: 3px 0; }
+        .footer p { font-size: 12px; margin: 3px 0; }
         .no-print { text-align: center; margin-bottom: 14px; }
         .btn-print { padding: 9px 22px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-family: sans-serif; }
         @media print { body { padding: 0; } .no-print { display: none !important; } @page { size: 80mm auto; margin: 5mm; } }
@@ -254,14 +254,14 @@ export function PostSaleModal() {
         setPrinting(false);
     };
 
-    // Abre el HTML de la factura (ORIGINAL o DUPLICADO)
-    const handleOpenFactura = async (esCopia: boolean) => {
+    // Abre el HTML de la factura (ORIGINAL o DUPLICADO, opcionalmente formato ticket)
+    const handleOpenFactura = async (esCopia: boolean, formato?: 'ticket') => {
         if (!comprobante) return;
 
         if (esCopia) setOpeningDuplicado(true);
         else setOpeningFactura(true);
         try {
-            await abrirFacturaHTML(comprobante.id, false, esCopia);
+            await abrirFacturaHTML(comprobante.id, false, esCopia, formato);
         } catch (err) {
             notifications.show({
                 title: 'No se pudo abrir la factura',
@@ -572,6 +572,18 @@ export function PostSaleModal() {
                                 fullWidth
                             >
                                 Imprimir DUPLICADO
+                            </Button>
+
+                            <Button
+                                size="lg"
+                                leftSection={<Receipt size={18} />}
+                                onClick={() => handleOpenFactura(false, 'ticket')}
+                                loading={openingFactura}
+                                variant="outline"
+                                color="blue"
+                                fullWidth
+                            >
+                                Imprimir formato Ticket
                             </Button>
                         </>
                     )}

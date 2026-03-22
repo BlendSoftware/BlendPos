@@ -158,7 +158,14 @@ export function PosTerminal() {
                     }
                     const local = await findCatalogProductByBarcode(trimmed);
                     if (local) {
-                        addItem({ id: local.id, nombre: apiProduct.nombre, precio: apiProduct.precio_venta, codigoBarras: trimmed });
+                        addItem({
+                            id: local.id,
+                            nombre: apiProduct.nombre,
+                            precio: typeof apiProduct.precio_venta === 'number'
+                                ? apiProduct.precio_venta
+                                : parseFloat(apiProduct.precio_venta as unknown as string),
+                            codigoBarras: trimmed,
+                        });
                         return true;
                     }
                 } catch {
