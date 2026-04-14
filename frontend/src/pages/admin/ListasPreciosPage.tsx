@@ -95,7 +95,7 @@ export function ListasPreciosPage() {
         try {
             const data = await obtenerListaPrecios(id);
             setDetalle(data);
-        } catch (err) {
+        } catch {
             notifications.show({ title: 'Error', message: 'No se pudo cargar el detalle', color: 'red' });
         } finally {
             setDetalleLoading(false);
