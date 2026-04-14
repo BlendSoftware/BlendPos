@@ -16,14 +16,36 @@ Three-service architecture:
 
 ### Backend Layers
 
+All backend code lives under `backend/internal/`:
+
 ```
-handler/ (HTTP, Gin)  →  service/ (business logic)  →  repository/ (GORM data access)
-                                                              ↓
-middleware/ (JWT, CORS, errors)    infra/ (DB, Redis, AFIP client, mailer)
-                                  worker/ (goroutine pool: invoicing, email)
+internal/
+├── handler/     HTTP handlers (Gin). One file per domain (ventas, caja, productos…)
+├── service/     Business logic. Services depend on repository interfaces.
+├── repository/  GORM data access.
+├── model/       GORM models. Decimal fields use shopspring/decimal.
+├── dto/         Request/response structs for JSON binding.
+├── apierror/    Structured API error types.
+├── config/      Viper-based config (config.go) — loaded from env vars.
+├── middleware/   JWT auth, CORS, error recovery, rate limiting.
+├── infra/       DB, Redis, AFIP HTTP client, circuit breaker, mailer, PDF generation.
+├── router/      Single router.go wires all routes. Deps struct injected from main.go.
+└── worker/      Async job processing (see below).
 ```
 
-All dependencies are injected in `cmd/server/main.go` (composition root). Services depend on repository interfaces.
+Composition root: `cmd/server/main.go` — creates all repos, services, workers, and injects into `router.Deps`.
+
+### Worker System
+
+Separated worker pools so invoicing and email don't starve each other:
+
+- `worker/pool.go` — goroutine pool with configurable sizes per job type
+- `worker/facturacion_worker.go` — AFIP invoice processing (backend → sidecar POST)
+- `worker/email_worker.go` — async email dispatch via SMTP
+- `worker/retry_cron.go` — periodic retry of pending AFIP comprobantes
+- `worker/dlq.go` — dead letter queue for permanently failed jobs
+
+The AFIP sidecar HTTP client uses a **circuit breaker** (`infra/circuit_breaker.go`) to avoid cascading failures when AFIP is down.
 
 ### Key Architectural Invariants
 
@@ -32,13 +54,19 @@ All dependencies are injected in `cmd/server/main.go` (composition root). Servic
 - **Immutable cash events**: Cash movements are never deleted — cancellations create inverse movements.
 - **Async invoicing**: Sales confirm instantly. AFIP invoicing happens async via worker pool → sidecar POST. AFIP failures must NEVER block sales.
 - **Schema migrations only**: Never use GORM AutoMigrate. All schema changes via golang-migrate SQL files in `backend/migrations/`.
+- **Decimal as string**: Backend uses `shopspring/decimal` for all monetary amounts. These serialize as strings in JSON — frontend must `parseFloat()`.
 
 ### Frontend Architecture
 
-- Zustand stores in `src/store/`: auth, cart, sale, caja, UI, printer
-- Offline DB in `src/offline/`: Dexie.js with sync queue for pending sales
-- API client in `src/services/api/`
-- Amounts come from backend as strings (`shopspring/decimal`) — frontend must `parseFloat()`
+- **Zustand stores** in `src/store/`: auth, cart, sale, caja, POSUI, printer, promociones, tokenStore
+- **Offline DB** in `src/offline/`: Dexie.js (`db.ts`) with offline catalog (`catalog.ts`) and sync queue (`sync.ts`) for pending sales
+- **API client** in `src/services/api/`
+- **Thermal printing** via `src/services/ThermalPrinterService.ts` (ESC/POS)
+- **Pages**: `src/pages/PosTerminal.tsx` (main POS view) + `src/pages/admin/` (back-office)
+
+### Swagger Docs
+
+Backend uses swag annotations. Generated docs in `backend/docs/`. Available at `/swagger/index.html` when running.
 
 ## Commands
 
@@ -76,9 +104,9 @@ gofmt -w .                                # Format
 ```bash
 cd frontend
 npm run dev            # Dev server (:5173)
-npm run build          # Production build
-npm run lint           # ESLint + TypeScript
-npm run test           # Vitest
+npm run build          # Production build (runs tsc -b first)
+npm run lint           # ESLint
+npm run test           # Vitest (single run)
 npm run test:watch     # Watch mode
 npm run test:coverage  # Coverage report
 ```
@@ -89,7 +117,7 @@ npm run test:coverage  # Coverage report
 cd backend
 migrate -path migrations -database "$DATABASE_URL" up          # Apply all
 migrate -path migrations -database "$DATABASE_URL" down 1      # Rollback one
-migrate create -ext sql -dir migrations -seq description       # Create new
+migrate create -ext sql -dir migrations -seq description       # Create new pair
 ```
 
 ### Production
@@ -112,7 +140,7 @@ Backend serves on `:8000`, frontend on `:5173`, AFIP sidecar on `:8001`.
 
 GitHub Actions (`.github/workflows/ci.yml`): test backend → lint frontend → build Docker images to GHCR → deploy to VPS via SSH. Triggers on push to master/main.
 
-## SDD Reference Documents
+## Reference Documents
 
 Planning specs live in `Go/`:
 - `especificacion.md` — Features with Given/When/Then acceptance criteria

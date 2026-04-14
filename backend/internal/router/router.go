@@ -41,7 +41,8 @@ type Deps struct {
 	CategoriaSvc    service.CategoriaService
 	AuditSvc        service.AuditService
 	CompraSvc       service.CompraService
-	PromocionSvc    service.PromocionService
+	PromocionSvc      service.PromocionService
+	ListaPreciosSvc   service.ListaPreciosService
 
 	// Repos still needed by handlers that bypass the service layer
 	ProductoRepo        repository.ProductoRepository
@@ -95,6 +96,7 @@ func New(d Deps) *gin.Engine {
 	configFiscalH := handler.NewConfiguracionFiscalHandler(d.ConfigFiscalSvc)
 	comprasH := handler.NewCompraHandler(d.CompraSvc)
 	promocionesH := handler.NewPromocionHandler(d.PromocionSvc)
+	listaPreciosH := handler.NewListaPreciosHandler(d.ListaPreciosSvc, d.ConfigFiscalSvc, cfg.PDFStoragePath)
 
 	// ── Routes ───────────────────────────────────────────────────────────────
 
@@ -239,6 +241,20 @@ func New(d Deps) *gin.Engine {
 			promos.POST("", promocionesH.Crear)
 			promos.PUT(":id", promocionesH.Actualizar)
 			promos.DELETE(":id", promocionesH.Eliminar)
+		}
+
+		// Listas de precios diferenciales — administrador only
+		lp := v1.Group("/listas-precios", middleware.RequireRole("administrador"))
+		{
+			lp.GET("", listaPreciosH.Listar)
+			lp.POST("", listaPreciosH.Crear)
+			lp.GET("/:id", listaPreciosH.ObtenerPorID)
+			lp.PUT("/:id", listaPreciosH.Actualizar)
+			lp.DELETE("/:id", listaPreciosH.Eliminar)
+			lp.POST("/:id/productos", listaPreciosH.AsignarProducto)
+			lp.DELETE("/:id/productos/:productoId", listaPreciosH.QuitarProducto)
+			lp.POST("/:id/aplicar-masivo", listaPreciosH.AplicarMasivo)
+			lp.GET("/:id/pdf", listaPreciosH.DescargarPDF)
 		}
 	}
 

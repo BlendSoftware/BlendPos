@@ -34,6 +34,7 @@ const NuevaCompraPage = lazy(() => import('./pages/admin/NuevaCompraPage').then(
 const DetalleCompraPage = lazy(() => import('./pages/admin/DetalleCompraPage').then(m => ({ default: m.DetalleCompraPage })));
 const GuiaAfipPage = lazy(() => import('./pages/admin/GuiaAfipPage').then(m => ({ default: m.GuiaAfipPage })));
 const ConfiguracionFiscalPage = lazy(() => import('./pages/admin/ConfiguracionFiscalPage').then(m => ({ default: m.ConfiguracionFiscalPage })));
+const ListasPreciosPage = lazy(() => import('./pages/admin/ListasPreciosPage').then(m => ({ default: m.ListasPreciosPage })));
 
 function LoadingSpinner() {
     return <Center h="100vh"><Loader size="xl" /></Center>;
@@ -154,6 +155,13 @@ function App() {
                             <RouteErrorBoundary>
                                 <Suspense fallback={<LoadingSpinner />}>
                                     <ConfiguracionFiscalPage />
+                                </Suspense>
+                            </RouteErrorBoundary>
+                        } />
+                        <Route path="listas-precios" element={
+                            <RouteErrorBoundary>
+                                <Suspense fallback={<LoadingSpinner />}>
+                                    <ListasPreciosPage />
                                 </Suspense>
                             </RouteErrorBoundary>
                         } />
