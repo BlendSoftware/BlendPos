@@ -16,11 +16,11 @@ type ActualizarListaPreciosRequest struct {
 
 type AsignarProductoRequest struct {
 	ProductoID          string          `json:"producto_id"           validate:"required,uuid"`
-	DescuentoPorcentaje decimal.Decimal `json:"descuento_porcentaje"  validate:"required"`
+	DescuentoPorcentaje decimal.Decimal `json:"descuento_porcentaje"`
 }
 
 type AplicarMasivoRequest struct {
-	DescuentoPorcentaje decimal.Decimal `json:"descuento_porcentaje" validate:"required"`
+	DescuentoPorcentaje decimal.Decimal `json:"descuento_porcentaje"`
 }
 
 // ─── Filter / Pagination ─────────────────────────────────────────────────────
