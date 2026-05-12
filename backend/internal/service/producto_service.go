@@ -95,20 +95,21 @@ func toProductoResponse(p *model.Producto) *dto.ProductoResponse {
 		provStr = &s
 	}
 	return &dto.ProductoResponse{
-		ID:           p.ID.String(),
-		CodigoBarras: p.CodigoBarras,
-		Nombre:       p.Nombre,
-		Descripcion:  p.Descripcion,
-		Categoria:    p.Categoria,
-		PrecioCosto:  p.PrecioCosto,
-		PrecioVenta:  p.PrecioVenta,
-		MargenPct:    calcMargen(p.PrecioCosto, p.PrecioVenta),
-		StockActual:  p.StockActual,
-		StockMinimo:  p.StockMinimo,
-		UnidadMedida: p.UnidadMedida,
-		EsPadre:      p.EsPadre,
-		Activo:       p.Activo,
-		ProveedorID:  provStr,
+		ID:              p.ID.String(),
+		CodigoBarras:    p.CodigoBarras,
+		Nombre:          p.Nombre,
+		Descripcion:     p.Descripcion,
+		Categoria:       p.Categoria,
+		PrecioCosto:     p.PrecioCosto,
+		PrecioVenta:     p.PrecioVenta,
+		PrecioMayorista: p.PrecioMayorista,
+		MargenPct:       calcMargen(p.PrecioCosto, p.PrecioVenta),
+		StockActual:     p.StockActual,
+		StockMinimo:     p.StockMinimo,
+		UnidadMedida:    p.UnidadMedida,
+		EsPadre:         p.EsPadre,
+		Activo:          p.Activo,
+		ProveedorID:     provStr,
 	}
 }
 
@@ -130,19 +131,20 @@ func (s *productoService) Crear(ctx context.Context, req dto.CrearProductoReques
 	}
 
 	p := &model.Producto{
-		CodigoBarras: req.CodigoBarras,
-		Nombre:       req.Nombre,
-		Descripcion:  req.Descripcion,
-		Categoria:    req.Categoria,
-		CategoriaID:  catID,
-		PrecioCosto:  req.PrecioCosto,
-		PrecioVenta:  req.PrecioVenta,
-		StockActual:  req.StockActual,
-		StockMinimo:  req.StockMinimo,
-		UnidadMedida: req.UnidadMedida,
-		EsPadre:      false,
-		Activo:       true,
-		ProveedorID:  provID,
+		CodigoBarras:    req.CodigoBarras,
+		Nombre:          req.Nombre,
+		Descripcion:     req.Descripcion,
+		Categoria:       req.Categoria,
+		CategoriaID:     catID,
+		PrecioCosto:     req.PrecioCosto,
+		PrecioVenta:     req.PrecioVenta,
+		PrecioMayorista: req.PrecioMayorista,
+		StockActual:     req.StockActual,
+		StockMinimo:     req.StockMinimo,
+		UnidadMedida:    req.UnidadMedida,
+		EsPadre:         false,
+		Activo:          true,
+		ProveedorID:     provID,
 	}
 
 	if err := s.repo.Create(ctx, p); err != nil {
@@ -224,6 +226,12 @@ func (s *productoService) Actualizar(ctx context.Context, id uuid.UUID, req dto.
 	}
 	if req.PrecioVenta != nil {
 		p.PrecioVenta = *req.PrecioVenta
+	}
+	if req.PrecioMayorista != nil {
+		// Aceptar 0 explícito como "limpiar" no aplica aquí: el campo es punteros opcionales.
+		// Para limpiar, el frontend debe enviar precio_mayorista: null, lo cual GORM no procesa via Update con struct.
+		// Si quieren limpiarlo, deberán usar un endpoint específico o map[string]any. Por ahora, set unidireccional.
+		p.PrecioMayorista = req.PrecioMayorista
 	}
 	if req.StockMinimo != nil {
 		p.StockMinimo = *req.StockMinimo

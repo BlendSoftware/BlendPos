@@ -22,6 +22,9 @@ type Producto struct {
 	CategoriaID  uuid.UUID       `gorm:"type:uuid;not null;index"`
 	PrecioCosto  decimal.Decimal `gorm:"type:decimal(10,2);not null"`
 	PrecioVenta  decimal.Decimal `gorm:"type:decimal(10,2);not null"`
+	// PrecioMayorista is the optional wholesale price. NULL means the product
+	// has no wholesale variant — the POS hides the "Mayorista" toggle in that case.
+	PrecioMayorista *decimal.Decimal `gorm:"type:decimal(10,2)"`
 	// MargenPct is derived from (PrecioVenta - PrecioCosto) / PrecioCosto * 100
 	MargenPct    decimal.Decimal `gorm:"type:decimal(5,2)"`
 	StockActual  int             `gorm:"not null;default:0"`

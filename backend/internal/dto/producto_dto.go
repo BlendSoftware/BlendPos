@@ -9,23 +9,25 @@ type CrearProductoRequest struct {
 	Nombre       string          `json:"nombre"        validate:"required,min=2,max=120"`
 	Descripcion  *string         `json:"descripcion"`
 	Categoria    string          `json:"categoria"     validate:"required"`
-	PrecioCosto  decimal.Decimal `json:"precio_costo"  validate:"required"`
-	PrecioVenta  decimal.Decimal `json:"precio_venta"  validate:"required"`
-	StockActual  int             `json:"stock_actual"  validate:"min=0"`
-	StockMinimo  int             `json:"stock_minimo"  validate:"min=0"`
-	UnidadMedida string          `json:"unidad_medida"`
-	ProveedorID  *string         `json:"proveedor_id"  validate:"omitempty,uuid"`
+	PrecioCosto     decimal.Decimal  `json:"precio_costo"     validate:"required"`
+	PrecioVenta     decimal.Decimal  `json:"precio_venta"     validate:"required"`
+	PrecioMayorista *decimal.Decimal `json:"precio_mayorista" validate:"omitempty"`
+	StockActual     int              `json:"stock_actual"     validate:"min=0"`
+	StockMinimo     int              `json:"stock_minimo"     validate:"min=0"`
+	UnidadMedida    string           `json:"unidad_medida"`
+	ProveedorID     *string          `json:"proveedor_id"     validate:"omitempty,uuid"`
 }
 
 type ActualizarProductoRequest struct {
-	Nombre       *string          `json:"nombre"        validate:"omitempty,min=2,max=120"`
-	Descripcion  *string          `json:"descripcion"`
-	Categoria    *string          `json:"categoria"`
-	PrecioCosto  *decimal.Decimal `json:"precio_costo"`
-	PrecioVenta  *decimal.Decimal `json:"precio_venta"`
-	StockMinimo  *int             `json:"stock_minimo"  validate:"omitempty,min=0"`
-	UnidadMedida *string          `json:"unidad_medida"`
-	ProveedorID  *string          `json:"proveedor_id"  validate:"omitempty,uuid"`
+	Nombre          *string          `json:"nombre"        validate:"omitempty,min=2,max=120"`
+	Descripcion     *string          `json:"descripcion"`
+	Categoria       *string          `json:"categoria"`
+	PrecioCosto     *decimal.Decimal `json:"precio_costo"`
+	PrecioVenta     *decimal.Decimal `json:"precio_venta"`
+	PrecioMayorista *decimal.Decimal `json:"precio_mayorista"`
+	StockMinimo     *int             `json:"stock_minimo"  validate:"omitempty,min=0"`
+	UnidadMedida    *string          `json:"unidad_medida"`
+	ProveedorID     *string          `json:"proveedor_id"  validate:"omitempty,uuid"`
 }
 
 // ─── Filter / Pagination ─────────────────────────────────────────────────────
@@ -47,20 +49,21 @@ type ProductoFilter struct {
 // ─── Response DTOs ───────────────────────────────────────────────────────────
 
 type ProductoResponse struct {
-	ID           string          `json:"id"`
-	CodigoBarras string          `json:"codigo_barras"`
-	Nombre       string          `json:"nombre"`
-	Descripcion  *string         `json:"descripcion"`
-	Categoria    string          `json:"categoria"`
-	PrecioCosto  decimal.Decimal `json:"precio_costo"`
-	PrecioVenta  decimal.Decimal `json:"precio_venta"`
-	MargenPct    decimal.Decimal `json:"margen_pct"`
-	StockActual  int             `json:"stock_actual"`
-	StockMinimo  int             `json:"stock_minimo"`
-	UnidadMedida string          `json:"unidad_medida"`
-	EsPadre      bool            `json:"es_padre"`
-	Activo       bool            `json:"activo"`
-	ProveedorID  *string         `json:"proveedor_id"`
+	ID              string           `json:"id"`
+	CodigoBarras    string           `json:"codigo_barras"`
+	Nombre          string           `json:"nombre"`
+	Descripcion     *string          `json:"descripcion"`
+	Categoria       string           `json:"categoria"`
+	PrecioCosto     decimal.Decimal  `json:"precio_costo"`
+	PrecioVenta     decimal.Decimal  `json:"precio_venta"`
+	PrecioMayorista *decimal.Decimal `json:"precio_mayorista,omitempty"`
+	MargenPct       decimal.Decimal  `json:"margen_pct"`
+	StockActual     int              `json:"stock_actual"`
+	StockMinimo     int              `json:"stock_minimo"`
+	UnidadMedida    string           `json:"unidad_medida"`
+	EsPadre         bool             `json:"es_padre"`
+	Activo          bool             `json:"activo"`
+	ProveedorID     *string          `json:"proveedor_id"`
 }
 
 type ProductoListResponse struct {
