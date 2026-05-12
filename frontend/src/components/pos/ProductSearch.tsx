@@ -98,7 +98,13 @@ export function ProductSearch({ onClose, inputRef, initialQuery = '' }: ProductS
 
     const selectProduct = useCallback(
         (product: LocalProduct) => {
-            addItem({ id: product.id, nombre: product.nombre, precio: product.precio, codigoBarras: product.codigoBarras });
+            addItem({
+                id: product.id,
+                nombre: product.nombre,
+                precio: product.precio,
+                precioMayorista: product.precioMayorista ?? null,
+                codigoBarras: product.codigoBarras,
+            });
             onClose();
         },
         [addItem, onClose]

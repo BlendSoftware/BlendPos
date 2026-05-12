@@ -164,6 +164,7 @@ export function PosTerminal() {
                             precio: typeof apiProduct.precio_venta === 'number'
                                 ? apiProduct.precio_venta
                                 : parseFloat(apiProduct.precio_venta as unknown as string),
+                            precioMayorista: local.precioMayorista ?? null,
                             codigoBarras: trimmed,
                         });
                         return true;
@@ -177,7 +178,13 @@ export function PosTerminal() {
             // findCatalogProductByBarcode ya filtra stock > 0
             const product = await findCatalogProductByBarcode(trimmed);
             if (product) {
-                addItem({ id: product.id, nombre: product.nombre, precio: product.precio, codigoBarras: product.codigoBarras });
+                addItem({
+                    id: product.id,
+                    nombre: product.nombre,
+                    precio: product.precio,
+                    precioMayorista: product.precioMayorista ?? null,
+                    codigoBarras: product.codigoBarras,
+                });
                 return true;
             }
 
@@ -186,7 +193,13 @@ export function PosTerminal() {
             const results = await searchCatalogProducts(trimmed, 1);
             const match = results[0];
             if (match) {
-                addItem({ id: match.id, nombre: match.nombre, precio: match.precio, codigoBarras: match.codigoBarras });
+                addItem({
+                    id: match.id,
+                    nombre: match.nombre,
+                    precio: match.precio,
+                    precioMayorista: match.precioMayorista ?? null,
+                    codigoBarras: match.codigoBarras,
+                });
                 return true;
             }
 
