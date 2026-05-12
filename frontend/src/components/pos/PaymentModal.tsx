@@ -32,7 +32,7 @@ export function PaymentModal() {
     const closePaymentModal = usePOSUIStore((s) => s.closePaymentModal);
     const tipoComprobanteSeleccionado = usePOSUIStore((s) => s.tipoComprobante);
     const total = useCartStore((s) => s.total);
-    const descuentoGlobal = useCartStore((s) => s.descuentoGlobal);
+    const globalDiscount = useCartStore((s) => s.globalDiscount);
     const totalConDescuento = useCartStore((s) => s.totalConDescuento);
     const cart = useCartStore((s) => s.cart);
     const confirmSale = useSaleStore((s) => s.confirmSale);
@@ -108,7 +108,7 @@ export function PaymentModal() {
     const toNumber = (val: number | string): number =>
         (typeof val === 'string' ? parseFloat(val) || 0 : val) || 0;
 
-    const finalTotal = descuentoGlobal > 0 ? totalConDescuento : total;
+    const finalTotal = globalDiscount.amount > 0 ? totalConDescuento : total;
     const itemCount = cart.reduce((sum, item) => sum + item.cantidad, 0);
 
     const isRecibidoVacio = (metodoPago === 'efectivo' || metodoPago === 'mixto') && montoRecibido === '';
@@ -257,7 +257,7 @@ export function PaymentModal() {
                         <Text size="sm" fw={600}>{itemCount}</Text>
                     </Group>
 
-                    {descuentoGlobal > 0 && (
+                    {globalDiscount.amount > 0 && (
                         <>
                             <Group justify="space-between" mt={4}>
                                 <Text size="sm" c="dimmed">Subtotal</Text>
@@ -269,11 +269,13 @@ export function PaymentModal() {
                                 <Group gap="xs">
                                     <Text size="sm" c="dimmed">Descuento</Text>
                                     <Badge size="xs" color="orange" variant="light">
-                                        -{descuentoGlobal}%
+                                        {globalDiscount.type === 'percentage'
+                                            ? `-${globalDiscount.value}%`
+                                            : 'monto fijo'}
                                     </Badge>
                                 </Group>
                                 <Text size="sm" fw={500} c="orange.4" ff="monospace">
-                                    - {formatCurrency(total - totalConDescuento)}
+                                    - {formatCurrency(globalDiscount.amount)}
                                 </Text>
                             </Group>
                         </>
