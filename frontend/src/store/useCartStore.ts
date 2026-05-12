@@ -1,6 +1,17 @@
 import { create } from 'zustand';
 import { notifications } from '@mantine/notifications';
 import { getLocalStock, deductLocalStock } from '../offline/catalog';
+import {
+    parseMoney,
+    calcLineSubtotal,
+    calcCartSubtotal,
+    applyDiscount,
+    calcFinalTotal,
+    ZERO_DISCOUNT,
+    type AppliedDiscount,
+    type DiscountInput,
+} from '../utils/money';
+import type { TipoPrecio } from '../types';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 // Exported here so other stores and services can import them without creating
@@ -16,7 +27,14 @@ export interface PagoDetalle {
 export interface CartItem {
     id: string;
     nombre: string;
+    /** Precio unitario APLICADO (minorista o mayorista). Usar este campo para cálculos. */
     precio: number;
+    /** Precio minorista original — siempre presente, fuente de verdad para el toggle. */
+    precioMinoristaOriginal: number;
+    /** Precio mayorista del producto si existe (null = el producto no tiene precio mayorista). */
+    precioMayorista?: number | null;
+    /** Tipo de precio actualmente aplicado en esta línea. */
+    tipoPrecio: TipoPrecio;
     codigoBarras: string;
     cantidad: number;
     subtotal: number;
@@ -30,23 +48,42 @@ export interface CartItem {
 interface CartState {
     cart: CartItem[];
     total: number;
-    descuentoGlobal: number; // porcentaje 0-100
+    /** Descuento global canónico: tipo + valor ingresado + monto $ derivado. */
+    globalDiscount: AppliedDiscount;
+    /**
+     * Equivalente legacy: porcentaje 0-100 cuando el descuento es porcentual; 0 cuando es monto fijo.
+     * Mantenido para retrocompatibilidad de lectura con componentes existentes. NO escribir directamente.
+     */
+    descuentoGlobal: number;
     totalConDescuento: number;
     lastAdded: CartItem | null;
     selectedRowIndex: number;
 
     // Cart actions
-    addItem: (item: Pick<CartItem, 'id' | 'nombre' | 'precio' | 'codigoBarras'>) => void;
+    addItem: (item: {
+        id: string;
+        nombre: string;
+        precio: number;
+        precioMayorista?: number | null;
+        codigoBarras: string;
+    }) => void;
     removeItem: (id: string) => void;
     updateQuantity: (id: string, cantidad: number) => void;
     setItemDiscount: (id: string, descuento: number) => void;
+    /** Cambia el tipo de precio (minorista/mayorista) de un ítem. No-op si no hay precio mayorista. */
+    setItemPriceType: (id: string, tipoPrecio: TipoPrecio) => void;
     /**
      * Batch-updates promotion discounts for all cart items.
      * Receives a map of { productId → discountPct } and optionally { productId → promoNombre }.
      * Items not present in the map are reset to 0. Only re-renders if something changed.
      */
     setPromoDiscounts: (map: Record<string, number>, nombres?: Record<string, string>) => void;
-    setGlobalDiscount: (descuento: number) => void;
+    /** Aplica/actualiza el descuento global. Acepta porcentaje o monto fijo. */
+    setGlobalDiscount: (input: DiscountInput) => void;
+    /** Atajo: aplicar un porcentaje (retrocompatibilidad con llamadores existentes). */
+    setGlobalDiscountPct: (pct: number) => void;
+    /** Quita el descuento global. */
+    clearGlobalDiscount: () => void;
     clearCart: () => void;
 
     // Keyboard navigation
@@ -62,40 +99,55 @@ interface CartState {
 const effectivePct = (item: CartItem): number =>
     Math.max(item.descuento, item.promoDescuento ?? 0);
 
-const computeTotal = (cart: CartItem[]): number =>
-    cart.reduce((sum, item) => sum + item.subtotal, 0);
+/** Recalcula el subtotal de una línea respetando el precio APLICADO (minorista/mayorista). */
+const recomputeSubtotal = (item: CartItem): number =>
+    calcLineSubtotal({
+        cantidad: item.cantidad,
+        precioUnitario: item.precio,
+        descuentoPct: effectivePct(item),
+    });
 
-const computeTotalConDescuento = (total: number, descuentoGlobal: number): number =>
-    total * (1 - descuentoGlobal / 100);
+const recomputeTotals = (cart: CartItem[], discount: AppliedDiscount) => {
+    const total = calcCartSubtotal(cart);
+    const applied = applyDiscount(total, { type: discount.type, value: discount.value });
+    return {
+        cart,
+        total,
+        globalDiscount: applied,
+        descuentoGlobal: applied.type === 'percentage' ? applied.value : 0,
+        totalConDescuento: calcFinalTotal(total, applied),
+    };
+};
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 export const useCartStore = create<CartState>()((set, get) => ({
     cart: [],
     total: 0,
+    globalDiscount: { ...ZERO_DISCOUNT },
     descuentoGlobal: 0,
     totalConDescuento: 0,
     lastAdded: null,
     selectedRowIndex: -1,
 
     addItem: async (raw) => {
-        // Defensive: ensure precio is always a number (backend sends decimal as string)
-        const item = {
-            ...raw,
-            precio: typeof raw.precio === 'number' ? raw.precio : parseFloat(raw.precio as unknown as string) || 0,
-        };
+        // Defensive: backend manda decimales como string — parseMoney los coacciona.
+        const precioMinorista = parseMoney(raw.precio);
+        const precioMayoristaRaw = raw.precioMayorista == null ? null : parseMoney(raw.precioMayorista);
+        // 0 o negativos en mayorista se consideran "no tiene precio mayorista".
+        const precioMayorista = precioMayoristaRaw && precioMayoristaRaw > 0 ? precioMayoristaRaw : null;
 
         // ── Stock validation ──────────────────────────────────────────────
         try {
-            const localStock = await getLocalStock(item.id);
+            const localStock = await getLocalStock(raw.id);
             const { cart } = get();
-            const existing = cart.find((c) => c.id === item.id);
+            const existing = cart.find((c) => c.id === raw.id);
             const currentInCart = existing?.cantidad ?? 0;
 
             if (localStock <= 0) {
                 notifications.show({
                     title: 'Sin stock',
-                    message: `"${item.nombre}" no tiene stock disponible`,
+                    message: `"${raw.nombre}" no tiene stock disponible`,
                     color: 'orange',
                     autoClose: 3000,
                 });
@@ -105,7 +157,7 @@ export const useCartStore = create<CartState>()((set, get) => ({
             if (currentInCart + 1 > localStock) {
                 notifications.show({
                     title: 'Stock insuficiente',
-                    message: `"${item.nombre}" solo tiene ${localStock} ud. en stock (ya hay ${currentInCart} en el carrito)`,
+                    message: `"${raw.nombre}" solo tiene ${localStock} ud. en stock (ya hay ${currentInCart} en el carrito)`,
                     color: 'orange',
                     autoClose: 3000,
                 });
@@ -117,26 +169,29 @@ export const useCartStore = create<CartState>()((set, get) => ({
         }
 
         // ── Add to cart ───────────────────────────────────────────────────
-        const { cart } = get();
-        const existingIndex = cart.findIndex((c) => c.id === item.id);
+        const { cart, globalDiscount } = get();
+        const existingIndex = cart.findIndex((c) => c.id === raw.id);
 
         let updatedCart: CartItem[];
 
         if (existingIndex >= 0) {
-            updatedCart = cart.map((c, i) =>
-                i === existingIndex
-                    ? {
-                        ...c,
-                        cantidad: c.cantidad + 1,
-                        subtotal: (c.cantidad + 1) * c.precio * (1 - effectivePct(c) / 100),
-                    }
-                    : c
-            );
+            updatedCart = cart.map((c, i) => {
+                if (i !== existingIndex) return c;
+                const cantidad = c.cantidad + 1;
+                const next: CartItem = { ...c, cantidad };
+                return { ...next, subtotal: recomputeSubtotal(next) };
+            });
         } else {
             const newItem: CartItem = {
-                ...item,
+                id: raw.id,
+                nombre: raw.nombre,
+                codigoBarras: raw.codigoBarras,
+                precio: precioMinorista,
+                precioMinoristaOriginal: precioMinorista,
+                precioMayorista,
+                tipoPrecio: 'minorista',
                 cantidad: 1,
-                subtotal: item.precio,
+                subtotal: precioMinorista,
                 descuento: 0,
                 promoDescuento: 0,
             };
@@ -145,37 +200,31 @@ export const useCartStore = create<CartState>()((set, get) => ({
 
         // Actualizar codigoBarras si aún no lo tiene
         updatedCart = updatedCart.map((c) =>
-            c.id === item.id && !c.codigoBarras
-                ? { ...c, codigoBarras: item.codigoBarras }
+            c.id === raw.id && !c.codigoBarras
+                ? { ...c, codigoBarras: raw.codigoBarras }
                 : c
         );
 
-        const lastAdded = updatedCart.find((c) => c.id === item.id) ?? null;
-        const total = computeTotal(updatedCart);
+        const lastAdded = updatedCart.find((c) => c.id === raw.id) ?? null;
 
         set({
-            cart: updatedCart,
-            total,
-            totalConDescuento: computeTotalConDescuento(total, get().descuentoGlobal),
+            ...recomputeTotals(updatedCart, globalDiscount),
             lastAdded,
-            selectedRowIndex: updatedCart.findIndex((c) => c.id === item.id),
+            selectedRowIndex: updatedCart.findIndex((c) => c.id === raw.id),
         });
 
         setTimeout(() => {
-            if (get().lastAdded?.id === item.id) {
+            if (get().lastAdded?.id === raw.id) {
                 set({ lastAdded: null });
             }
         }, 1500);
     },
 
     removeItem: (id) => {
-        const { cart, descuentoGlobal, selectedRowIndex } = get();
+        const { cart, globalDiscount, selectedRowIndex } = get();
         const updatedCart = cart.filter((c) => c.id !== id);
-        const total = computeTotal(updatedCart);
         set({
-            cart: updatedCart,
-            total,
-            totalConDescuento: computeTotalConDescuento(total, descuentoGlobal),
+            ...recomputeTotals(updatedCart, globalDiscount),
             selectedRowIndex: Math.max(0, Math.min(selectedRowIndex, updatedCart.length - 1)),
         });
     },
@@ -202,66 +251,86 @@ export const useCartStore = create<CartState>()((set, get) => ({
             console.warn('[BlendPOS] Error al verificar stock local:', err);
         }
 
-        const { descuentoGlobal } = get();
-        const updatedCart = get().cart.map((c) =>
-            c.id === id
-                ? { ...c, cantidad, subtotal: cantidad * c.precio * (1 - effectivePct(c) / 100) }
-                : c
-        );
-        const total = computeTotal(updatedCart);
-        set({
-            cart: updatedCart,
-            total,
-            totalConDescuento: computeTotalConDescuento(total, descuentoGlobal),
+        const { globalDiscount } = get();
+        const updatedCart = get().cart.map((c) => {
+            if (c.id !== id) return c;
+            const next: CartItem = { ...c, cantidad };
+            return { ...next, subtotal: recomputeSubtotal(next) };
         });
+        set(recomputeTotals(updatedCart, globalDiscount));
     },
 
     setItemDiscount: (id, descuento) => {
-        const { descuentoGlobal } = get();
+        const { globalDiscount } = get();
         const updatedCart = get().cart.map((c) => {
             if (c.id !== id) return c;
-            const effectivo = Math.max(descuento, c.promoDescuento ?? 0);
-            return { ...c, descuento, subtotal: c.cantidad * c.precio * (1 - effectivo / 100) };
+            const next: CartItem = { ...c, descuento };
+            return { ...next, subtotal: recomputeSubtotal(next) };
         });
-        const total = computeTotal(updatedCart);
-        set({
-            cart: updatedCart,
-            total,
-            totalConDescuento: computeTotalConDescuento(total, descuentoGlobal),
+        set(recomputeTotals(updatedCart, globalDiscount));
+    },
+
+    setItemPriceType: (id, tipoPrecio) => {
+        const { globalDiscount } = get();
+        const updatedCart = get().cart.map((c) => {
+            if (c.id !== id) return c;
+            // No-op si el producto no tiene precio mayorista pero piden mayorista
+            if (tipoPrecio === 'mayorista' && (c.precioMayorista == null || c.precioMayorista <= 0)) {
+                return c;
+            }
+            const nuevoPrecio = tipoPrecio === 'mayorista'
+                ? (c.precioMayorista ?? c.precioMinoristaOriginal)
+                : c.precioMinoristaOriginal;
+            const next: CartItem = { ...c, tipoPrecio, precio: nuevoPrecio };
+            return { ...next, subtotal: recomputeSubtotal(next) };
         });
+        set(recomputeTotals(updatedCart, globalDiscount));
     },
 
     setPromoDiscounts: (map, nombres = {}) => {
-        const { cart, descuentoGlobal } = get();
+        const { cart, globalDiscount } = get();
         let changed = false;
         const updatedCart = cart.map((c) => {
             const newPromo = map[c.id] ?? 0;
             const newNombre = nombres[c.id] ?? undefined;
             if (c.promoDescuento === newPromo && c.promoNombre === newNombre) return c;
             changed = true;
-            const effectivo = Math.max(c.descuento, newPromo);
-            return {
+            const next: CartItem = {
                 ...c,
                 promoDescuento: newPromo,
                 promoNombre: newNombre,
                 // NOTE: descuento (manual) is intentionally NOT touched here
-                subtotal: c.cantidad * c.precio * (1 - effectivo / 100),
             };
+            return { ...next, subtotal: recomputeSubtotal(next) };
         });
         if (!changed) return; // avoid unnecessary re-render
-        const total = computeTotal(updatedCart);
+        set(recomputeTotals(updatedCart, globalDiscount));
+    },
+
+    setGlobalDiscount: (input) => {
+        const { cart } = get();
+        const total = calcCartSubtotal(cart);
+        const applied = applyDiscount(total, input);
         set({
-            cart: updatedCart,
+            globalDiscount: applied,
+            descuentoGlobal: applied.type === 'percentage' ? applied.value : 0,
             total,
-            totalConDescuento: computeTotalConDescuento(total, descuentoGlobal),
+            totalConDescuento: calcFinalTotal(total, applied),
         });
     },
 
-    setGlobalDiscount: (descuento) => {
-        const total = get().total;
+    setGlobalDiscountPct: (pct) => {
+        get().setGlobalDiscount({ type: 'percentage', value: pct });
+    },
+
+    clearGlobalDiscount: () => {
+        const { cart } = get();
+        const total = calcCartSubtotal(cart);
         set({
-            descuentoGlobal: descuento,
-            totalConDescuento: computeTotalConDescuento(total, descuento),
+            globalDiscount: { ...ZERO_DISCOUNT },
+            descuentoGlobal: 0,
+            total,
+            totalConDescuento: total,
         });
     },
 
@@ -269,6 +338,7 @@ export const useCartStore = create<CartState>()((set, get) => ({
         set({
             cart: [],
             total: 0,
+            globalDiscount: { ...ZERO_DISCOUNT },
             descuentoGlobal: 0,
             totalConDescuento: 0,
             lastAdded: null,
