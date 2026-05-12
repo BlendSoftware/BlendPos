@@ -1,5 +1,6 @@
 import { db, type LocalProduct } from './db';
 import { listarProductos } from '../services/api/products';
+import { parseMoney } from '../utils/money';
 
 const SEED_LIMIT = 5000;
 const LAST_SYNC_KEY = 'catalogLastSyncAt';
@@ -28,7 +29,8 @@ export async function seedCatalogFromAPI(): Promise<boolean> {
                     id: p.id,
                     codigoBarras: p.codigo_barras,
                     nombre: p.nombre,
-                    precio: typeof p.precio_venta === 'number' ? p.precio_venta : parseFloat(p.precio_venta as unknown as string),
+                    precio: parseMoney(p.precio_venta),
+                    precioMayorista: p.precio_mayorista == null ? null : parseMoney(p.precio_mayorista),
                     stock: p.stock_actual ?? 0,
                 }));
             await db.products.clear();
@@ -78,7 +80,8 @@ export async function deltaSyncCatalog(): Promise<boolean> {
             id: p.id,
             codigoBarras: p.codigo_barras,
             nombre: p.nombre,
-            precio: typeof p.precio_venta === 'number' ? p.precio_venta : parseFloat(p.precio_venta as unknown as string),
+            precio: parseMoney(p.precio_venta),
+            precioMayorista: p.precio_mayorista == null ? null : parseMoney(p.precio_mayorista),
             // If product was deactivated, set stock=0 so the POS blocks sales
             stock: p.activo ? (p.stock_actual ?? 0) : 0,
         }));

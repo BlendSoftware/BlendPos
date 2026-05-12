@@ -18,6 +18,7 @@ import { enqueueSale, trySyncQueue } from '../offline/sync';
 import { useCajaStore } from './useCajaStore';
 import { useCartStore, deductLocalStock } from './useCartStore';
 import type { CartItem, MetodoPago, PagoDetalle } from './useCartStore';
+import type { AppliedDiscount } from '../utils/money';
 import { getLastTicketNumber } from '../services/api/ventas';
 
 // ── Re-export shared types for backward compatibility ─────────────────────────
@@ -54,7 +55,17 @@ export interface SaleRecord {
     receptorNombre?: string;
     /** Domicilio fiscal/comercial del comprador. */
     receptorDomicilio?: string;
-    /** Descuento global aplicado al carrito (porcentaje 0-100). */
+    /**
+     * Descuento global aplicado al carrito.
+     * Estructura canónica: tipo (% o $ fijo), valor ingresado, monto resultante.
+     * Si está ausente, no se aplicó descuento global.
+     */
+    globalDiscount?: AppliedDiscount;
+    /**
+     * Legacy: porcentaje 0-100 cuando el descuento fue porcentual. 0 si fue monto fijo.
+     * Mantenido por compatibilidad con ventas viejas en historial / ticket impreso.
+     * Para nuevas ventas se llena solo si globalDiscount.type === 'percentage'.
+     */
     descuentoGlobal?: number;
 }
 
@@ -101,7 +112,7 @@ export const useSaleStore = create<SaleState>()(
 
             confirmSale: (pago) => {
                 // Pull cart from the cart sub-store — single source of truth.
-                const { cart, total, totalConDescuento, descuentoGlobal, clearCart } = useCartStore.getState();
+                const { cart, total, totalConDescuento, globalDiscount, clearCart } = useCartStore.getState();
                 const { historial, cajero, ticketCounter } = get();
 
                 const nextCounter = ticketCounter + 1;
@@ -138,7 +149,11 @@ export const useSaleStore = create<SaleState>()(
                     nroDocReceptor: pago.nroDocReceptor,
                     receptorNombre: pago.receptorNombre,
                     receptorDomicilio: pago.receptorDomicilio,
-                    descuentoGlobal: descuentoGlobal > 0 ? descuentoGlobal : undefined,
+                    globalDiscount: globalDiscount.amount > 0 ? { ...globalDiscount } : undefined,
+                    descuentoGlobal:
+                        globalDiscount.amount > 0 && globalDiscount.type === 'percentage'
+                            ? globalDiscount.value
+                            : undefined,
                 };
 
                 // 🖨️ Printing is now handled by PostSaleModal (user-initiated).
