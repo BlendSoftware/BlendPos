@@ -102,12 +102,14 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 
 	// 3. Resolve products and calculate totals (pre-flight, outside TX)
 	type resolvedItem struct {
-		productoID uuid.UUID
-		nombre     string
-		precio     decimal.Decimal
-		cantidad   int
-		descuento  decimal.Decimal
-		subtotal   decimal.Decimal
+		productoID         uuid.UUID
+		nombre             string
+		precio             decimal.Decimal // precio efectivo aplicado (minorista o mayorista)
+		precioMinoristaOrig decimal.Decimal // snapshot del minorista para audit
+		tipoPrecio         string
+		cantidad           int
+		descuento          decimal.Decimal
+		subtotal           decimal.Decimal
 	}
 
 	var resolved []resolvedItem
@@ -144,9 +146,23 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 			}
 			conflictoStock = true
 		}
+
+		// Resolver tipo de precio. Nunca confiar en el precio enviado por el cliente.
+		tipoPrecio := "minorista"
+		if item.TipoPrecio != nil {
+			tipoPrecio = *item.TipoPrecio
+		}
+		precioEfectivo := p.PrecioVenta
+		if tipoPrecio == "mayorista" {
+			if p.PrecioMayorista == nil {
+				return nil, fmt.Errorf("producto %s no tiene precio mayorista configurado", p.Nombre)
+			}
+			precioEfectivo = *p.PrecioMayorista
+		}
+
 		// Descuento cap: no puede superar el 50% del valor de la línea (precio × cantidad).
 		// Prevents negative subtotals and guards against client-side manipulation.
-		lineTotal := p.PrecioVenta.Mul(decimal.NewFromInt(int64(item.Cantidad)))
+		lineTotal := precioEfectivo.Mul(decimal.NewFromInt(int64(item.Cantidad)))
 		maxDescuento := lineTotal.Mul(decimal.NewFromFloat(0.50))
 		if item.Descuento.GreaterThan(maxDescuento) {
 			return nil, fmt.Errorf("descuento para %s excede el máximo permitido (50%% del precio de línea)", p.Nombre)
@@ -155,12 +171,14 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 		subtotal = subtotal.Add(lineSubtotal)
 		descuentoTotal = descuentoTotal.Add(item.Descuento)
 		resolved = append(resolved, resolvedItem{
-			productoID: pid,
-			nombre:     p.Nombre,
-			precio:     p.PrecioVenta,
-			cantidad:   item.Cantidad,
-			descuento:  item.Descuento,
-			subtotal:   lineSubtotal,
+			productoID:         pid,
+			nombre:             p.Nombre,
+			precio:             precioEfectivo,
+			precioMinoristaOrig: p.PrecioVenta,
+			tipoPrecio:         tipoPrecio,
+			cantidad:           item.Cantidad,
+			descuento:          item.Descuento,
+			subtotal:           lineSubtotal,
 		})
 	}
 
@@ -246,14 +264,24 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 			ConflictoStock:  conflictoStock,
 		}
 
+		// Persist global discount audit (type + raw value). Amount efectivo siempre está en DescuentoTotal.
+		if req.DescuentoGlobal != nil && req.DescuentoGlobal.Type != "" {
+			tipo := req.DescuentoGlobal.Type
+			venta.DiscountType = &tipo
+			venta.DiscountValue = req.DescuentoGlobal.Value
+		}
+
 		// Build items
 		for _, r := range resolved {
+			precioMinSnapshot := r.precioMinoristaOrig
 			venta.Items = append(venta.Items, model.VentaItem{
-				ProductoID:     r.productoID,
-				Cantidad:       r.cantidad,
-				PrecioUnitario: r.precio,
-				DescuentoItem:  r.descuento,
-				Subtotal:       r.subtotal,
+				ProductoID:              r.productoID,
+				Cantidad:                r.cantidad,
+				PrecioUnitario:          r.precio,
+				DescuentoItem:           r.descuento,
+				Subtotal:                r.subtotal,
+				TipoPrecio:              r.tipoPrecio,
+				PrecioMinoristaOriginal: &precioMinSnapshot,
 			})
 		}
 
