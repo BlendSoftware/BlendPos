@@ -326,14 +326,31 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 			}
 		}
 
-		// Create movimientos de caja (one per payment method)
+		// Create movimientos de caja (one per payment method).
+		// CRÍTICO: el vuelto siempre se devuelve en efectivo, por lo tanto el efectivo NETO
+		// que queda en caja por esta venta es (monto_efectivo_recibido - vuelto). Sin este
+		// ajuste el arqueo siempre da faltante = ΣVueltos de la sesión.
+		hasEfectivo := false
+		for _, p := range req.Pagos {
+			if p.Metodo == "efectivo" {
+				hasEfectivo = true
+				break
+			}
+		}
+		if vuelto.GreaterThan(decimal.Zero) && !hasEfectivo {
+			return errors.New("hay vuelto pero ningún pago en efectivo: el vuelto no puede devolverse en tarjeta/QR")
+		}
 		for _, pago := range req.Pagos {
 			metodo := pago.Metodo
+			monto := pago.Monto
+			if metodo == "efectivo" && vuelto.GreaterThan(decimal.Zero) {
+				monto = monto.Sub(vuelto)
+			}
 			mov := model.MovimientoCaja{
 				SesionCajaID: sesionID,
 				Tipo:         "venta",
 				MetodoPago:   &metodo,
-				Monto:        pago.Monto,
+				Monto:        monto,
 				Descripcion:  fmt.Sprintf("Venta #%d", ticketNum),
 				ReferenciaID: &venta.ID,
 			}
@@ -443,15 +460,28 @@ func (s *ventaService) AnularVenta(ctx context.Context, id uuid.UUID, motivo str
 			}
 		}
 
-		// Create inverse movimientos de caja
+		// Create inverse movimientos de caja.
+		// IMPORTANTE: debe revertir EXACTAMENTE lo que generó RegistrarVenta.
+		// RegistrarVenta resta el vuelto del movimiento de efectivo, así que acá
+		// también lo restamos antes de negar — de lo contrario al anular se
+		// "devuelve" más efectivo del que realmente entró y descuadra la caja.
+		totalPagos := decimal.Zero
+		for _, pago := range venta.Pagos {
+			totalPagos = totalPagos.Add(pago.Monto)
+		}
+		vueltoOriginal := totalPagos.Sub(venta.Total)
+
 		for _, pago := range venta.Pagos {
 			metodo := pago.Metodo
-			monto := pago.Monto.Neg()
+			monto := pago.Monto
+			if metodo == "efectivo" && vueltoOriginal.GreaterThan(decimal.Zero) {
+				monto = monto.Sub(vueltoOriginal)
+			}
 			mov := model.MovimientoCaja{
 				SesionCajaID: venta.SesionCajaID,
 				Tipo:         "anulacion",
 				MetodoPago:   &metodo,
-				Monto:        monto,
+				Monto:        monto.Neg(),
 				Descripcion:  fmt.Sprintf("Anulación venta #%d — %s", venta.NumeroTicket, motivo),
 				ReferenciaID: &venta.ID,
 			}
