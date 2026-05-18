@@ -1,16 +1,17 @@
 import {
     SimpleGrid, Paper, Text, Title, Group, Stack, Badge,
-    Skeleton, Table, ThemeIcon, Divider, Center, ActionIcon, Tooltip, SegmentedControl,
+    Skeleton, Table, ThemeIcon, Divider, Center, ActionIcon, Tooltip, Menu, Button,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { AreaChart, BarChart, DonutChart } from '@mantine/charts';
 import {
     TrendingUp, ShoppingCart, Package, AlertTriangle,
-    CheckCircle, CreditCard, Banknote, QrCode, Landmark, RefreshCw, Receipt, Calendar,
+    CheckCircle, CreditCard, Banknote, QrCode, Landmark, RefreshCw, Receipt,
+    Calendar, CalendarDays, CalendarRange, Sun, Sliders, ChevronDown,
 } from 'lucide-react';
 import { formatARS } from '../../utils/format';
 import {
-    getTodayRange, getYesterdayRange, getCurrentWeekRange, getCurrentMonthRange,
+    getTodayRange, getCurrentWeekRange, getCurrentMonthRange, getSingleDayRange,
     normalizeDateRange, formatDateForAPI, formatRangeLabel,
     type DateRange,
 } from '../../utils/dates';
@@ -23,26 +24,36 @@ import { listarVentas, type VentaListItem } from '../../services/api/ventas';
 import { listarCompras } from '../../services/api/compras';
 import { trySyncQueue, recoverLostSales } from '../../offline/sync';
 
-type Periodo = 'hoy' | 'ayer' | 'semana' | 'mes' | 'personalizado';
+type Periodo = 'hoy' | 'dia' | 'semana' | 'mes' | 'personalizado';
 
-const PERIODO_LABEL: Record<Periodo, string> = {
-    hoy: 'Hoy',
-    ayer: 'Ayer',
-    semana: 'Esta semana',
-    mes: 'Este mes',
-    personalizado: 'Personalizado',
-};
+interface PeriodoOption {
+    value: Periodo;
+    label: string;
+    icon: React.ReactNode;
+}
 
-/** Devuelve el rango de fechas para un período predefinido. */
-function rangeFor(periodo: Periodo, custom: DateRange | null): DateRange {
+const PERIODO_OPTIONS: PeriodoOption[] = [
+    { value: 'hoy',           label: 'Hoy',                icon: <Sun size={14} /> },
+    { value: 'dia',           label: 'Ver día…',           icon: <Calendar size={14} /> },
+    { value: 'semana',        label: 'Esta semana',        icon: <CalendarDays size={14} /> },
+    { value: 'mes',           label: 'Este mes',           icon: <CalendarRange size={14} /> },
+    { value: 'personalizado', label: 'Rango personalizado', icon: <Sliders size={14} /> },
+];
+
+/** "Mayo 2026", "Febrero 2024", etc. — capitalizado. */
+function getMonthLabel(date: Date): string {
+    const name = new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(date);
+    return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${date.getFullYear()}`;
+}
+
+/** Label visible en el botón / KPI según el período activo. */
+function displayLabel(periodo: Periodo, range: DateRange): string {
     switch (periodo) {
-        case 'hoy': return getTodayRange();
-        case 'ayer': return getYesterdayRange();
-        case 'semana': return getCurrentWeekRange();
-        case 'mes': return getCurrentMonthRange();
-        case 'personalizado':
-            // Fallback al día de hoy si todavía no se eligió un rango.
-            return custom ?? getTodayRange();
+        case 'hoy':           return 'Hoy';
+        case 'dia':           return formatRangeLabel(range);
+        case 'semana':        return `Semana del ${formatRangeLabel(range)}`;
+        case 'mes':           return getMonthLabel(range.from);
+        case 'personalizado': return formatRangeLabel(range);
     }
 }
 
@@ -89,15 +100,24 @@ export function DashboardPage() {
     const [comprasPendientes, setComprasPendientes] = useState<{ count: number; total: number }>({ count: 0, total: 0 });
     const [periodo, setPeriodo]         = useState<Periodo>('hoy');
     const [customRange, setCustomRange] = useState<[Date | null, Date | null]>([null, null]);
+    const [singleDay, setSingleDay]     = useState<Date | null>(null);
+    const [dayPickerOpen, setDayPickerOpen] = useState(false);
 
     // Rango calendario activo (siempre normalizado a 00:00 → 23:59 vía helpers).
     const activeRange = useMemo<DateRange>(() => {
-        if (periodo === 'personalizado') {
-            const norm = normalizeDateRange(customRange[0], customRange[1]);
-            return norm ?? getTodayRange();
+        switch (periodo) {
+            case 'hoy':    return getTodayRange();
+            case 'semana': return getCurrentWeekRange();
+            case 'mes':    return getCurrentMonthRange();
+            case 'dia':    return getSingleDayRange(singleDay ?? new Date());
+            case 'personalizado': {
+                const norm = normalizeDateRange(customRange[0], customRange[1]);
+                return norm ?? getTodayRange();
+            }
         }
-        return rangeFor(periodo, null);
-    }, [periodo, customRange]);
+    }, [periodo, customRange, singleDay]);
+
+    const periodoOption = PERIODO_OPTIONS.find((o) => o.value === periodo)!;
 
     const fetchDashboardData = useCallback(async (showSpinner = false) => {
         if (showSpinner) setRefreshing(true);
@@ -244,9 +264,7 @@ export function DashboardPage() {
             cantidad: p.cantidad, total: p.total,
         }));
 
-    const periodoLabel = periodo === 'personalizado'
-        ? formatRangeLabel(activeRange)
-        : PERIODO_LABEL[periodo];
+    const periodoLabel = displayLabel(periodo, activeRange);
 
     return (
         <Stack gap="xl">
@@ -258,18 +276,83 @@ export function DashboardPage() {
                     </Text>
                 </div>
                 <Group gap="md" align="center">
-                    <SegmentedControl
-                        value={periodo}
-                        onChange={(v) => setPeriodo(v as Periodo)}
-                        data={[
-                            { value: 'hoy', label: 'Hoy' },
-                            { value: 'ayer', label: 'Ayer' },
-                            { value: 'semana', label: 'Semana' },
-                            { value: 'mes', label: 'Mes' },
-                            { value: 'personalizado', label: 'Rango' },
-                        ]}
-                        size="sm"
-                    />
+                    <Menu shadow="lg" width={240} radius="md" position="bottom-end" withArrow>
+                        <Menu.Target>
+                            <Button
+                                variant="default"
+                                size="sm"
+                                radius="md"
+                                leftSection={periodoOption.icon}
+                                rightSection={<ChevronDown size={14} />}
+                                styles={{ root: { fontWeight: 600, minWidth: 200 } }}
+                            >
+                                {periodoLabel}
+                            </Button>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                            <Menu.Label>Período</Menu.Label>
+                            {PERIODO_OPTIONS.map((opt) => [
+                                opt.value === 'personalizado' && <Menu.Divider key={`${opt.value}-div`} />,
+                                <Menu.Item
+                                    key={opt.value}
+                                    leftSection={opt.icon}
+                                    onClick={() => {
+                                        setPeriodo(opt.value);
+                                        if (opt.value === 'dia') {
+                                            if (!singleDay) setSingleDay(new Date());
+                                            setDayPickerOpen(true);
+                                        }
+                                    }}
+                                    rightSection={
+                                        periodo === opt.value
+                                            ? <CheckCircle size={14} color="var(--mantine-color-teal-5)" />
+                                            : null
+                                    }
+                                >
+                                    {opt.label}
+                                </Menu.Item>,
+                            ])}
+                        </Menu.Dropdown>
+                    </Menu>
+
+                    {periodo === 'dia' && (
+                        <DatePickerInput
+                            value={singleDay}
+                            onChange={(val) => {
+                                const toDate = (v: unknown): Date | null => {
+                                    if (!v) return null;
+                                    if (v instanceof Date) return v;
+                                    if (typeof v === 'string') {
+                                        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+                                        if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+                                        const d = new Date(v);
+                                        return isNaN(d.getTime()) ? null : d;
+                                    }
+                                    return null;
+                                };
+                                const d = toDate(val);
+                                setSingleDay(d);
+                                // Al elegir una fecha, cerramos el popover (estamos en modo controlado).
+                                if (d) setDayPickerOpen(false);
+                            }}
+                            placeholder="Elegí un día"
+                            valueFormat="DD/MM/YYYY"
+                            maxDate={new Date()}
+                            leftSection={<Calendar size={14} />}
+                            size="sm"
+                            w={180}
+                            popoverProps={{
+                                opened: dayPickerOpen,
+                                onChange: setDayPickerOpen,
+                                withArrow: true,
+                                shadow: 'md',
+                                position: 'bottom-end',
+                                closeOnClickOutside: true,
+                                trapFocus: false,
+                            }}
+                        />
+                    )}
+
                     {periodo === 'personalizado' && (
                         <DatePickerInput
                             type="range"
