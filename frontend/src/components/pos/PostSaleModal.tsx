@@ -118,7 +118,7 @@ export function PostSaleModal() {
     });
 
     const handlePrint = () => {
-        const printWindow = window.open('', '_blank', 'width=800,height=700');
+        const printWindow = window.open('', '_blank', 'width=420,height=700');
         if (!printWindow) {
             notifications.show({
                 title: 'Error de impresión',
@@ -136,7 +136,7 @@ export function PostSaleModal() {
         const vuelto = record.vuelto ?? 0;
 
         const METODO_PRINT: Record<string, string> = {
-            efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito',
+            efectivo: 'Efectivo', debito: 'Debito', credito: 'Credito',
             qr: 'QR', transferencia: 'Transferencia', mixto: 'Mixto',
         };
 
@@ -144,104 +144,151 @@ export function PostSaleModal() {
         const storeSub  = printerConfig.storeSubtitle || '';
         const storeAddr = printerConfig.storeAddress || '';
         const storePhone = printerConfig.storePhone || '';
-        const storeFooter = printerConfig.storeFooter || '¡Gracias por su compra!';
-        const ars = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(n);
+        const storeFooter = printerConfig.storeFooter || 'Gracias por su compra';
+        const ars = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(n);
+        const fechaStr = `${new Date(record.fecha).toLocaleDateString('es-AR')} ${new Date(record.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`;
+        const escape = (s: string) =>
+            String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        const itemsHTML = (record.items ?? []).map((item) => `
+            <tr>
+                <td class="prod">${escape(item.nombre)}</td>
+                <td class="num">${item.cantidad}</td>
+                <td class="num">${ars(item.precio)}</td>
+                <td class="num">${ars(item.cantidad * item.precio)}</td>
+            </tr>
+        `).join('');
+
+        const pagosMixtosHTML = record.metodoPago === 'mixto' && record.pagos
+            ? record.pagos.map((p) => `
+                <div class="row sub"><span>· ${escape(METODO_PRINT[p.metodo] ?? p.metodo)}</span><span>${ars(p.monto)}</span></div>
+            `).join('')
+            : '';
+
+        const efectivoBlock = record.efectivoRecibido && record.efectivoRecibido > 0
+            ? `
+                <div class="row"><span>Efectivo recibido</span><span>${ars(record.efectivoRecibido)}</span></div>
+                ${vuelto > 0 ? `<div class="row bold"><span>Vuelto</span><span>${ars(vuelto)}</span></div>` : ''}
+            `
+            : '';
 
         const ticketHTML = `<!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Ticket #${record.numeroTicket}</title>
     <style>
+        /* Forzá tamaño exacto del papel térmico: 80mm de ancho, alto auto. */
+        @page { size: 80mm auto; margin: 0; }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Courier New', monospace; background: white; display: flex; justify-content: center; padding: 10mm; }
-        .ticket { width: 76mm; max-width: 76mm; background: white; padding: 5mm; }
-        .header { text-align: center; margin-bottom: 12px; }
-        .store-name { font-size: 20px; font-weight: bold; margin-bottom: 3px; }
-        .store-sub { font-size: 11px; color: #222; margin-bottom: 2px; }
-        .store-addr { font-size: 10px; color: #222; margin-bottom: 1px; }
-        .divider { border-top: 1px dashed #555; margin: 8px 0; }
-        .divider-solid { border-top: 2px solid #000; margin: 8px 0; }
-        .section { margin: 6px 0; }
-        .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 13px; }
-        .label { color: #000; font-weight: 600; }
-        .value { font-weight: bold; text-align: right; }
-        .items-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
-        .items-table thead th { font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding: 3px 2px; text-align: left; }
-        .items-table thead th:not(:first-child) { text-align: right; }
-        .items-table tbody td { font-size: 12px; padding: 3px 2px; }
-        .items-table tbody td:not(:first-child) { text-align: right; }
-        .items-table .name-col { max-width: 36mm; word-break: break-word; }
-        .total-row { font-size: 18px; font-weight: bold; margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; }
-        .pagos-mixtos { margin-left: 8px; }
-        .footer { text-align: center; margin-top: 14px; padding-top: 10px; border-top: 1px dashed #555; }
-        .footer p { font-size: 12px; margin: 3px 0; }
-        .no-print { text-align: center; margin-bottom: 14px; }
-        .btn-print { padding: 9px 22px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-family: sans-serif; }
-        @media print { body { padding: 0; } .no-print { display: none !important; } @page { size: 80mm auto; margin: 5mm; } }
+        html, body { width: 80mm; margin: 0; padding: 0; background: #fff; color: #000; }
+
+        body {
+            /* Courier monospace garantiza alineación de columnas en impresora térmica */
+            font-family: "Courier", "Courier New", "Liberation Mono", monospace;
+            font-size: 12pt;
+            line-height: 1.25;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .ticket { width: 80mm; padding: 3mm 2mm; }
+        .header { text-align: center; margin-bottom: 3mm; }
+        .store-name { font-size: 16pt; font-weight: 700; letter-spacing: 1px; }
+        .store-sub, .store-addr { font-size: 10pt; }
+        .sep   { border-top: 1px dashed #000; margin: 2mm 0; }
+        .sep-h { border-top: 2px solid #000; margin: 2mm 0; }
+        .row { display: flex; justify-content: space-between; gap: 2mm; margin: 0.5mm 0; }
+        .row.sub { padding-left: 3mm; font-size: 10pt; }
+        .row.bold, .bold { font-weight: 700; }
+        .total { font-size: 16pt; font-weight: 700; padding: 1mm 0; }
+
+        table { width: 100%; border-collapse: collapse; margin: 1mm 0; }
+        thead th {
+            font-size: 10pt; font-weight: 700; text-align: left;
+            border-bottom: 1px solid #000; padding: 1mm 0;
+        }
+        thead th.num { text-align: right; }
+        tbody td { font-size: 11pt; padding: 0.8mm 0; vertical-align: top; }
+        tbody td.num { text-align: right; white-space: nowrap; }
+        tbody td.prod { word-break: break-word; }
+
+        .footer { text-align: center; margin-top: 3mm; font-size: 10pt; }
+        .no-print { padding: 10px; text-align: center; background: #f3f4f6; border-bottom: 2px solid #d1d5db; }
+        .btn-print {
+            padding: 10px 22px; background: #2563eb; color: white; border: none;
+            border-radius: 4px; cursor: pointer; font-size: 14px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            html, body { width: 80mm; }
+            .ticket { padding: 2mm 2mm; }
+        }
     </style>
 </head>
 <body>
-<div class="ticket">
-    <div class="no-print"><button class="btn-print" onclick="window.print()">Imprimir</button></div>
-    <div class="header">
-        <div class="store-name">${storeName}</div>
-        ${storeSub ? `<div class="store-sub">${storeSub}</div>` : ''}
-        ${storeAddr ? `<div class="store-addr">${storeAddr}</div>` : ''}
-        ${storePhone ? `<div class="store-addr">${storePhone}</div>` : ''}
+    <div class="no-print">
+        <button class="btn-print" onclick="window.print()">Imprimir ahora</button>
     </div>
-    <div class="divider-solid"></div>
-    <div class="section">
-        <div class="row"><span class="label">Ticket N°</span><span class="value">#${record.numeroTicket}</span></div>
-        <div class="row"><span class="label">Fecha</span><span class="value">${new Date(record.fecha).toLocaleDateString('es-AR')} ${new Date(record.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span></div>
-        <div class="row"><span class="label">Cajero</span><span class="value">${record.cajero}</span></div>
-    </div>
-    <div class="divider"></div>
-    <div class="section">
-        <table class="items-table">
-            <thead><tr><th class="name-col">Producto</th><th>Cant</th><th>P.Unit</th><th>Total</th></tr></thead>
-            <tbody>${record.items.map(item => `
+    <div class="ticket">
+        <div class="header">
+            <div class="store-name">${escape(storeName)}</div>
+            ${storeSub ? `<div class="store-sub">${escape(storeSub)}</div>` : ''}
+            ${storeAddr ? `<div class="store-addr">${escape(storeAddr)}</div>` : ''}
+            ${storePhone ? `<div class="store-addr">${escape(storePhone)}</div>` : ''}
+        </div>
+        <div class="sep-h"></div>
+        <div class="row"><span>Ticket N°</span><span class="bold">#${record.numeroTicket}</span></div>
+        <div class="row"><span>Fecha</span><span>${fechaStr}</span></div>
+        <div class="row"><span>Cajero</span><span>${escape(record.cajero)}</span></div>
+        <div class="sep"></div>
+        <table>
+            <thead>
                 <tr>
-                    <td class="name-col">${item.nombre}</td>
-                    <td>${item.cantidad}</td>
-                    <td>${ars(item.precio)}</td>
-                    <td>${ars(item.cantidad * item.precio)}</td>
-                </tr>`).join('')}
+                    <th>Producto</th>
+                    <th class="num">Cant</th>
+                    <th class="num">P.Unit</th>
+                    <th class="num">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itemsHTML}
             </tbody>
         </table>
-    </div>
-    <div class="divider"></div>
-    <div class="section">
+        <div class="sep"></div>
         ${tieneDescuento ? `
-        <div class="row"><span class="label">Subtotal</span><span class="value">${ars(record.total)}</span></div>
-        <div class="row"><span class="label">Descuento</span><span class="value">-${ars(record.total - record.totalConDescuento)}</span></div>
+            <div class="row"><span>Subtotal</span><span>${ars(record.total)}</span></div>
+            <div class="row"><span>Descuento</span><span>-${ars(record.total - record.totalConDescuento)}</span></div>
         ` : ''}
-        <div class="row total-row"><span class="label">TOTAL</span><span class="value">${ars(totalFinal)}</span></div>
+        <div class="row total"><span>TOTAL</span><span>${ars(totalFinal)}</span></div>
+        <div class="sep"></div>
+        <div class="row bold"><span>Pago</span><span>${escape(METODO_PRINT[record.metodoPago] ?? record.metodoPago)}</span></div>
+        ${pagosMixtosHTML}
+        ${efectivoBlock}
+        ${record.clienteEmail ? `<div class="sep"></div><div class="row"><span>Email</span><span>${escape(record.clienteEmail)}</span></div>` : ''}
+        <div class="sep"></div>
+        <div class="footer">${escape(storeFooter)}</div>
     </div>
-    <div class="divider"></div>
-    <div class="section">
-        <div class="row"><span class="label">Método de pago</span><span class="value">${METODO_PRINT[record.metodoPago] ?? record.metodoPago}</span></div>
-        ${record.metodoPago === 'mixto' && record.pagos ? `<div class="pagos-mixtos">${record.pagos.map(p => `<div class="row"><span class="label">• ${METODO_PRINT[p.metodo] ?? p.metodo}</span><span class="value">${ars(p.monto)}</span></div>`).join('')}</div>` : ''}
-        ${record.efectivoRecibido && record.efectivoRecibido > 0 ? `
-        <div class="row"><span class="label">Efectivo recibido</span><span class="value">${ars(record.efectivoRecibido)}</span></div>
-        ${vuelto > 0 ? `<div class="row"><span class="label">Vuelto</span><span class="value">${ars(vuelto)}</span></div>` : ''}` : ''}
-    </div>
-    ${record.clienteEmail ? `<div class="divider"></div><div class="section"><div class="row"><span class="label">Email</span><span class="value">${record.clienteEmail}</span></div></div>` : ''}
-    <div class="footer">
-        <p>${storeFooter}</p>
-    </div>
-</div>
+    <script>
+        // Auto-print al cargar; cierre tras imprimir (o cancelar) usando afterprint
+        // para que el documento alcance a spoolearse a la impresora.
+        window.addEventListener('load', function () {
+            window.focus();
+            setTimeout(function () { window.print(); }, 250);
+        });
+        window.addEventListener('afterprint', function () {
+            setTimeout(function () { window.close(); }, 200);
+        });
+    </script>
 </body>
 </html>`;
 
         printWindow.document.open();
         printWindow.document.write(ticketHTML);
         printWindow.document.close();
-        printWindow.onload = () => {
-            printWindow.focus();
-            printWindow.print();
-            setTimeout(() => printWindow.close(), 100);
-        };
 
         notifications.show({
             title: 'Impresión iniciada',
