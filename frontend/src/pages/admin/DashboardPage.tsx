@@ -1,42 +1,60 @@
 import {
     SimpleGrid, Paper, Text, Title, Group, Stack, Badge,
-    Skeleton, Table, ThemeIcon, Divider, Center, ActionIcon, Tooltip, SegmentedControl,
+    Skeleton, Table, ThemeIcon, Divider, Center, ActionIcon, Tooltip, Menu, Button,
 } from '@mantine/core';
+import { DatePickerInput } from '@mantine/dates';
 import { AreaChart, BarChart, DonutChart } from '@mantine/charts';
 import {
     TrendingUp, ShoppingCart, Package, AlertTriangle,
     CheckCircle, CreditCard, Banknote, QrCode, Landmark, RefreshCw, Receipt,
+    Calendar, CalendarDays, CalendarRange, Sun, Sliders, ChevronDown,
 } from 'lucide-react';
 import { formatARS } from '../../utils/format';
+import {
+    getTodayRange, getCurrentWeekRange, getCurrentMonthRange, getSingleDayRange,
+    normalizeDateRange, formatDateForAPI, formatRangeLabel,
+    type DateRange,
+} from '../../utils/dates';
+import { parseMoney } from '../../utils/money';
 import styles from './DashboardPage.module.css';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { getAlertasStock } from '../../services/api/inventario';
 import type { AlertaStockResponse } from '../../services/api/inventario';
 import { listarVentas, type VentaListItem } from '../../services/api/ventas';
 import { listarCompras } from '../../services/api/compras';
 import { trySyncQueue, recoverLostSales } from '../../offline/sync';
 
-type Periodo = 'dia' | 'semana' | 'mes';
+type Periodo = 'hoy' | 'dia' | 'semana' | 'mes' | 'personalizado';
 
-const PERIODO_LABEL: Record<Periodo, string> = {
-    dia: 'Hoy',
-    semana: 'Esta semana',
-    mes: 'Este mes',
-};
+interface PeriodoOption {
+    value: Periodo;
+    label: string;
+    icon: React.ReactNode;
+}
 
-function getDateRange(periodo: Periodo): { fecha?: string; desde?: string; hasta?: string; limit: number } {
-    const today = new Date();
-    const toStr = (d: Date) => d.toLocaleDateString('en-CA');
-    const todayStr = toStr(today);
-    if (periodo === 'dia') return { fecha: todayStr, limit: 500 };
-    if (periodo === 'semana') {
-        const desde = new Date(today);
-        desde.setDate(today.getDate() - 6);
-        return { desde: toStr(desde), hasta: todayStr, limit: 500 };
+const PERIODO_OPTIONS: PeriodoOption[] = [
+    { value: 'hoy',           label: 'Hoy',                icon: <Sun size={14} /> },
+    { value: 'dia',           label: 'Ver día…',           icon: <Calendar size={14} /> },
+    { value: 'semana',        label: 'Esta semana',        icon: <CalendarDays size={14} /> },
+    { value: 'mes',           label: 'Este mes',           icon: <CalendarRange size={14} /> },
+    { value: 'personalizado', label: 'Rango personalizado', icon: <Sliders size={14} /> },
+];
+
+/** "Mayo 2026", "Febrero 2024", etc. — capitalizado. */
+function getMonthLabel(date: Date): string {
+    const name = new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(date);
+    return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${date.getFullYear()}`;
+}
+
+/** Label visible en el botón / KPI según el período activo. */
+function displayLabel(periodo: Periodo, range: DateRange): string {
+    switch (periodo) {
+        case 'hoy':           return 'Hoy';
+        case 'dia':           return formatRangeLabel(range);
+        case 'semana':        return `Semana del ${formatRangeLabel(range)}`;
+        case 'mes':           return getMonthLabel(range.from);
+        case 'personalizado': return formatRangeLabel(range);
     }
-    // 'mes' = últimos 30 días (igual que FacturacionPage)
-    const desde = new Date(today.getTime() - 30 * 86400000);
-    return { desde: toStr(desde), hasta: todayStr, limit: 1000 };
 }
 
 const METODO_COLOR: Record<string, string> = {
@@ -80,16 +98,44 @@ export function DashboardPage() {
     const [alertas, setAlertas]         = useState<AlertaStockResponse[]>([]);
     const [apiVentas, setApiVentas]     = useState<VentaListItem[]>([]);
     const [comprasPendientes, setComprasPendientes] = useState<{ count: number; total: number }>({ count: 0, total: 0 });
-    const [periodo, setPeriodo]         = useState<Periodo>('mes');
+    const [periodo, setPeriodo]         = useState<Periodo>('hoy');
+    const [customRange, setCustomRange] = useState<[Date | null, Date | null]>([null, null]);
+    const [singleDay, setSingleDay]     = useState<Date | null>(null);
+    const [dayPickerOpen, setDayPickerOpen] = useState(false);
 
-    const fetchDashboardData = useCallback(async (showSpinner = false, p: Periodo = periodo) => {
+    // Rango calendario activo (siempre normalizado a 00:00 → 23:59 vía helpers).
+    const activeRange = useMemo<DateRange>(() => {
+        switch (periodo) {
+            case 'hoy':    return getTodayRange();
+            case 'semana': return getCurrentWeekRange();
+            case 'mes':    return getCurrentMonthRange();
+            case 'dia':    return getSingleDayRange(singleDay ?? new Date());
+            case 'personalizado': {
+                const norm = normalizeDateRange(customRange[0], customRange[1]);
+                return norm ?? getTodayRange();
+            }
+        }
+    }, [periodo, customRange, singleDay]);
+
+    const periodoOption = PERIODO_OPTIONS.find((o) => o.value === periodo)!;
+
+    const fetchDashboardData = useCallback(async (showSpinner = false) => {
         if (showSpinner) setRefreshing(true);
-        const range = getDateRange(p);
+        const desde = formatDateForAPI(activeRange.from);
+        const hasta = formatDateForAPI(activeRange.to);
+        // Si es un solo día, también pasamos `fecha` por compatibilidad con el backend.
+        const isOneDay = desde === hasta;
+        // Heurística simple para el límite — un día = 500, un mes puede tener miles.
+        const limit = isOneDay ? 500 : 2000;
         try {
             await recoverLostSales().then(() => trySyncQueue()).catch(() => { });
             const [alertasRes, ventasRes, comprasRes] = await Promise.allSettled([
                 getAlertasStock(),
-                listarVentas({ ...range, estado: 'completada' }),
+                listarVentas({
+                    ...(isOneDay ? { fecha: desde } : { desde, hasta }),
+                    estado: 'completada',
+                    limit,
+                }),
                 listarCompras({ estado: 'pendiente', limit: 200 }),
             ]);
             if (alertasRes.status === 'fulfilled') setAlertas(alertasRes.value);
@@ -103,27 +149,25 @@ export function DashboardPage() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [periodo]);
+    }, [activeRange]);
 
     const fetchRef = useRef(fetchDashboardData);
     fetchRef.current = fetchDashboardData;
     useEffect(() => {
         setLoading(true);
-        fetchRef.current(false, periodo);
-        const interval = setInterval(() => fetchRef.current(false, periodo), 60_000);
+        fetchRef.current(false);
+        const interval = setInterval(() => fetchRef.current(false), 60_000);
         return () => clearInterval(interval);
-    }, [periodo]);
-
-    const parseNum = (v: unknown): number => typeof v === 'number' ? v : parseFloat(String(v)) || 0;
+    }, [activeRange]);
 
     const ventasHoy = apiVentas
         .map((v) => ({
             id: v.id, fecha: v.created_at,
-            total: parseNum(v.total),
+            total: parseMoney(v.total),
             metodoPago: v.pagos[0]?.metodo ?? 'efectivo',
             items: v.items.map((i) => ({
                 id: i.producto, nombre: i.producto, cantidad: i.cantidad,
-                subtotal: parseNum(i.subtotal), precio: parseNum(i.precio_unitario),
+                subtotal: parseMoney(i.subtotal), precio: parseMoney(i.precio_unitario),
                 codigoBarras: '', descuento: 0,
             })),
             numeroTicket: v.numero_ticket,
@@ -144,13 +188,20 @@ export function DashboardPage() {
     }, {});
     const totalGeneral = Object.values(metodoPagoTotals).reduce((s, m) => s + m.total, 0);
 
+    // Construir series de tiempo según el rango.
+    // - Si es 1 día → bins por hora 00..23
+    // - Si son N días → bins por día (etiqueta corta)
+    const rangoUnDia = activeRange.from.toDateString() === activeRange.to.toDateString();
+
     const ventasPorHoraBase = Array.from({ length: 24 }, (_, hour) => ({
         hora: `${String(hour).padStart(2, '0')}:00`, total: 0, tickets: 0,
     }));
-    for (const venta of ventasHoy) {
-        const h = new Date(venta.fecha).getHours();
-        ventasPorHoraBase[h]!.total += venta.total;
-        ventasPorHoraBase[h]!.tickets += 1;
+    if (rangoUnDia) {
+        for (const venta of ventasHoy) {
+            const h = new Date(venta.fecha).getHours();
+            ventasPorHoraBase[h]!.total += venta.total;
+            ventasPorHoraBase[h]!.tickets += 1;
+        }
     }
     const horasConVentas = ventasPorHoraBase.map((h, i) => h.tickets > 0 ? i : null).filter((v): v is number => v !== null);
     const startHour = horasConVentas.length ? Math.max(0, Math.min(...horasConVentas) - 1) : 8;
@@ -158,35 +209,39 @@ export function DashboardPage() {
     const ventasPorHora = ventasPorHoraBase.slice(startHour, endHour + 1);
 
     const buildDayChart = () => {
-        const today = new Date();
-        const days  = periodo === 'semana' ? 7 : today.getDate();
-        return Array.from({ length: days }, (_, i) => {
-            const d = new Date(today);
-            d.setDate(today.getDate() - (days - 1 - i));
-            return {
-                dia: periodo === 'semana'
+        // Genera un bin por cada día del rango activo (inclusive).
+        const days: Array<{ dia: string; total: number; tickets: number; _dateStr: string }> = [];
+        const dayMs = 86_400_000;
+        const startMs = new Date(activeRange.from.getFullYear(), activeRange.from.getMonth(), activeRange.from.getDate()).getTime();
+        const endMs = new Date(activeRange.to.getFullYear(), activeRange.to.getMonth(), activeRange.to.getDate()).getTime();
+        const totalDias = Math.max(1, Math.round((endMs - startMs) / dayMs) + 1);
+        const safeMax = Math.min(totalDias, 62); // techo para evitar charts gigantes
+        for (let i = 0; i < safeMax; i++) {
+            const d = new Date(startMs + i * dayMs);
+            days.push({
+                dia: totalDias <= 7
                     ? d.toLocaleDateString('es-AR', { weekday: 'short', day: '2-digit' })
                     : String(d.getDate()).padStart(2, '0'),
-                total: 0, tickets: 0,
-                _dateStr: d.toLocaleDateString('en-CA'),
-            };
-        });
+                total: 0,
+                tickets: 0,
+                _dateStr: formatDateForAPI(d),
+            });
+        }
+        return days;
     };
-    const ventasPorDiaBase = buildDayChart();
-    if (periodo !== 'dia') {
+    const ventasPorDiaBase = rangoUnDia ? [] : buildDayChart();
+    if (!rangoUnDia) {
         for (const venta of ventasHoy) {
-            const ds   = new Date(venta.fecha).toLocaleDateString('en-CA');
+            const ds   = formatDateForAPI(new Date(venta.fecha));
             const slot = ventasPorDiaBase.find((s) => s._dateStr === ds);
             if (slot) { slot.total += venta.total; slot.tickets += 1; }
         }
     }
 
-    const chartData    = periodo === 'dia' ? ventasPorHora : ventasPorDiaBase;
-    const chartDataKey = periodo === 'dia' ? 'hora' : 'dia';
-    const chartTitle   = periodo === 'dia' ? 'Ventas por hora'
-        : periodo === 'semana' ? 'Ventas por día (semana)' : 'Ventas por día (mes)';
-    const chartSub     = periodo === 'dia' ? 'Total acumulado hoy'
-        : periodo === 'semana' ? 'Últimos 7 días' : 'Días del mes actual';
+    const chartData    = rangoUnDia ? ventasPorHora : ventasPorDiaBase;
+    const chartDataKey = rangoUnDia ? 'hora' : 'dia';
+    const chartTitle   = rangoUnDia ? 'Ventas por hora' : 'Ventas por día';
+    const chartSub     = formatRangeLabel(activeRange);
 
     const donutData = Object.entries(metodoPagoTotals)
         .map(([metodo, data]) => ({ name: metodo, value: data.total, color: METODO_COLOR[metodo] ?? 'gray' }))
@@ -209,6 +264,8 @@ export function DashboardPage() {
             cantidad: p.cantidad, total: p.total,
         }));
 
+    const periodoLabel = displayLabel(periodo, activeRange);
+
     return (
         <Stack gap="xl">
             <Group justify="space-between" align="flex-end">
@@ -219,16 +276,115 @@ export function DashboardPage() {
                     </Text>
                 </div>
                 <Group gap="md" align="center">
-                    <SegmentedControl
-                        value={periodo}
-                        onChange={(v) => setPeriodo(v as Periodo)}
-                        data={[
-                            { value: 'dia', label: 'Hoy' },
-                            { value: 'semana', label: 'Semana' },
-                            { value: 'mes', label: 'Mes' },
-                        ]}
-                        size="sm"
-                    />
+                    <Menu shadow="lg" width={240} radius="md" position="bottom-end" withArrow>
+                        <Menu.Target>
+                            <Button
+                                variant="default"
+                                size="sm"
+                                radius="md"
+                                leftSection={periodoOption.icon}
+                                rightSection={<ChevronDown size={14} />}
+                                styles={{ root: { fontWeight: 600, minWidth: 200 } }}
+                            >
+                                {periodoLabel}
+                            </Button>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                            <Menu.Label>Período</Menu.Label>
+                            {PERIODO_OPTIONS.map((opt) => [
+                                opt.value === 'personalizado' && <Menu.Divider key={`${opt.value}-div`} />,
+                                <Menu.Item
+                                    key={opt.value}
+                                    leftSection={opt.icon}
+                                    onClick={() => {
+                                        setPeriodo(opt.value);
+                                        if (opt.value === 'dia') {
+                                            if (!singleDay) setSingleDay(new Date());
+                                            setDayPickerOpen(true);
+                                        }
+                                    }}
+                                    rightSection={
+                                        periodo === opt.value
+                                            ? <CheckCircle size={14} color="var(--mantine-color-teal-5)" />
+                                            : null
+                                    }
+                                >
+                                    {opt.label}
+                                </Menu.Item>,
+                            ])}
+                        </Menu.Dropdown>
+                    </Menu>
+
+                    {periodo === 'dia' && (
+                        <DatePickerInput
+                            value={singleDay}
+                            onChange={(val) => {
+                                const toDate = (v: unknown): Date | null => {
+                                    if (!v) return null;
+                                    if (v instanceof Date) return v;
+                                    if (typeof v === 'string') {
+                                        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+                                        if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+                                        const d = new Date(v);
+                                        return isNaN(d.getTime()) ? null : d;
+                                    }
+                                    return null;
+                                };
+                                const d = toDate(val);
+                                setSingleDay(d);
+                                // Al elegir una fecha, cerramos el popover (estamos en modo controlado).
+                                if (d) setDayPickerOpen(false);
+                            }}
+                            placeholder="Elegí un día"
+                            valueFormat="DD/MM/YYYY"
+                            maxDate={new Date()}
+                            leftSection={<Calendar size={14} />}
+                            size="sm"
+                            w={180}
+                            popoverProps={{
+                                opened: dayPickerOpen,
+                                onChange: setDayPickerOpen,
+                                withArrow: true,
+                                shadow: 'md',
+                                position: 'bottom-end',
+                                closeOnClickOutside: true,
+                                trapFocus: false,
+                            }}
+                        />
+                    )}
+
+                    {periodo === 'personalizado' && (
+                        <DatePickerInput
+                            type="range"
+                            value={customRange}
+                            onChange={(val) => {
+                                // Mantine devuelve string[] (YYYY-MM-DD) o Date[] según la versión.
+                                // `new Date('YYYY-MM-DD')` interpreta como UTC → en TZ negativa (ART)
+                                // cae al día anterior. Parseamos manual a fecha local.
+                                const toDate = (v: unknown): Date | null => {
+                                    if (!v) return null;
+                                    if (v instanceof Date) return v;
+                                    if (typeof v === 'string') {
+                                        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+                                        if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+                                        const d = new Date(v);
+                                        return isNaN(d.getTime()) ? null : d;
+                                    }
+                                    return null;
+                                };
+                                setCustomRange([toDate(val?.[0]), toDate(val?.[1])]);
+                            }}
+                            placeholder="Elegir rango"
+                            valueFormat="DD/MM/YYYY"
+                            numberOfColumns={2}
+                            maxDate={new Date()}
+                            leftSection={<Calendar size={14} />}
+                            clearable
+                            size="sm"
+                            w={250}
+                            popoverProps={{ withArrow: true, shadow: 'md', position: 'bottom-end' }}
+                        />
+                    )}
                     <Group gap="xs" align="center">
                         {lastRefresh && (
                             <Text size="xs" c="dimmed">
@@ -255,7 +411,7 @@ export function DashboardPage() {
                 </SimpleGrid>
             ) : (
                 <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }}>
-                    <KpiCard label={`Ventas · ${PERIODO_LABEL[periodo]}`} value={formatARS(totalHoy)} sub={`${ventasHoy.length} transacciones`} icon={<TrendingUp size={22} />} color="blue" />
+                    <KpiCard label={`Ventas · ${periodoLabel}`} value={formatARS(totalHoy)} sub={`${ventasHoy.length} transacciones`} icon={<TrendingUp size={22} />} color="blue" />
                     <KpiCard label="Ticket promedio" value={formatARS(ticketProm)} sub="por transacción" icon={<ShoppingCart size={22} />} color="teal" />
                     <KpiCard label="Stock crítico" value={String(stockCritico.length)} sub="productos bajo mínimo" icon={<AlertTriangle size={22} />} color="yellow" />
                     <KpiCard label="Sin stock" value={String(sinStock.length)} sub="productos agotados" icon={<Package size={22} />} color="red" />
@@ -275,11 +431,11 @@ export function DashboardPage() {
                     {loading ? (
                         <Skeleton h={240} radius="md" />
                     ) : ventasHoy.length === 0 ? (
-                        <Center py="xl"><Text size="sm" c="dimmed">Sin ventas en {PERIODO_LABEL[periodo].toLowerCase()}</Text></Center>
+                        <Center py="xl"><Text size="sm" c="dimmed">Sin ventas en {periodoLabel.toLowerCase()}</Text></Center>
                     ) : (
                         <AreaChart h={240} data={chartData} dataKey={chartDataKey}
                             series={[{ name: 'total', label: 'Total', color: 'teal.6' }]}
-                            withDots={periodo !== 'dia'} strokeWidth={2} withLegend={false}
+                            withDots={!rangoUnDia} strokeWidth={2} withLegend={false}
                             valueFormatter={(value) => formatARS(value)} tickLine="none" gridAxis="y" />
                     )}
                 </Paper>
@@ -288,14 +444,14 @@ export function DashboardPage() {
                     <Group justify="space-between" mb="md">
                         <div>
                             <Title order={5} c="blue.4">Métodos de pago</Title>
-                            <Text size="xs" c="dimmed">Distribución · {PERIODO_LABEL[periodo].toLowerCase()}</Text>
+                            <Text size="xs" c="dimmed">Distribución · {periodoLabel.toLowerCase()}</Text>
                         </div>
                         <Badge variant="filled" color="blue" radius="sm">{ventasHoy.length} ventas</Badge>
                     </Group>
                     {loading ? (
                         <Skeleton h={240} radius="md" />
                     ) : ventasHoy.length === 0 ? (
-                        <Center py="xl"><Text size="sm" c="dimmed">Sin ventas en {PERIODO_LABEL[periodo].toLowerCase()}</Text></Center>
+                        <Center py="xl"><Text size="sm" c="dimmed">Sin ventas en {periodoLabel.toLowerCase()}</Text></Center>
                     ) : (
                         <Group align="flex-start" justify="space-between" wrap="nowrap" gap="lg">
                             <DonutChart data={donutData} size={190} thickness={22} withTooltip
@@ -325,16 +481,16 @@ export function DashboardPage() {
                     <Group justify="space-between" mb="md">
                         <div>
                             <Title order={5} c="violet.4">Top productos</Title>
-                            <Text size="xs" c="dimmed">Por facturación · {PERIODO_LABEL[periodo].toLowerCase()}</Text>
+                            <Text size="xs" c="dimmed">Por facturación · {periodoLabel.toLowerCase()}</Text>
                         </div>
                         <Badge variant="filled" color="violet" radius="sm">{itemsVendidos} ud</Badge>
                     </Group>
                     {loading ? (
                         <Skeleton h={240} radius="md" />
                     ) : ventasHoy.length === 0 ? (
-                        <Center py="xl"><Text size="sm" c="dimmed">Sin ventas en {PERIODO_LABEL[periodo].toLowerCase()}</Text></Center>
+                        <Center py="xl"><Text size="sm" c="dimmed">Sin ventas en {periodoLabel.toLowerCase()}</Text></Center>
                     ) : topProductos.length === 0 ? (
-                        <Center py="xl"><Text size="sm" c="dimmed">Sin ítems vendidos en {PERIODO_LABEL[periodo].toLowerCase()}</Text></Center>
+                        <Center py="xl"><Text size="sm" c="dimmed">Sin ítems vendidos en {periodoLabel.toLowerCase()}</Text></Center>
                     ) : (
                         <BarChart h={240} data={topProductos} dataKey="producto"
                             series={[{ name: 'total', label: 'Total', color: 'violet.6' }]}
@@ -382,7 +538,7 @@ export function DashboardPage() {
                 <Paper p="lg" radius="md" withBorder className={styles.card}>
                     <Group justify="space-between" mb="md">
                         <div>
-                            <Title order={5} c="blue.4">Ventas · {PERIODO_LABEL[periodo]}</Title>
+                            <Title order={5} c="blue.4">Ventas · {periodoLabel}</Title>
                             <Text size="xs" c="dimmed">Últimas transacciones completadas</Text>
                         </div>
                         <Badge variant="filled" color="blue" size="md" radius="sm">
@@ -393,7 +549,7 @@ export function DashboardPage() {
                         <Center py="xl">
                             <Stack align="center" gap="xs">
                                 <ThemeIcon size={48} radius="xl" variant="light" color="gray"><ShoppingCart size={24} /></ThemeIcon>
-                                <Text c="dimmed" size="sm">No hay ventas en {PERIODO_LABEL[periodo].toLowerCase()}</Text>
+                                <Text c="dimmed" size="sm">No hay ventas en {periodoLabel.toLowerCase()}</Text>
                             </Stack>
                         </Center>
                     ) : (
@@ -401,7 +557,7 @@ export function DashboardPage() {
                             <Table.Thead>
                                 <Table.Tr style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                                     <Table.Th><Text size="xs" c="dimmed" fw={700} tt="uppercase">Ticket</Text></Table.Th>
-                                    <Table.Th><Text size="xs" c="dimmed" fw={700} tt="uppercase">{periodo === 'dia' ? 'Hora' : 'Fecha'}</Text></Table.Th>
+                                    <Table.Th><Text size="xs" c="dimmed" fw={700} tt="uppercase">{rangoUnDia ? 'Hora' : 'Fecha'}</Text></Table.Th>
                                     <Table.Th><Text size="xs" c="dimmed" fw={700} tt="uppercase">Cajero</Text></Table.Th>
                                     <Table.Th><Text size="xs" c="dimmed" fw={700} tt="uppercase">Método</Text></Table.Th>
                                     <Table.Th ta="right"><Text size="xs" c="dimmed" fw={700} tt="uppercase">Total</Text></Table.Th>
@@ -413,7 +569,7 @@ export function DashboardPage() {
                                         <Table.Td><Text size="sm" fw={700} ff="monospace" className={styles.ticketCell}>#{v.numeroTicket}</Text></Table.Td>
                                         <Table.Td>
                                             <Text size="sm" c="dimmed">
-                                                {periodo === 'dia'
+                                                {rangoUnDia
                                                     ? new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
                                                     : new Date(v.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                             </Text>

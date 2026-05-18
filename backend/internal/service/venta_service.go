@@ -102,12 +102,14 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 
 	// 3. Resolve products and calculate totals (pre-flight, outside TX)
 	type resolvedItem struct {
-		productoID uuid.UUID
-		nombre     string
-		precio     decimal.Decimal
-		cantidad   int
-		descuento  decimal.Decimal
-		subtotal   decimal.Decimal
+		productoID         uuid.UUID
+		nombre             string
+		precio             decimal.Decimal // precio efectivo aplicado (minorista o mayorista)
+		precioMinoristaOrig decimal.Decimal // snapshot del minorista para audit
+		tipoPrecio         string
+		cantidad           int
+		descuento          decimal.Decimal
+		subtotal           decimal.Decimal
 	}
 
 	var resolved []resolvedItem
@@ -144,9 +146,23 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 			}
 			conflictoStock = true
 		}
+
+		// Resolver tipo de precio. Nunca confiar en el precio enviado por el cliente.
+		tipoPrecio := "minorista"
+		if item.TipoPrecio != nil {
+			tipoPrecio = *item.TipoPrecio
+		}
+		precioEfectivo := p.PrecioVenta
+		if tipoPrecio == "mayorista" {
+			if p.PrecioMayorista == nil {
+				return nil, fmt.Errorf("producto %s no tiene precio mayorista configurado", p.Nombre)
+			}
+			precioEfectivo = *p.PrecioMayorista
+		}
+
 		// Descuento cap: no puede superar el 50% del valor de la línea (precio × cantidad).
 		// Prevents negative subtotals and guards against client-side manipulation.
-		lineTotal := p.PrecioVenta.Mul(decimal.NewFromInt(int64(item.Cantidad)))
+		lineTotal := precioEfectivo.Mul(decimal.NewFromInt(int64(item.Cantidad)))
 		maxDescuento := lineTotal.Mul(decimal.NewFromFloat(0.50))
 		if item.Descuento.GreaterThan(maxDescuento) {
 			return nil, fmt.Errorf("descuento para %s excede el máximo permitido (50%% del precio de línea)", p.Nombre)
@@ -155,12 +171,14 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 		subtotal = subtotal.Add(lineSubtotal)
 		descuentoTotal = descuentoTotal.Add(item.Descuento)
 		resolved = append(resolved, resolvedItem{
-			productoID: pid,
-			nombre:     p.Nombre,
-			precio:     p.PrecioVenta,
-			cantidad:   item.Cantidad,
-			descuento:  item.Descuento,
-			subtotal:   lineSubtotal,
+			productoID:         pid,
+			nombre:             p.Nombre,
+			precio:             precioEfectivo,
+			precioMinoristaOrig: p.PrecioVenta,
+			tipoPrecio:         tipoPrecio,
+			cantidad:           item.Cantidad,
+			descuento:          item.Descuento,
+			subtotal:           lineSubtotal,
 		})
 	}
 
@@ -246,14 +264,24 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 			ConflictoStock:  conflictoStock,
 		}
 
+		// Persist global discount audit (type + raw value). Amount efectivo siempre está en DescuentoTotal.
+		if req.DescuentoGlobal != nil && req.DescuentoGlobal.Type != "" {
+			tipo := req.DescuentoGlobal.Type
+			venta.DiscountType = &tipo
+			venta.DiscountValue = req.DescuentoGlobal.Value
+		}
+
 		// Build items
 		for _, r := range resolved {
+			precioMinSnapshot := r.precioMinoristaOrig
 			venta.Items = append(venta.Items, model.VentaItem{
-				ProductoID:     r.productoID,
-				Cantidad:       r.cantidad,
-				PrecioUnitario: r.precio,
-				DescuentoItem:  r.descuento,
-				Subtotal:       r.subtotal,
+				ProductoID:              r.productoID,
+				Cantidad:                r.cantidad,
+				PrecioUnitario:          r.precio,
+				DescuentoItem:           r.descuento,
+				Subtotal:                r.subtotal,
+				TipoPrecio:              r.tipoPrecio,
+				PrecioMinoristaOriginal: &precioMinSnapshot,
 			})
 		}
 
@@ -298,14 +326,31 @@ func (s *ventaService) registrarVentaInternal(ctx context.Context, usuarioID uui
 			}
 		}
 
-		// Create movimientos de caja (one per payment method)
+		// Create movimientos de caja (one per payment method).
+		// CRÍTICO: el vuelto siempre se devuelve en efectivo, por lo tanto el efectivo NETO
+		// que queda en caja por esta venta es (monto_efectivo_recibido - vuelto). Sin este
+		// ajuste el arqueo siempre da faltante = ΣVueltos de la sesión.
+		hasEfectivo := false
+		for _, p := range req.Pagos {
+			if p.Metodo == "efectivo" {
+				hasEfectivo = true
+				break
+			}
+		}
+		if vuelto.GreaterThan(decimal.Zero) && !hasEfectivo {
+			return errors.New("hay vuelto pero ningún pago en efectivo: el vuelto no puede devolverse en tarjeta/QR")
+		}
 		for _, pago := range req.Pagos {
 			metodo := pago.Metodo
+			monto := pago.Monto
+			if metodo == "efectivo" && vuelto.GreaterThan(decimal.Zero) {
+				monto = monto.Sub(vuelto)
+			}
 			mov := model.MovimientoCaja{
 				SesionCajaID: sesionID,
 				Tipo:         "venta",
 				MetodoPago:   &metodo,
-				Monto:        pago.Monto,
+				Monto:        monto,
 				Descripcion:  fmt.Sprintf("Venta #%d", ticketNum),
 				ReferenciaID: &venta.ID,
 			}
@@ -415,15 +460,28 @@ func (s *ventaService) AnularVenta(ctx context.Context, id uuid.UUID, motivo str
 			}
 		}
 
-		// Create inverse movimientos de caja
+		// Create inverse movimientos de caja.
+		// IMPORTANTE: debe revertir EXACTAMENTE lo que generó RegistrarVenta.
+		// RegistrarVenta resta el vuelto del movimiento de efectivo, así que acá
+		// también lo restamos antes de negar — de lo contrario al anular se
+		// "devuelve" más efectivo del que realmente entró y descuadra la caja.
+		totalPagos := decimal.Zero
+		for _, pago := range venta.Pagos {
+			totalPagos = totalPagos.Add(pago.Monto)
+		}
+		vueltoOriginal := totalPagos.Sub(venta.Total)
+
 		for _, pago := range venta.Pagos {
 			metodo := pago.Metodo
-			monto := pago.Monto.Neg()
+			monto := pago.Monto
+			if metodo == "efectivo" && vueltoOriginal.GreaterThan(decimal.Zero) {
+				monto = monto.Sub(vueltoOriginal)
+			}
 			mov := model.MovimientoCaja{
 				SesionCajaID: venta.SesionCajaID,
 				Tipo:         "anulacion",
 				MetodoPago:   &metodo,
-				Monto:        monto,
+				Monto:        monto.Neg(),
 				Descripcion:  fmt.Sprintf("Anulación venta #%d — %s", venta.NumeroTicket, motivo),
 				ReferenciaID: &venta.ID,
 			}

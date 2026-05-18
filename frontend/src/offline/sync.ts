@@ -39,6 +39,7 @@ function toLocalSale(sale: SaleRecord): LocalSale {
         nroDocReceptor: sale.nroDocReceptor,
         receptorNombre: sale.receptorNombre,
         receptorDomicilio: sale.receptorDomicilio,
+        globalDiscount: sale.globalDiscount,
         descuentoGlobal: sale.descuentoGlobal,
         synced: 0,
     };

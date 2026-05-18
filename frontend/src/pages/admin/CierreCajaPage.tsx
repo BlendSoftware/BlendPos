@@ -9,15 +9,11 @@ import { Lock, CheckCircle, AlertTriangle, History, ClipboardList, RefreshCw } f
 import { useAuthStore } from '../../store/useAuthStore';
 import { useCajaStore } from '../../store/useCajaStore';
 import { formatARS } from '../../utils/format';
-import type { IArqueoItem } from '../../types';
 import type { ReporteCajaResponse, ArqueoResponse as ApiArqueoResponse } from '../../services/api/caja';
 import { getHistorialCajas } from '../../services/api/caja';
 
-// Denominaciones billetes/monedas ARS
-const DENOMINACIONES = [10000, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10];
-
 interface FormValues {
-    items: IArqueoItem[];
+    efectivoContado: number;
     observaciones: string;
 }
 
@@ -65,22 +61,22 @@ export function CierreCajaPage() {
 
     const form = useForm<FormValues>({
         initialValues: {
-            items: DENOMINACIONES.map((d) => ({ denominacion: d, cantidad: 0 })),
+            efectivoContado: 0,
             observaciones: '',
+        },
+        validate: {
+            efectivoContado: (v) => (v < 0 ? 'No puede ser negativo' : null),
         },
     });
 
-    const efectivoContado = form.values.items.reduce(
-        (sum, item) => sum + item.denominacion * item.cantidad,
-        0
-    );
+    const efectivoContado = form.values.efectivoContado;
 
     const handleSubmit = form.onSubmit(async (values) => {
         if (!sesionId) {
             notifications.show({ title: 'Sin sesión', message: 'No hay una sesión de caja abierta', color: 'red' });
             return;
         }
-        const contado = values.items.reduce((s, i) => s + i.denominacion * i.cantidad, 0);
+        const contado = values.efectivoContado;
         // Los medios digitales (débito, crédito, transferencia) se confirman del sistema
         // ya que el operador no puede "contar" tarjetas como billetes.
         const debitoSistema = Number(reporte?.monto_esperado?.debito ?? 0);
@@ -179,7 +175,7 @@ export function CierreCajaPage() {
 
                                 <Alert color="blue" variant="light" icon={<Lock size={16} />}>
                                     <strong>Arqueo ciego:</strong> No verás el monto esperado hasta enviar el formulario.
-                                    Contá el efectivo y completá las denominaciones.
+                                    Contá el efectivo total e ingresalo directamente.
                                 </Alert>
 
                                 {/* Resumen de pagos digitales del sistema */}
@@ -203,35 +199,26 @@ export function CierreCajaPage() {
                                 )}
 
                                 <Paper p="lg" radius="md" withBorder>
-                                    <Title order={5} mb="md">Conteo de denominaciones</Title>
-                                    <Stack gap="sm">
-                                        {form.values.items.map((item, i) => (
-                                            <Group key={item.denominacion} justify="space-between" align="center">
-                                                <Text size="sm" w={100} fw={500}>
-                                                    {formatARS(item.denominacion)}
-                                                </Text>
-                                                <NumberInput
-                                                    min={0}
-                                                    w={110}
-                                                    placeholder="0"
-                                                    value={form.values.items[i].cantidad}
-                                                    onChange={(v) => {
-                                                        const newItems = [...form.values.items];
-                                                        newItems[i] = { ...newItems[i], cantidad: Number(v) || 0 };
-                                                        form.setFieldValue('items', newItems);
-                                                    }}
-                                                />
-                                                <Text size="sm" c="dimmed" w={120} ta="right">
-                                                    = {formatARS(item.denominacion * form.values.items[i].cantidad)}
-                                                </Text>
-                                            </Group>
-                                        ))}
-                                    </Stack>
-
+                                    <Title order={5} mb="sm">Efectivo total contado</Title>
+                                    <Text size="xs" c="dimmed" mb="md">
+                                        Ingresá el total en pesos que tenés físicamente en la caja al cierre.
+                                    </Text>
+                                    <NumberInput
+                                        size="xl"
+                                        min={0}
+                                        step={100}
+                                        thousandSeparator="."
+                                        decimalSeparator=","
+                                        prefix="$ "
+                                        placeholder="0"
+                                        hideControls
+                                        value={form.values.efectivoContado}
+                                        onChange={(v) => form.setFieldValue('efectivoContado', Number(v) || 0)}
+                                        styles={{ input: { fontSize: 28, fontWeight: 700, textAlign: 'right' } }}
+                                    />
                                     <Divider my="md" />
-
                                     <Group justify="space-between">
-                                        <Text fw={700}>Total contado:</Text>
+                                        <Text fw={700}>Total a declarar:</Text>
                                         <Text fw={800} size="xl" c="teal">{formatARS(efectivoContado)}</Text>
                                     </Group>
                                 </Paper>

@@ -25,6 +25,8 @@ export interface ProductoResponse {
     categoria: string;
     precio_costo: number;
     precio_venta: number;
+    /** Precio mayorista opcional. Si está ausente o es null, el producto no tiene precio mayorista. */
+    precio_mayorista?: number | null;
     margen_pct: number;
     stock_actual: number;
     stock_minimo: number;
@@ -66,6 +68,7 @@ export interface CrearProductoRequest {
     categoria: string;
     precio_costo: number;
     precio_venta: number;
+    precio_mayorista?: number | null;
     stock_actual: number;
     stock_minimo: number;
     unidad_medida?: string;
@@ -78,6 +81,7 @@ export interface ActualizarProductoRequest {
     categoria?: string;
     precio_costo?: number;
     precio_venta?: number;
+    precio_mayorista?: number | null;
     stock_minimo?: number;
     unidad_medida?: string;
     proveedor_id?: string;

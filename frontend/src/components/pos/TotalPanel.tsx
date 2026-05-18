@@ -3,19 +3,17 @@ import { ShoppingCart, CreditCard, X, Percent } from 'lucide-react';
 import { useCartStore } from '../../store/useCartStore';
 import { usePOSUIStore } from '../../store/usePOSUIStore';
 import { LastScannedProduct } from './LastScannedProduct';
+import { formatMoney } from '../../utils/money';
 import styles from './TotalPanel.module.css';
 
-function formatCurrency(value: number): string {
-    return new Intl.NumberFormat('es-AR', {
-        style: 'currency',
-        currency: 'ARS',
-        minimumFractionDigits: 2,
-    }).format(value);
+/** Etiqueta corta del descuento global para mostrar en badges y botones (% o $). */
+function discountLabel(d: { type: 'percentage' | 'fixed'; value: number; amount: number }): string {
+    return d.type === 'percentage' ? `-${d.value}%` : `-${formatMoney(d.amount)}`;
 }
 
 export function TotalPanel() {
     const total = useCartStore((s) => s.total);
-    const descuentoGlobal = useCartStore((s) => s.descuentoGlobal);
+    const globalDiscount = useCartStore((s) => s.globalDiscount);
     const totalConDescuento = useCartStore((s) => s.totalConDescuento);
     const cart = useCartStore((s) => s.cart);
     const openPaymentModal = usePOSUIStore((s) => s.openPaymentModal);
@@ -23,7 +21,7 @@ export function TotalPanel() {
     const openDiscountModal = usePOSUIStore((s) => s.openDiscountModal);
 
     const itemCount = cart.reduce((sum, item) => sum + item.cantidad, 0);
-    const hasDiscount = descuentoGlobal > 0;
+    const hasDiscount = globalDiscount.amount > 0;
     const displayTotal = hasDiscount ? totalConDescuento : total;
 
     return (
@@ -47,16 +45,16 @@ export function TotalPanel() {
                 {hasDiscount && (
                     <Box className={styles.originalPrice}>
                         <Text size="md" c="dimmed" td="line-through" ff="monospace">
-                            {formatCurrency(total)}
+                            {formatMoney(total)}
                         </Text>
                         <Badge color="orange" variant="light" size="sm">
-                            -{descuentoGlobal}%
+                            {discountLabel(globalDiscount)}
                         </Badge>
                     </Box>
                 )}
 
                 <Text className={`${styles.totalAmount} ${hasDiscount ? styles.totalDiscount : styles.totalNormal}`} fw={800}>
-                    {formatCurrency(displayTotal)}
+                    {formatMoney(displayTotal)}
                 </Text>
 
                 <Group gap="xs" mt={4}>
@@ -97,7 +95,7 @@ export function TotalPanel() {
                 >
                     <Stack gap={0} align="flex-start">
                         <Text size="sm" fw={700}>
-                            {hasDiscount ? `Descuento (${descuentoGlobal}%)` : 'DESCUENTO'}
+                            {hasDiscount ? `Descuento (${discountLabel(globalDiscount).slice(1)})` : 'DESCUENTO'}
                         </Text>
                         <Text size="xs" className={styles.shortcutLabel}>F8</Text>
                     </Stack>

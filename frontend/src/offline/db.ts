@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { CartItem, MetodoPago, PagoDetalle } from '../store/useCartStore';
+import type { AppliedDiscount } from '../utils/money';
 
 export interface LocalSale {
     id: string;
@@ -29,7 +30,15 @@ export interface LocalSale {
     receptorNombre?: string;
     /** Domicilio del comprador para comprobantes fiscales. */
     receptorDomicilio?: string;
-    /** Descuento global aplicado al carrito (porcentaje 0-100). */
+    /**
+     * Descuento global canónico (tipo + valor + monto). Agregado en Dexie v5.
+     * Las ventas anteriores tienen este campo derivado del legacy `descuentoGlobal` durante upgrade.
+     */
+    globalDiscount?: AppliedDiscount;
+    /**
+     * Legacy: porcentaje 0-100. Se mantiene para retrocompatibilidad de tickets y vistas históricas.
+     * En ventas nuevas se llena solo cuando globalDiscount.type === 'percentage'.
+     */
     descuentoGlobal?: number;
     synced: 0 | 1;
 }
@@ -53,6 +62,8 @@ export interface LocalProduct {
     codigoBarras: string;
     nombre: string;
     precio: number;
+    /** Precio mayorista opcional. Undefined/null/0 = sin precio mayorista. */
+    precioMayorista?: number | null;
     stock: number;
 }
 
@@ -96,6 +107,30 @@ class BlendPosDB extends Dexie {
             products: 'id, codigoBarras, nombre, stock',
             sync_meta: 'key',
         });
+
+        // v5: schema unchanged. El upgrade migra in-place el campo legacy
+        // `descuentoGlobal: number` (porcentaje) al canónico `globalDiscount: AppliedDiscount`.
+        // Las ventas nuevas escriben ambos campos para tickets y vistas que aún leen el legacy.
+        this.version(5)
+            .stores({
+                sales: 'id, fecha, synced',
+                sync_queue: '++id, status, createdAt, type, nextAttemptAt',
+                products: 'id, codigoBarras, nombre, stock',
+                sync_meta: 'key',
+            })
+            .upgrade(async (tx) => {
+                await tx.table('sales').toCollection().modify((sale: LocalSale) => {
+                    if (sale.globalDiscount) return;
+                    const pct = sale.descuentoGlobal ?? 0;
+                    if (pct <= 0) return;
+                    const amount = (sale.total ?? 0) * pct / 100;
+                    sale.globalDiscount = {
+                        type: 'percentage',
+                        value: pct,
+                        amount: Math.round(amount * 100) / 100,
+                    };
+                });
+            });
     }
 }
 

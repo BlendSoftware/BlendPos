@@ -17,8 +17,12 @@ type Venta struct {
 	Subtotal       decimal.Decimal `gorm:"type:decimal(12,2);not null"`
 	DescuentoTotal decimal.Decimal `gorm:"type:decimal(12,2);not null;default:0"`
 	Total          decimal.Decimal `gorm:"type:decimal(12,2);not null"`
-	Estado         string          `gorm:"type:varchar(20);not null;default:'completada'"`
-	ComprobanteID  *uuid.UUID      `gorm:"type:uuid"`
+	// DiscountType: 'percentage' | 'fixed' | nil (sin descuento global tipado).
+	// Solo audit: el monto efectivo siempre está en DescuentoTotal.
+	DiscountType  *string         `gorm:"type:varchar(20)"`
+	DiscountValue decimal.Decimal `gorm:"type:decimal(12,2);not null;default:0"`
+	Estado        string          `gorm:"type:varchar(20);not null;default:'completada'"`
+	ComprobanteID *uuid.UUID      `gorm:"type:uuid"`
 	// TipoComprobante is the receipt type requested at POS time.
 	// "ticket_interno" (default) | "factura_a" | "factura_b" | "factura_c"
 	TipoComprobante string `gorm:"type:varchar(30);not null;default:'ticket_interno'"`
@@ -43,6 +47,10 @@ type VentaItem struct {
 	PrecioUnitario decimal.Decimal `gorm:"type:decimal(10,2);not null"`
 	DescuentoItem  decimal.Decimal `gorm:"type:decimal(10,2);not null;default:0"`
 	Subtotal       decimal.Decimal `gorm:"type:decimal(12,2);not null"`
+	// TipoPrecio: 'minorista' (default) | 'mayorista'. Indica qué precio del producto se aplicó.
+	TipoPrecio string `gorm:"type:varchar(20);not null;default:'minorista'"`
+	// PrecioMinoristaOriginal: snapshot del precio_venta al momento de la venta (útil cuando TipoPrecio='mayorista').
+	PrecioMinoristaOriginal *decimal.Decimal `gorm:"type:decimal(10,2)"`
 
 	Producto *Producto `gorm:"foreignKey:ProductoID"`
 }

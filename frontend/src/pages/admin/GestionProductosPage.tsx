@@ -29,6 +29,9 @@ function mapProducto(p: ProductoResponse): IProducto {
         categoria: (p.categoria as CategoriaProducto) ?? 'otros',
         precioCosto: typeof p.precio_costo === 'number' ? p.precio_costo : Number(p.precio_costo),
         precioVenta: typeof p.precio_venta === 'number' ? p.precio_venta : Number(p.precio_venta),
+        precioMayorista: p.precio_mayorista == null
+            ? null
+            : (typeof p.precio_mayorista === 'number' ? p.precio_mayorista : Number(p.precio_mayorista)),
         stock: p.stock_actual,
         stockMinimo: p.stock_minimo,
         activo: p.activo,
@@ -53,6 +56,8 @@ interface FormValues {
     categoria: string;
     precioCosto: number;
     precioVenta: number;
+    /** 0 o vacío = producto sin precio mayorista. */
+    precioMayorista: number | '';
     stock: number;
     stockMinimo: number;
     activo: boolean;
@@ -61,6 +66,7 @@ interface FormValues {
 const EMPTY_FORM: FormValues = {
     codigoBarras: '', nombre: '', descripcion: '',
     categoria: 'otros', precioCosto: 0, precioVenta: 0,
+    precioMayorista: '',
     stock: 0, stockMinimo: 5, activo: true,
 };
 
@@ -248,6 +254,7 @@ export function GestionProductosPage() {
             categoria: matchedCat?.nombre ?? productCat,
             precioCosto: Number(p.precioCosto),
             precioVenta: Number(p.precioVenta),
+            precioMayorista: p.precioMayorista != null ? Number(p.precioMayorista) : '',
             stock: p.stock,
             stockMinimo: p.stockMinimo,
             activo: p.activo,
@@ -335,6 +342,10 @@ export function GestionProductosPage() {
 
     const handleSubmit = form.onSubmit(async (values) => {
         try {
+            // Mayorista: vacío o 0 → null (producto sin precio mayorista); >0 → enviarlo.
+            const mayorista = values.precioMayorista === '' || Number(values.precioMayorista) <= 0
+                ? null
+                : Number(values.precioMayorista);
             if (editTarget) {
                 await actualizarProducto(editTarget.id, {
                     nombre: values.nombre,
@@ -342,6 +353,7 @@ export function GestionProductosPage() {
                     categoria: values.categoria,
                     precio_costo: values.precioCosto,
                     precio_venta: values.precioVenta,
+                    precio_mayorista: mayorista ?? undefined,
                     stock_minimo: values.stockMinimo,
                 });
                 notifications.show({ title: 'Producto actualizado', message: values.nombre, color: 'blue' });
@@ -353,6 +365,7 @@ export function GestionProductosPage() {
                     categoria: values.categoria,
                     precio_costo: values.precioCosto,
                     precio_venta: values.precioVenta,
+                    precio_mayorista: mayorista ?? undefined,
                     stock_actual: values.stock,
                     stock_minimo: values.stockMinimo,
                 });
@@ -651,6 +664,19 @@ export function GestionProductosPage() {
                                 {...form.getInputProps('precioVenta')}
                             />
                         </Group>
+
+                        <NumberInput
+                            label="Precio mayorista (opcional)"
+                            description="Dejar vacío si el producto no tiene precio mayorista. El POS muestra el toggle solo si está cargado."
+                            placeholder="Sin precio mayorista"
+                            prefix="$"
+                            decimalScale={2}
+                            thousandSeparator="."
+                            decimalSeparator=","
+                            min={0}
+                            allowNegative={false}
+                            {...form.getInputProps('precioMayorista')}
+                        />
 
                         {form.values.precioCosto > 0 && form.values.precioVenta > form.values.precioCosto && (
                             <Text size="xs" c="teal">

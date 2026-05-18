@@ -45,6 +45,21 @@ type ItemVentaRequest struct {
 	ProductoID string          `json:"producto_id" validate:"required,uuid"`
 	Cantidad   int             `json:"cantidad"    validate:"required,min=1"`
 	Descuento  decimal.Decimal `json:"descuento"   validate:"min=0"`
+	// TipoPrecio: "minorista" (default) o "mayorista". El backend valida que el producto
+	// tenga precio_mayorista cuando se solicita "mayorista".
+	TipoPrecio *string `json:"tipo_precio" validate:"omitempty,oneof=minorista mayorista"`
+	// PrecioUnitarioAplicado: opcional, informativo. Backend SIEMPRE recalcula
+	// el precio efectivo desde la BD según TipoPrecio (security: no aceptar precios del cliente).
+	PrecioUnitarioAplicado *decimal.Decimal `json:"precio_unitario_aplicado" validate:"omitempty"`
+}
+
+// DescuentoGlobalRequest captura el descuento global tipado para audit.
+// El backend NO recalcula totales con esto — el monto efectivo viene en ItemVentaRequest.Descuento
+// (ya distribuido proporcionalmente por el frontend). Este bloque solo persiste el INPUT del cajero.
+type DescuentoGlobalRequest struct {
+	Type   string          `json:"type"   validate:"required,oneof=percentage fixed"`
+	Value  decimal.Decimal `json:"value"  validate:"min=0"`
+	Amount decimal.Decimal `json:"amount" validate:"min=0"`
 }
 
 type PagoRequest struct {
@@ -56,6 +71,9 @@ type RegistrarVentaRequest struct {
 	SesionCajaID string             `json:"sesion_caja_id" validate:"required,uuid"`
 	Items        []ItemVentaRequest `json:"items"          validate:"required,min=1,dive"`
 	Pagos        []PagoRequest      `json:"pagos"          validate:"required,min=1,dive"`
+	// DescuentoGlobal: descuento global tipado (% o $ fijo). Opcional.
+	// El backend lo persiste para audit en ventas.discount_type/discount_value.
+	DescuentoGlobal *DescuentoGlobalRequest `json:"descuento_global" validate:"omitempty"`
 	// OfflineID is set by the PWA when registering a sale created offline
 	OfflineID *string `json:"offline_id"    validate:"omitempty,uuid"`
 	// ClienteEmail: optional — when present, the facturacion worker mails the PDF receipt.

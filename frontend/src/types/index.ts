@@ -33,6 +33,8 @@ export interface IProducto {
     categoria: CategoriaProducto;
     precioCosto: number;
     precioVenta: number;
+    /** Precio mayorista opcional. Null/undefined = producto sin precio mayorista. */
+    precioMayorista?: number | null;
     stock: number;
     stockMinimo: number;
     activo: boolean;
@@ -62,12 +64,16 @@ export interface IMovimientoStock {
 
 // ── Ventas ───────────────────────────────────────────────────────────────────
 
+export type TipoPrecio = 'minorista' | 'mayorista';
+
 export interface IItemVenta {
     productoId: string;
     productoNombre: string;
     codigoBarras: string;
     cantidad: number;
     precioUnitario: number;
+    /** Tipo de precio aplicado a este ítem. Default: 'minorista'. */
+    tipoPrecio?: TipoPrecio;
     descuento: number; // %
     subtotal: number;
 }

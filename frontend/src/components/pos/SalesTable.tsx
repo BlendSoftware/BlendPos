@@ -1,19 +1,14 @@
 import { useState } from 'react';
-import { Table, Text, Flex, Box, ActionIcon, NumberInput, Tooltip, Badge, Stack } from '@mantine/core';
+import { Table, Text, Flex, Box, ActionIcon, NumberInput, Tooltip, Badge, Stack, SegmentedControl } from '@mantine/core';
 import { ScanBarcode, Trash2, Plus, Minus, Tag } from 'lucide-react';
+import { notifications } from '@mantine/notifications';
 import { useCartStore } from '../../store/useCartStore';
 import type { CartItem } from '../../store/useCartStore';
 import { usePromocionesStore } from '../../store/usePromocionesStore';
 import type { PromocionResponse } from '../../services/api/promociones';
+import { getLocalStock } from '../../offline/catalog';
+import { formatMoney } from '../../utils/money';
 import styles from './SalesTable.module.css';
-
-function formatCurrency(value: number): string {
-    return new Intl.NumberFormat('es-AR', {
-        style: 'currency',
-        currency: 'ARS',
-        minimumFractionDigits: 2,
-    }).format(value);
-}
 
 // ── Display row types ─────────────────────────────────────────────────────────
 
@@ -139,6 +134,7 @@ export function SalesTable() {
     const lastAdded = useCartStore((s) => s.lastAdded);
     const updateQuantity = useCartStore((s) => s.updateQuantity);
     const removeItem = useCartStore((s) => s.removeItem);
+    const setItemPriceType = useCartStore((s) => s.setItemPriceType);
     const setSelectedRowIndex = useCartStore((s) => s.setSelectedRowIndex);
 
     const promociones = usePromocionesStore((s) => s.promociones);
@@ -153,12 +149,12 @@ export function SalesTable() {
     };
 
     const commitEdit = (id: string, currentTotal: number, displayQty: number) => {
-        const val = typeof editingValue === 'string' ? parseInt(editingValue) : editingValue;
-        if (!isNaN(val) && val > 0) {
-            // Map display qty edit → total qty edit: keep combo units, replace extra units
-            const comboUnits = currentTotal - displayQty;
-            updateQuantity(id, comboUnits + val);
-        }
+        // Coerce input → entero positivo. Si es inválido, mantiene la cantidad actual.
+        const raw = typeof editingValue === 'string' ? parseInt(editingValue, 10) : Math.floor(editingValue);
+        const newDisplay = Number.isFinite(raw) && raw > 0 ? raw : displayQty;
+        // Map display qty edit → total qty edit: keep combo units, replace extra units
+        const comboUnits = currentTotal - displayQty;
+        updateQuantity(id, comboUnits + newDisplay);
         setEditingId(null);
     };
 
@@ -168,6 +164,42 @@ export function SalesTable() {
             const newQty = cartItem.cantidad - qty;
             if (newQty <= 0) removeItem(cartItem.id);
             else updateQuantity(cartItem.id, newQty);
+        });
+    };
+
+    // Sumar un combo completo: agrega `n` unidades a CADA producto del combo.
+    // Pre-valida stock de todos los componentes para no dejar el cart inconsistente.
+    const handleIncrementCombo = async (row: ComboRow) => {
+        const n = row.n;
+        for (const { cartItem } of row.items) {
+            try {
+                const stock = await getLocalStock(cartItem.id);
+                if (cartItem.cantidad + n > stock) {
+                    notifications.show({
+                        title: 'Stock insuficiente',
+                        message: `No alcanza stock de "${cartItem.nombre}" para sumar otra promo`,
+                        color: 'orange',
+                        autoClose: 3000,
+                    });
+                    return;
+                }
+            } catch (err) {
+                console.warn('[BlendPOS] stock check error en combo +1', err);
+            }
+        }
+        for (const { cartItem } of row.items) {
+            await updateQuantity(cartItem.id, cartItem.cantidad + n);
+        }
+    };
+
+    // Restar un combo completo: si queda en 0 → eliminar el combo entero.
+    const handleDecrementCombo = (row: ComboRow) => {
+        if (row.completeSets <= 1) {
+            handleDeleteCombo(row);
+            return;
+        }
+        row.items.forEach(({ cartItem }) => {
+            updateQuantity(cartItem.id, cartItem.cantidad - row.n);
         });
     };
 
@@ -260,7 +292,7 @@ export function SalesTable() {
                                                 ))}
                                             </Stack>
                                             <Text size="xs" c="orange.5" mt={2}>
-                                                −{formatCurrency(descuento)} de descuento
+                                                −{formatMoney(descuento)} de descuento
                                             </Text>
                                         </Box>
                                     </Table.Td>
@@ -269,25 +301,49 @@ export function SalesTable() {
                                     <Table.Td style={{ textAlign: 'right' }}>
                                         {row.completeSets > 1 ? (
                                             <Text size="xs" c="dimmed" ff="monospace">
-                                                {formatCurrency(row.totalConDescuento / row.completeSets)}/u
+                                                {formatMoney(row.totalConDescuento / row.completeSets)}/u
                                             </Text>
                                         ) : null}
                                     </Table.Td>
 
-                                    {/* Quantity — number of complete combos */}
+                                    {/* Quantity — number of complete combos, interactivo */}
                                     <Table.Td style={{ textAlign: 'center' }}>
-                                        <Text size="sm" fw={700}>{row.completeSets}</Text>
+                                        <Box className={styles.quantityControl}>
+                                            <Tooltip label="Restar promo" position="top" withArrow>
+                                                <ActionIcon
+                                                    size="xs"
+                                                    variant="subtle"
+                                                    color="gray"
+                                                    onClick={(e) => { e.stopPropagation(); handleDecrementCombo(row); }}
+                                                >
+                                                    <Minus size={10} />
+                                                </ActionIcon>
+                                            </Tooltip>
+                                            <Box className={styles.quantityBadge}>
+                                                <Text size="sm" fw={700}>{row.completeSets}</Text>
+                                            </Box>
+                                            <Tooltip label="Sumar otra promo" position="top" withArrow>
+                                                <ActionIcon
+                                                    size="xs"
+                                                    variant="subtle"
+                                                    color="gray"
+                                                    onClick={(e) => { e.stopPropagation(); handleIncrementCombo(row); }}
+                                                >
+                                                    <Plus size={10} />
+                                                </ActionIcon>
+                                            </Tooltip>
+                                        </Box>
                                     </Table.Td>
 
                                     {/* Subtotal */}
                                     <Table.Td style={{ textAlign: 'right' }}>
                                         <Box>
                                             <Text size="sm" fw={700} ff="monospace" c="orange.4">
-                                                {formatCurrency(row.totalConDescuento)}
+                                                {formatMoney(row.totalConDescuento)}
                                             </Text>
                                             {row.totalSinDescuento !== row.totalConDescuento && (
                                                 <Text size="xs" c="dimmed" td="line-through" ff="monospace">
-                                                    {formatCurrency(row.totalSinDescuento)}
+                                                    {formatMoney(row.totalSinDescuento)}
                                                 </Text>
                                             )}
                                         </Box>
@@ -355,12 +411,27 @@ export function SalesTable() {
                                                 🏷 {cartItem.promoNombre}
                                             </Badge>
                                         )}
+                                        {/* Toggle Minorista / Mayorista — solo si el producto tiene precio mayorista */}
+                                        {cartItem.precioMayorista != null && cartItem.precioMayorista > 0 && (
+                                            <SegmentedControl
+                                                size="xs"
+                                                mt={4}
+                                                value={cartItem.tipoPrecio}
+                                                onChange={(val) => setItemPriceType(cartItem.id, val as 'minorista' | 'mayorista')}
+                                                data={[
+                                                    { label: 'Minorista', value: 'minorista' },
+                                                    { label: 'Mayorista', value: 'mayorista' },
+                                                ]}
+                                                onClick={(e) => e.stopPropagation()}
+                                                color="blue"
+                                            />
+                                        )}
                                     </Box>
                                 </Table.Td>
 
                                 <Table.Td style={{ textAlign: 'right' }}>
                                     <Text size="sm" c="dimmed" ff="monospace">
-                                        {formatCurrency(cartItem.precio)}
+                                        {formatMoney(cartItem.precio)}
                                     </Text>
                                 </Table.Td>
 
@@ -371,6 +442,10 @@ export function SalesTable() {
                                             onChange={setEditingValue}
                                             min={1}
                                             max={999}
+                                            step={1}
+                                            allowDecimal={false}
+                                            allowNegative={false}
+                                            clampBehavior="strict"
                                             size="xs"
                                             w={70}
                                             data-pos-focusable
@@ -431,7 +506,7 @@ export function SalesTable() {
 
                                 <Table.Td style={{ textAlign: 'right' }}>
                                     <Text size="sm" fw={700} ff="monospace">
-                                        {formatCurrency(subtotal)}
+                                        {formatMoney(subtotal)}
                                     </Text>
                                 </Table.Td>
 
