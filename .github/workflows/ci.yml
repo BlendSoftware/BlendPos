@@ -99,6 +99,11 @@ jobs:
 
   build-and-push:
     needs: [backend-test, frontend-lint]
+    # Solo en push a master/main. Sin esta guarda, abrir un PR pisaba las
+    # imagenes :latest de GHCR con codigo sin mergear: deploy-vps no corre en
+    # PRs, pero cualquier `docker compose pull` o reinicio de contenedor en el
+    # VPS se habria bajado ese :latest a produccion sin que nadie lo aprobara.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
