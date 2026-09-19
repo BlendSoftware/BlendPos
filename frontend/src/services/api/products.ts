@@ -114,6 +114,52 @@ export async function listarProductos(filter: ProductoFilter = {}): Promise<Prod
     });
 }
 
+/** Tamaño de página al recorrer el catálogo completo. */
+export const PAGE_SIZE_CATALOGO = 500;
+
+/**
+ * Tope de páginas. Es una red contra un backend que ignore `page` y devuelva
+ * siempre una página llena: sin esto el bucle no termina nunca.
+ */
+const MAX_PAGINAS_CATALOGO = 50;
+
+/**
+ * Trae el catálogo COMPLETO recorriendo la paginación del backend.
+ *
+ * Por qué existe: las pantallas de administración pedían `limit: 500` y
+ * filtraban del lado del cliente sobre ese array. El día que el catálogo pasó
+ * los 500 productos (536 en producción), los que caían después en el orden
+ * alfabético dejaron de existir para la aplicación: no aparecían en el listado
+ * ni con "Mostrar inactivos", pero seguían ocupando su código de barras, así
+ * que intentar volver a crearlos fallaba con "ya existe".
+ *
+ * Un `limit` más grande sólo corre el problema de lugar. Esto lo saca: no hay
+ * número mágico, el corte lo marca el backend.
+ */
+export async function listarTodosLosProductos(
+    filter: Omit<ProductoFilter, 'page' | 'limit'> = {},
+): Promise<ProductoResponse[]> {
+    const acumulado: ProductoResponse[] = [];
+
+    for (let page = 1; page <= MAX_PAGINAS_CATALOGO; page++) {
+        const resp = await listarProductos({ ...filter, page, limit: PAGE_SIZE_CATALOGO });
+        const lote = resp?.data ?? [];
+        acumulado.push(...lote);
+
+        // Página incompleta = era la última.
+        if (lote.length < PAGE_SIZE_CATALOGO) return acumulado;
+        // Ya tenemos todo lo que el backend dice que hay.
+        if (typeof resp.total === 'number' && acumulado.length >= resp.total) return acumulado;
+    }
+
+    // Nunca truncar en silencio: si llegamos acá, el listado está incompleto.
+    console.warn(
+        `[productos] se alcanzó el tope de ${MAX_PAGINAS_CATALOGO} páginas ` +
+        `(${acumulado.length} productos). El listado puede estar incompleto.`,
+    );
+    return acumulado;
+}
+
 /**
  * GET /v1/productos/:id  (requiere rol: administrador)
  */

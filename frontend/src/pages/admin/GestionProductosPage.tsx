@@ -12,7 +12,7 @@ import { Plus, Search, Edit, PowerOff, Power, X, AlertCircle, PackagePlus, Chevr
 import { PromocionesTab } from './PromocionesTab';
 import { formatARS } from '../../utils/format';
 import {
-    listarProductos, crearProducto, actualizarProducto, desactivarProducto, reactivarProducto, ajustarStock,
+    listarTodosLosProductos, crearProducto, actualizarProducto, desactivarProducto, reactivarProducto, ajustarStock,
     type ProductoResponse,
 } from '../../services/api/products';
 import { listarCategorias, type CategoriaResponse } from '../../services/api/categorias';
@@ -119,12 +119,14 @@ export function GestionProductosPage() {
         setLoading(true);
         setApiError(null);
         try {
-            // Fetch all products including inactive so that client-side filter works
+            // Catálogo COMPLETO (incluidos inactivos) — el filtrado de esta pantalla
+            // es client-side, así que si el fetch trunca, los productos que quedan
+            // afuera desaparecen de la UI sin ningún aviso.
             const [productosResp, categoriasResp] = await Promise.all([
-                listarProductos({ limit: 500, page: 1, activo: 'all' }),
+                listarTodosLosProductos({ activo: 'all' }),
                 listarCategorias(),
             ]);
-            setProductos(productosResp.data.map(mapProducto));
+            setProductos(productosResp.map(mapProducto));
             setCategorias(categoriasResp.filter((c) => c.activo));
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Error al cargar productos';

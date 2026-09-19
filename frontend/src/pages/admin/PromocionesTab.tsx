@@ -13,7 +13,7 @@ import {
     TIPO_OPTIONS,
     type PromocionResponse, type TipoPromocion, type ModoPromocion, type TipoSeleccion,
 } from '../../services/api/promociones';
-import { listarProductos, type ProductoResponse } from '../../services/api/products';
+import { listarTodosLosProductos, type ProductoResponse } from '../../services/api/products';
 import { listarCategorias, type CategoriaResponse } from '../../services/api/categorias';
 import { formatARS } from '../../utils/format';
 
@@ -181,12 +181,12 @@ export function PromocionesTab() {
         try {
             const [promoRes, prodRes, catRes] = await Promise.allSettled([
                 listarPromociones(),
-                listarProductos({ limit: 500 }),
+                listarTodosLosProductos(),
                 listarCategorias(),
             ]);
             if (promoRes.status === 'fulfilled') setPromociones(promoRes.value);
             else setApiError('Error al cargar promociones');
-            if (prodRes.status === 'fulfilled') setProductos(prodRes.value.data.filter(p => p.activo));
+            if (prodRes.status === 'fulfilled') setProductos(prodRes.value.filter(p => p.activo));
             if (catRes.status === 'fulfilled') setCategorias(catRes.value.filter(c => c.activo));
         } finally {
             setLoading(false);
