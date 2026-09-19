@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"blendpos/internal/dto"
 	"blendpos/internal/model"
@@ -115,7 +116,45 @@ func toProductoResponse(p *model.Producto) *dto.ProductoResponse {
 
 // ── Service methods ──────────────────────────────────────────────────────────
 
+// esCodigoBarrasDuplicado detecta la violación del índice único
+// idx_productos_barcode (SQLSTATE 23505). Sirve de red para la carrera entre el
+// pre-chequeo de Crear y el INSERT: sin esto el error crudo de Postgres llega
+// tal cual a la pantalla del cajero.
+func esCodigoBarrasDuplicado(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "23505") && !strings.Contains(msg, "duplicate key") {
+		return false
+	}
+	return strings.Contains(msg, "barcode") || strings.Contains(msg, "codigo_barras")
+}
+
+// conflictoCodigoBarras arma el mensaje que ve el usuario cuando el código ya
+// está tomado. Distingue los dos casos porque la salida es distinta: si el
+// producto está activo hay que buscarlo en el listado; si está desactivado hay
+// que reactivarlo, no crearlo de nuevo.
+func conflictoCodigoBarras(p *model.Producto) error {
+	if p.Activo {
+		return fmt.Errorf(
+			"el código de barras %s ya pertenece al producto %q",
+			p.CodigoBarras, p.Nombre)
+	}
+	return fmt.Errorf(
+		"el código de barras %s pertenece al producto %q, que está desactivado. "+
+			"Reactivalo desde el listado (activá \"Mostrar inactivos\") en lugar de crearlo de nuevo",
+		p.CodigoBarras, p.Nombre)
+}
+
 func (s *productoService) Crear(ctx context.Context, req dto.CrearProductoRequest) (*dto.ProductoResponse, error) {
+	// El índice único de codigo_barras cubre activos e inactivos, así que el
+	// pre-chequeo tiene que mirar los dos. Mirando sólo los activos, un producto
+	// desactivado resultaba invisible acá y el INSERT moría contra la base.
+	if existente, err := s.repo.FindByBarcodeAny(ctx, req.CodigoBarras); err == nil && existente != nil {
+		return nil, conflictoCodigoBarras(existente)
+	}
+
 	var provID *uuid.UUID
 	if req.ProveedorID != nil {
 		id, err := uuid.Parse(*req.ProveedorID)
@@ -148,6 +187,13 @@ func (s *productoService) Crear(ctx context.Context, req dto.CrearProductoReques
 	}
 
 	if err := s.repo.Create(ctx, p); err != nil {
+		// Carrera: otro request tomó el código entre el pre-chequeo y este INSERT.
+		if esCodigoBarrasDuplicado(err) {
+			if existente, findErr := s.repo.FindByBarcodeAny(ctx, req.CodigoBarras); findErr == nil && existente != nil {
+				return nil, conflictoCodigoBarras(existente)
+			}
+			return nil, fmt.Errorf("el código de barras %s ya está en uso", req.CodigoBarras)
+		}
 		return nil, err
 	}
 	return toProductoResponse(p), nil
