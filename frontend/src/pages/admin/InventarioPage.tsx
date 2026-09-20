@@ -7,7 +7,7 @@ import {
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { Scissors, AlertTriangle, ArrowUp, PackagePlus, Plus, Link2, Pencil, Trash2 } from 'lucide-react';
-import { listarProductos, ajustarStock } from '../../services/api/products';
+import { listarTodosLosProductos, ajustarStock } from '../../services/api/products';
 import { getAlertasStock, ejecutarDesarme as apiEjecutarDesarme, listarVinculos, crearVinculo, actualizarVinculo, eliminarVinculo, listarMovimientos, type AlertaStockResponse, type VinculoResponse } from '../../services/api/inventario';
 import type { IProducto, IMovimientoStock } from '../../types';
 
@@ -43,13 +43,13 @@ export function InventarioPage() {
         setLoading(true);
         try {
             const [productosResp, alertasResp, vinculosResp, movimientosResp] = await Promise.allSettled([
-                listarProductos({ limit: 500 }),
+                listarTodosLosProductos(),
                 getAlertasStock(),
                 listarVinculos(),
                 listarMovimientos({ limit: 200 }),
             ]);
             if (productosResp.status === 'fulfilled') {
-                setProductos(productosResp.value.data.map((p) => ({
+                setProductos(productosResp.value.map((p) => ({
                     id: p.id, codigoBarras: p.codigo_barras, nombre: p.nombre,
                     descripcion: p.descripcion ?? '', categoria: p.categoria as IProducto['categoria'],
                     precioCosto: p.precio_costo, precioVenta: p.precio_venta,

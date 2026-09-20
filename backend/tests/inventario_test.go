@@ -64,6 +64,15 @@ func (r *stubProductoRepo) FindByBarcode(_ context.Context, barcode string) (*mo
 	return nil, errors.New("record not found")
 }
 
+func (r *stubProductoRepo) FindByBarcodeAny(_ context.Context, barcode string) (*model.Producto, error) {
+	for _, p := range r.productos {
+		if p.CodigoBarras == barcode {
+			return p, nil
+		}
+	}
+	return nil, errors.New("record not found")
+}
+
 func (r *stubProductoRepo) List(_ context.Context, filter dto.ProductoFilter) ([]model.Producto, int64, error) {
 	var result []model.Producto
 	for _, p := range r.productos {

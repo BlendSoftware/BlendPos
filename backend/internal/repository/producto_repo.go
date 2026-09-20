@@ -21,6 +21,10 @@ type ProductoRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*model.Producto, error)
 	FindByIDTx(tx *gorm.DB, id uuid.UUID) (*model.Producto, error)
 	FindByBarcode(ctx context.Context, barcode string) (*model.Producto, error)
+	// FindByBarcodeAny busca por código de barras SIN filtrar por activo.
+	// El índice único idx_productos_barcode cubre activos e inactivos, así que
+	// éste es el único lookup que refleja lo que la base realmente va a rechazar.
+	FindByBarcodeAny(ctx context.Context, barcode string) (*model.Producto, error)
 	List(ctx context.Context, filter dto.ProductoFilter) ([]model.Producto, int64, error)
 	Update(ctx context.Context, p *model.Producto) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
@@ -74,6 +78,12 @@ func (r *productoRepo) FindByIDTx(tx *gorm.DB, id uuid.UUID) (*model.Producto, e
 func (r *productoRepo) FindByBarcode(ctx context.Context, barcode string) (*model.Producto, error) {
 	var p model.Producto
 	err := r.db.WithContext(ctx).Where("codigo_barras = ? AND activo = true", barcode).First(&p).Error
+	return &p, err
+}
+
+func (r *productoRepo) FindByBarcodeAny(ctx context.Context, barcode string) (*model.Producto, error) {
+	var p model.Producto
+	err := r.db.WithContext(ctx).Where("codigo_barras = ?", barcode).First(&p).Error
 	return &p, err
 }
 
